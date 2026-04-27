@@ -1,0 +1,10 @@
+/* 强制关闭首页背景图的淡入过渡 */
+#page-header.full-img::before {
+  transition: none !important;
+  opacity: 1 !important;
+}
+
+/* 关闭header容器的过渡效果 */
+#page-header {
+  transition: none !important;
+}
