@@ -8,3 +8,17 @@
 #page-header {
   transition: none !important;
 }
+
+
+/* 仅隐藏：分类、标签、归档页 的顶部横幅 */
+body.category #page-header,
+body.tag #page-header,
+body.archive #page-header {
+  display: none !important;
+}
+/* 仅修复这三个页面的顶部间距，不影响主页 */
+body.category #content,
+body.tag #content,
+body.archive #content {
+  margin-top: 80px !important;
+}
