@@ -1,24 +1,32 @@
-/* 强制关闭首页背景图的淡入过渡 */
+/* 强制关闭首页背景图的淡入过渡
 #page-header.full-img::before {
   transition: none !important;
   opacity: 1 !important;
-}
+} */
 
-/* 关闭header容器的过渡效果 */
+/* 关闭header容器的过渡效果 
 #page-header {
   transition: none !important;
-}
+}*/
 
 
-/* 仅隐藏：分类、标签、归档页 的顶部横幅 */
-body.category #page-header,
-body.tag #page-header,
-body.archive #page-header {
+/* 暴力隐藏 分类/标签/归档/文章页 头部横幅，无视主题版本 */
+body[class*="category"] #page-header,
+body[class*="tag"] #page-header,
+body[class*="archive"] #page-header,
+body[class*="post"] #page-header {
   display: none !important;
+  height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  background: none !important;
 }
-/* 仅修复这三个页面的顶部间距，不影响主页 */
-body.category #content,
-body.tag #content,
-body.archive #content {
-  margin-top: 80px !important;
+/* 修复顶部间距，不影响主页 */
+body[class*="category"] #content,
+body[class*="tag"] #content,
+body[class*="archive"] #content,
+body[class*="post"] #content {
+  margin-top: 100px !important;
+  padding-top: 0 !important;
 }
