@@ -1,0 +1,20 @@
+# 编译产物，不要上传
+public/
+.deploy_git/
+
+# 依赖包（体积巨大，可以npm install重新安装，不用上传）
+node_modules/
+
+# 缓存、日志
+db.json
+*.log
+
+# IDE配置文件
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# 解决Butterfly主题子模块问题
+themes/butterfly/.git
+themes/butterfly/.github
