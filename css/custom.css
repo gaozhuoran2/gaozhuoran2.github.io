@@ -30,3 +30,31 @@ body[class*="post"] #content {
   margin-top: 100px !important;
   padding-top: 0 !important;
 }
+
+/* ============================================================
+   数学公式显示微调（公式由 hexo-filter-mathjax 在构建时渲染成 SVG）
+   主题里这段样式写在 source/css/_layout/third-party.styl 的
+   `if hexo-config('math.use')` 里面，而本项目 math.use 故意留空
+   （避免主题再注入一份前端 MathJax 脚本），所以在此手动补上：
+   解决长公式横向撑破布局、行间公式基线不齐的问题。
+   ============================================================ */
+mjx-container {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+  max-width: 100%;
+}
+
+mjx-container[display] {
+  display: block !important;
+  min-width: auto !important;
+}
+
+mjx-container:not([display]) {
+  display: inline-grid !important;
+}
+
+mjx-assistive-mml {
+  right: 0;
+  bottom: 0;
+}
