@@ -35,26 +35,71 @@ body[class*="post"] #content {
    数学公式显示微调（公式由 hexo-filter-mathjax 在构建时渲染成 SVG）
    主题里这段样式写在 source/css/_layout/third-party.styl 的
    `if hexo-config('math.use')` 里面，而本项目 math.use 故意留空
-   （避免主题再注入一份前端 MathJax 脚本），所以在此手动补上：
-   解决长公式横向撑破布局、行间公式基线不齐的问题。
+   （避免主题再注入一份前端 MathJax 脚本），所以在此手动补上。
+   两条铁律（都踩过坑，详见下面注释）：
+   ① 行内公式容器不能用 grid/flex，否则一个公式被拆成好几行；
+   ② 行内公式容器不能有 overflow（滚动容器），否则公式基线变"底边"、整体上移。
    ============================================================ */
 mjx-container {
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: 4px;
   max-width: 100%;
 }
 
+/* 行间公式（$$...$$）：独立成行、居中；太宽时在公式内部横向滚动。
+   overflow 只给 block 级的行间公式用 —— 行间公式是块级元素，不受基线规则影响；
+   行内公式千万不能带 overflow（原因见下面那段注释）。 */
 mjx-container[display] {
   display: block !important;
   min-width: auto !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
 }
 
+/* 行内公式：必须是 inline-block，且必须保持 overflow: visible —— 踩过两个坑：
+   1) 不能用 inline-grid / inline-flex：
+      hexo-filter-mathjax 会把一个行内公式切成多个 <svg> 片段（片段之间是
+      <mjx-break> 折行点），grid 会让每个片段各占一行 → 一个公式被竖着拆成好几行。
+   2) 不能让容器变成"滚动容器"（overflow-x/y 不能是 auto / scroll / hidden）：
+      按 CSS 规范，inline-block 的 overflow 只要不是 visible，它的基线就变成"底边"，
+      于是整条公式相对同行文字上移（下沿越深移得越多，含 ∑ / 下标 / 括号时约半行）。
+      保持 visible 后，各 <svg> 片段自带的 vertical-align 才生效 → 公式基线与文字精确对齐。
+   代价：公式比整行还宽时不会自动折行，而是整体挪到下一行、必要时略微伸出正文栏
+   （全站最宽的行内公式 49ex ≈ 392px，桌面正文栏宽内都排得下）。
+   ⚠ 改完要 Ctrl+F5 强制刷新（/css/custom.css 没有版本号参数，浏览器会缓存旧样式） */
 mjx-container:not([display]) {
-  display: inline-grid !important;
+  display: inline-block !important;
+  white-space: nowrap;
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+  padding-bottom: 0 !important;
 }
 
 mjx-assistive-mml {
   right: 0;
   bottom: 0;
+}
+
+/* ============================================================
+   图片显示尺寸（只改网页上的显示大小，不动图片文件）
+   ------------------------------------------------------------
+   ✅ 只对【日记】里的图片生效：/diary/、/diary/2026-09/、/diary/2026/
+      → 日记渲染出来的结构是
+        <div class="timeline">
+          <div class="timeline-item">
+            <div class="timeline-item-content">图片在这里</div>
+   ✅ 其它地方（首页、文章详情页、普通页面）→ 保持主题默认 100%
+      不加任何规则 = 主题自带的 .container img{max-width:100%} = 原样
+
+   选择器里带 #article-container（id），优先级高于主题的 .container，
+   所以不用 !important 就能覆盖 ✔
+   想改比例就改下面的 50%（例如 70%），改完 hexo clean & hexo g
+   ============================================================ */
+#article-container .timeline-item-content img {
+  max-width: 50%;
+}
+
+/* 日记里如果用了相册/图库标签，保持网格原样（不缩小） */
+#article-container .timeline-item-content .gallery-container img,
+#article-container .timeline-item-content .gallery-group img {
+  max-width: 100%;
 }
