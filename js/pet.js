@@ -156,6 +156,7 @@
       ownerOk: '完整模式已开启。',
       ownerFail: '认不出来。',
       visitorTip: '我在陪你聊天。',
+      visitorHello: '欢迎欢迎喵',
       exportOk: '存档已复制。',
       importOk: '存档已读入。',
       importBad: '存档看不懂。',
@@ -1642,7 +1643,7 @@
       var d = App.data;
       if (!App.isOwner) {
         Panel.statsEl.innerHTML =
-          '<div class="pet-stat" style="grid-column:1/3">' + esc(sys('visitorTip')) + '</div>';
+          '<div class="pet-stat" style="grid-column:1/3">' + esc(sys('visitorHello')) + '</div>';
       } else {
         var lv = CONFIG.levelStep;
         Panel.statsEl.innerHTML =
@@ -1666,11 +1667,12 @@
         if (ownerOnly[i]) ownerOnly[i].style.display = App.isOwner ? '' : 'none';
       }
       if (Panel.tipEl && !Panel.tipEl.querySelector('textarea')) {
-        /* 主人这边底部提示整块去掉（没什么用）；访客保留一行引导（怎么开完整模式）
-           空着就 display:none，不留空洞；导出时会重新露出来（见 showExport） */
-        var tip = App.isOwner ? '' : (sys('visitorTip') + '\n在聊天框输入暗号，就能开启完整模式');
-        Panel.tipEl.textContent = tip;
-        Panel.tipEl.style.display = tip ? '' : 'none';
+        /* 底部那块平时一律留空：主人不需要（暗号怎么开，主人本来就知道），
+           访客也不需要（面板里写着"访客模式"，想开的人自己会去问）；
+           空着就 display:none，不留空洞。它是"提示 + 导出文本框"共用容器，
+           导出时会由 showExport() 重新露出来 */
+        Panel.tipEl.textContent = '';
+        Panel.tipEl.style.display = 'none';
       }
     },
 
