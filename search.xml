@@ -1,58 +1,755 @@
 <?xml version="1.0" encoding="utf-8"?>
 <search>
   <entry>
-    <title>大学物理I</title>
-    <url>/2026/10/06/%E5%A4%A7%E5%AD%A6%E7%89%A9%E7%90%86I/</url>
-    <content><![CDATA[刚体运动
+    <title>MAVRL论文全文中文翻译 - 从多类型反馈学习奖励函数的摊销变分推断</title>
+    <url>/2026/09/05/MAVRL%E8%AE%BA%E6%96%87%E5%85%A8%E6%96%87%E4%B8%AD%E6%96%87%E7%BF%BB%E8%AF%91/</url>
+    <content><![CDATA[
+原文信息
+MAVRL: Learning Reward Functions from Multiple Feedback Types with Amortized Variational Inference（MAVRL：利用摊销变分推断从多类型反馈学习奖励函数）
+作者：Raphaël Baur、Yannick Metz、Maria Gkoulta、Mennatallah El-Assady、Giorgia Ramponi、Thomas Kleine Buening
+机构：¹ ETH AI Center, ETH Zurich；² ETH Zurich 计算机系；³ University of Zurich 信息学系
+会议：Proceedings of the 43rd International Conference on Machine Learning（ICML 2026），首尔，韩国。PMLR 306。
+代码与模型：https://github.com/rabaur/mavrl
+译者说明
+
+本页为论文正文与附录（A–F）的完整中文翻译；参考文献列表按惯例保留英文原文。
+为便于阅读，正文将原文中以数学花体排印的四种反馈类型统一记为：P＝偏好（成对比较）、D＝示范、R＝评分、S＝停止信号；组合记号（如 PDR、PDRS）一律照原文保留，其具体所指以原 PDF 中的图表为准。
+插图（图 1–6）与表格（表 1–5）在正文对应位置以 [图 X] / [表 X] 标注并给出中文图题、所在页码与内容说明，精确图形/数据请对照原 PDF。
 
 
-平动
-转动（定轴）
-核心方程
+
+摘要（Abstract）奖励学习（reward learning）通常依赖单一类型的反馈，或者通过手动加权多个损失项来组合不同类型的反馈。目前，如何从异质反馈类型（例如示范、比较、评分与停止信号——它们提供性质上各不相同的信号）中联合学习奖励函数，仍然是一个悬而未决的问题。
+针对这一挑战，本文将”从多类型反馈学习奖励”形式化为对共享的潜在奖励函数进行贝叶斯推断：每种反馈类型都通过一个显式的似然函数（likelihood）贡献信息。我们提出了一种可扩展的摊销变分推断方法（amortized variational inference），它学习一个共享的奖励编码器（reward encoder）以及若干反馈专属的似然解码器（likelihood decoder），并通过优化**单一的证据下界（ELBO）**进行训练。我们的方法既不需要把不同反馈压缩到某种公共中间表示，也消除了手动平衡各项损失的需要。
+在离散（表格型）与连续控制基准上，我们证明：联合推断得到的奖励后验优于单一类型的基线，能够利用不同反馈类型之间的互补信息，并使最终策略对环境扰动更加鲁棒。此外，推断出的奖励不确定性还能提供可解释的信号，用于分析模型置信度以及不同反馈类型之间的一致性。
+
+1. 引言（Introduction）设计能够忠实刻画期望行为的奖励函数是出了名的困难。即使在定义良好的环境中，细微的偏好、安全性考量与各种权衡也很难通过手工编码实现；微小的错误设定就可能引发意料之外甚至不安全的行为（Abouelazm et al., 2024; Amodei et al., 2016; Gershman &amp; Niv, 2015; Hendrycks et al., 2021; Knox et al., 2023）。这一挑战催生了奖励学习这一广泛的研究方向：奖励函数不是被显式给定，而是从人类反馈中推断出来。这类方法之所以有吸引力，是因为它允许领域专家通过判断或干预来表达意图——这往往比给出完整的形式化规格更容易。
+然而，关于行为的人类反馈形式多种多样。以往工作研究了多种反馈形式下的学习，包括：示范学习（demonstrations）（Chan &amp; van der Schaar, 2021; Ng et al., 2000）、比较或偏好（comparisons/preferences）（Christiano et al., 2017; Wirth et al., 2016）、标量评分（scalar ratings）（Knox &amp; Stone, 2009）、排序（rankings）（Brown et al., 2019; Myers et al., 2021），以及纠正或紧急停止之类的干预（corrections / emergency stops）（Ghosal et al., 2023; Hadfield-Menell et al., 2017; Losey et al., 2022）等。每一种反馈类型都只提供了关于底层奖励函数的部分信息：示范对状态–动作空间的覆盖是稀疏的，且只沿着专家行为约束奖励；比较只提供关于回报的相对信息，无法完整刻画被比较备选方案之外的权衡；评分只给出序数信息（ordinal information），而不包含偏好的强度；停止信号通常只表明行为”不可接受”，却不说明此时怎样才算最优。因此，依赖任何单一反馈类型都可能使奖励的某些方面无法被确定。
+上述局限凸显了从多种反馈类型学习的必要性——不同模态能够提供互补信息，从而消解单一来源遗留下来的歧义。此外，不同反馈类型在可获得性、成本与信息量上各有差异，因而理解它们彼此之间的关系、各自携带多少信息、在何处重叠、在何时相互冲突，就显得十分重要。
+尽管潜力互补，从异质反馈类型中联合学习奖励函数仍然充满挑战。现有方法要么为每种反馈分别训练奖励模型、事后（post hoc）再加以组合（Ibarz et al., 2018; Macuglia et al., 2025; Metz et al., 2025），要么只关注一小部分模态（通常是示范与比较）（Bıyık et al., 2022）。这两种策略都会带来显著问题：事后聚合需要回答”如何调和不同反馈类型之间的奖励尺度与不确定性”；而把多样反馈折叠进单一中间表示（例如偏好）则可能抹掉模态专属信息，并且并不适用于所有反馈形式。因此，尽管各种反馈在潜力上互补，实践中要”联合地”从多种反馈学习奖励仍然困难。
+一个更有原则性的视角是：把每种反馈类型都看作对共享潜在奖励函数的一次概率观测。在这个框架下，从多类型反馈学习就自然地对应为贝叶斯推断：每种反馈模态通过其似然贡献信息。已有若干框架按此方式形式化人类反馈，例如把反馈建模为（可能是隐式的）选择集上的奖励理性选择（reward-rational choices）（Jeon et al., 2020）。这种基于似然的表述为异质反馈提供了概念上统一的处理方式，并清楚地揭示出不同反馈类型如何与同一个底层奖励相关联。然而，在此设定下进行精确贝叶斯推断通常不可行，因为需要对反馈实现与奖励函数两者同时做边缘化。
+为应对这些挑战，我们提出一种可扩展的摊销变分推断方法，用于从多类型反馈学习奖励函数。我们的方法建立在可扩展贝叶斯逆强化学习（Scalable Bayesian IRL）的既有工作之上（Chan &amp; van der Schaar, 2021），联合学习一个共享的变分奖励表示与若干反馈专属似然模型，并通过优化单一的证据下界完成训练。
+本文贡献具体如下：
+
+我们提出一个统一的贝叶斯形式化，用于从多类型反馈学习奖励函数：每种反馈模态通过显式似然贡献信息，且无需手动损失平衡（第 4 节）。
+我们提出一个可扩展的摊销变分推断算法，联合学习共享奖励表示与反馈专属似然模型（第 5 节）。
+我们通过实验证明：从多类型反馈联合学习能够利用互补信息、提升奖励恢复与策略鲁棒性，并在多个强化学习基准上产生可解释的奖励不确定性（第 6 节）¹。
+
+
+¹ 代码与训练好的模型见 https://github.com/rabaur/mavrl
+
+
+2. 相关工作（Related Work）奖励学习（Reward Learning）。 当显式指定奖励不切实际时，奖励学习旨在从人类反馈中推断奖励函数（Abbeel &amp; Ng, 2004; Christiano et al., 2017; Ng et al., 2000）。早期工作聚焦于从示范中做逆强化学习（inverse reinforcement learning, IRL），假设专家轨迹来自某个未知奖励下的（近似）最优行为（Abbeel &amp; Ng, 2004; Ng et al., 2000）。近年来，基于偏好的强化学习逐渐兴起，尤其是在语言建模中的应用：人类比较智能体产生的轨迹片段，奖励模型用 Bradley–Terry 模型或相关的概率选择形式化来训练（Christiano et al., 2017; Ouyang et al., 2022）。除示范与偏好之外，学界还探索了其他多种反馈类型，包括纠正（corrections）（Bajcsy et al., 2017; Losey et al., 2022）、排序（rankings）（Brown et al., 2020; Myers et al., 2021）和紧急停止（emergency stops）（Hadfield-Menell et al., 2017）。每种反馈范式都引入各自的建模假设与损失函数，并且通常被孤立地研究。Jeon et al.（2020）提出了一种统一视角，证明许多反馈类型都可以被解释为（可能是隐式的）选择集上的奖励理性选择。尽管这一框架给出了反馈的通用概率解释，但它本身并不产生一种能从异质反馈源联合学习的可扩展方法。
+贝叶斯 IRL 的近似推断（Approximate Inference for Bayesian IRL）。 与本文最密切相关的是可扩展贝叶斯 IRL 的相关文献。贝叶斯 IRL 把从示范学习奖励表述为后验推断，但早期方法依赖 MCMC 或其他基于采样的推断手段，限制了其只能应用于小规模任务（Ramachandran &amp; Amir, 2007; Rothkopf &amp; Dimitrakakis, 2011）。为解决这一问题，Chan &amp; van der Schaar（2021）提出 AVRIL，将摊销变分推断应用于贝叶斯 IRL：联合学习一个变分奖励编码器与一个示范似然解码器。该形式化无需在内循环中反复求解强化学习问题即可高效进行后验推断，并已被证明能扩展到高维控制任务，以及语言建模中基于 Transformer 的奖励模型（Cai et al., 2025）。另有一些近期工作把变分推断用于偏好学习，以捕捉用户专属的奖励差异，但其目标不同于”从多类型反馈学习共享奖励函数”（Poddar et al., 2024）。我们直接在 AVRIL 框架之上构建：用一组反馈专属似然模型替换其单一的示范似然，同时保持对奖励函数单一的共享变分后验。这使得我们可以从多种反馈类型进行联合摊销推断，而无需把它们折叠进某个公共替代目标。
+多类型反馈（Multi-Type Feedback）。 与单类型奖励学习相比，从多种类型的人类反馈学习的工作相对较少。大多数已有工作聚焦于示范与偏好，并且主要把示范用作初始化步骤：先用示范初始化，再施加基于偏好的学习以进一步精修策略与奖励估计（Bıyık et al., 2022; Ibarz et al., 2018; Macuglia et al., 2025; Palan et al., 2019）。少数方法尝试在单一学习流程中纳入两种以上的反馈类型：Mehta &amp; Losey（2024）在机器人设定中，用”奖励理性选择”框架整合示范、纠正与偏好，但最终还是通过加性损失项来组合各模态，而各损失项的相对影响由设计选择（例如采样率）固定。近期的基准套件与评估平台强调了异质反馈的实践相关性（Metz et al., 2023; Yuan et al., 2024）；已有的大规模研究则用集成式方法评估反馈类型的组合（Metz et al., 2025）。然而，这些方法并不对单一奖励函数做联合推断，而是依赖启发式来调和不同反馈类型之间在奖励尺度与不确定性上的差异。
+与之相对，我们的方法通过把反馈专属似然整合进同一个变分目标，从多类型反馈中对共享奖励函数进行联合贝叶斯推断。
+
+3. 预备知识（Preliminaries）我们考虑马尔可夫决策过程（MDP） ，其中  为状态空间， 为动作空间， 为转移动力学，    为真实奖励函数，  为折扣因子。 与  既可以是离散的也可以是连续的，且我们不假设能够访问转移动力学。此外，奖励函数  被假定为不可观测的。
+智能体通过一个（可能是随机的）平稳策略  与 MDP 交互，该策略在 MDP 上诱导出轨迹   上的分布。用  表示所有平稳策略构成的空间， 表示所有轨迹构成的空间²。给定奖励函数 ，轨迹  的回报为  ，策略  的期望回报为  。对给定的奖励函数 ，记     为最优动作值函数。
+
+² 所有定义与结论都能直接推广到有限时域 MDP：只需把无穷折扣和替换为有限时域回报。这里采用无穷时域折扣表述仅为记号方便。
+
+从多类型反馈进行贝叶斯学习。 给定一组多类型人类反馈 ，我们的目标是学习奖励函数。具体地，我们考虑  ，其中  对应于类型  的反馈（例如偏好）。从贝叶斯视角出发，我们的目标是推断给定数据下奖励函数的后验分布。据此，我们把奖励函数  视为潜变量，考虑
+
+其中  是奖励函数上的先验， 是在  下观测到多类型反馈  的似然。关键在于，给定  时观测反馈的似然以一种有用的方式因子分解：由于观测在给定奖励函数后条件独立，联合似然可写为  。因此，多类型反馈后验满足   。
+摊销变分推断（Amortized Variational Inference）。 尽管优雅，方程 (1) 通常是双重不可解的（doubly intractable）：一方面似然中需要对反馈选择做积分，另一方面分母需要对所有奖励函数做积分。变分推断（VI）用更简单的变分分布   来逼近后验，其参数  通过最大化证据下界（ELBO）学习：
+
+第一项最大化期望数据似然，第二项把  向先验  做软性正则化。变分自编码器（VAE）框架（Kingma &amp; Welling, 2014）通过把变分分布  表示为将观测  映射到潜变量  的神经网络编码器，使变分推断得以广泛应用与扩展，从而把后验推断在数据点之间”摊销”。此外，VAE 联合学习似然模型 ——即解码器——它从潜表示  重建观测响应 ³。这依赖重参数化技巧：把采样表达为确定性变换  （  ），从而使梯度能够穿过编码器流动。
+
+³ 通常，在 VAE 中目标是通过重建任务（ ）学习有意义的潜表示 。
+
+
+4. 反馈专属似然模型（Feedback-Specific Likelihood Models）我们为每种反馈类型定义概率似然模型，它们共同构成贝叶斯奖励学习目标（式 1）中的联合数据似然 ，从而决定我们的算法所优化的变分目标。在本文中，我们聚焦于偏好（成对比较）、示范、评分与停止信号四类反馈；但所提出的框架与算法适用于任何能够指定概率似然的反馈类型。重要的是，我们的方法与具体似然模型的选择无关，不依赖共享的中间表示，也不需要跨反馈类型的手动损失平衡。
+偏好（Preferences，P）。 这里采用广泛使用的 Bradley–Terry 模型：在奖励函数  下，轨迹  优于轨迹 （记为  ）的概率为
+
+该形式可以自然地扩展到轨迹片段之间的比较，正如 Christiano et al.（2017）所做的那样。逆温度参数  控制偏好判断的随机性。
+示范（Demonstrations，D）。 专家示范是另一种常用的反馈形式。Ramachandran &amp; Amir（2007）及其后续工作（例如 Chan &amp; van der Schaar, 2021; Rothkopf &amp; Dimitrakakis, 2011）用 Boltzmann 理性策略   对专家示范建模。我们沿用该建模方式，于是在奖励函数  下，一条专家轨迹  的似然为
+
+其中逆温度   控制专家的最优程度。
+评分（Ratings，R）。 评分提供序数反馈：人类给一条轨迹赋予离散分数以反映其感知质量，类似于李克特量表（Likert scale）判断（Likert, 1932）。我们用标准的序数回归框架——有序 logit 模型（ordered logit model）——对这一反馈形式建模（McCullagh, 1980）。
+我们假设每条轨迹在奖励函数  下会诱导一个未观测的潜在效用（latent utility），用以反映其质量，并叠加随机的判断噪声。报告的评分   通过一组有序切点         对这个潜在效用离散化而得到：当轨迹  的潜在效用落在  与  之间时，它得到评分  。在该模型下，对轨迹  观测到评分   的似然为
+
+其中  表示 logistic 累积分布函数。重要的是，这一反馈模态不等价于对奖励值的直接回归：它只提供序数信息，而不提供绝对判断。切点  不必等距，这反映了人类在把感知质量映射到离散评分时通常不会采用均匀或线性的阈值。
+停止信号（Stops，S）。 停止信号刻画这样一种场景：一旦智能体的表现退化到可接受水平之下，人类监督者就介入并终止其行为。这类反馈在实践中很普遍——例如机器人领域的安全停止、人在环路（human-in-the-loop）控制——但作为奖励或策略学习信号，受到的关注却很少。我们的框架通过对终止时间上的显式似然建模，自然地容纳了停止反馈。
+设  为用户介入的（随机）时间步。我们用离散时间风险模型（hazard model）对  建模：在时间  的瞬时风险（hazard）依赖于截至该时刻轨迹的累积次优程度。具体地，在奖励  下，动作  在状态  的瞬时次优程度定义为
+
+并引入一个回溯折扣因子   来折扣较早的偏差。由此得到的风险函数为
+
+其中   越大表示专家越”不宽容”。观测到在时间  发生停止的似然即为如下几何分布：
+
+如果片段内没有发生停止，则观测被视为右删失（right-censored）。
+其他反馈类型（Additional Feedback Types）。 文献中研究的其他反馈类型还包括排序（rankings）（Brown et al., 2019; Myers et al., 2021）、纠正（corrections）（Losey et al., 2022），以及其他形式的人为干预（human intervention）（Jeon et al., 2020）。虽然本文没有显式建模它们，但反馈专属似然可以类似地推导出来。关键在于，任何这类似然都可以直接纳入我们的框架与算法，无需额外的结构性修改。关于反馈模拟的实现细节见附录 A.2。
+
+5. MAVRL：多反馈摊销变分奖励学习（MAVRL: Multi-Feedback Amortized Variational Reward Learning）下面介绍 MAVRL——一种从多类型反馈进行贝叶斯奖励推断的通用学习算法。该算法（算法 1）用摊销变分推断实例化第 3 节引入的贝叶斯目标，并直接利用第 4 节定义的反馈专属似然模型。
+[算法 1] 位置说明：原文第 5 页顶部，题为 “Algorithm 1 (MAVRL): Multi-Feedback Amortized Variational Reward Learning”。 算法内容以如下伪代码表达：
+
+输入：多类型反馈 ，超参数 、，学习率 
+重复直到收敛：
+
+为所有反馈类型采样小批量： 
+编码所有转移： 
+重参数化奖励：    
+计算 Q 值： 
+计算各反馈专属负对数似然：  
+ ，其中先验  
+ 
+聚合损失：   
+更新参数：   
+
+返回：奖励编码器 、动作值模型 
+
+
+5.1 目标函数（Objective）我们的目标是联合学习一个概率奖励模型与一个辅助的动作值函数，后者用于支持那些基于状态–动作值来定义的反馈类型。具体来说，我们参数化一个条件奖励分布
+
+其中  与  都是神经网络，把状态–动作对  映射到局部奖励值上的一个分布。从这个编码器采样会在轨迹回报上诱导出一个分布，用来评估各类反馈的似然。
+此外，我们还学习一个辅助的动作值函数 ，它是依赖价值估计的反馈类型所必需的；当适用时，还会学习与反馈专属似然模型相关的参数 ，例如评分模型的切点。关键在于，奖励编码器本身与反馈的类型和结构无关；所有反馈专属的语义完全由相应的似然函数承载。
+学习过程直接来自贝叶斯奖励学习问题的证据下界（ELBO）。给定反馈数据集 （其中每个  包含类型  的反馈观测），MAVRL 所要最大化的统一目标为
+
+这里  表示一个通用的反馈观测，其结构取决于反馈类型——可以是轨迹、比较、标量评分或终止时间。每种反馈类型都为目标贡献一项似然，无需手动加权或分阶段优化。
+最后一项  强制推断得到的奖励分布与辅助动作值函数保持一致。借鉴 Chan &amp; van der Schaar（2021），我们加入一个时序差分（TD）正则化项，它鼓励编码器预测的奖励与  所蕴含的单步 Bellman 差分相一致。
+为定义这一项，我们利用与观测反馈相关联的轨迹。每条反馈观测  都植根于一条或多条轨迹，我们从中提取状态–动作转移。设   表示这样的转移元组，其中  是在状态  中采取的动作。相应的 TD 目标定义为
+
+我们通过最大化 TD 目标在编码器分布下的对数似然，来惩罚该 TD 目标与编码器预测奖励之间的偏差：
+
+其中  表示从观测反馈所依据的轨迹中提取出的转移集合。
+[图 1] 位置说明：原文第 6 页中部，标题为 “Figure 1. Visualizations of inferred reward functions from 2 demonstrations, 256 pairwise comparisons, or 128 ratings on a 10×10 grid_trap environment.”内容说明（中文）：该图在   的 grid_trap 网格环境中，可视化了分别由 2 条示范、256 对成对比较、128 条评分 推断得到的奖励函数。每一行对应一种单一反馈模态的推断结果；最后一列展示的是组合全部反馈模态后的结果。图中同时呈现学习到的奖励均值估计及其由方差量化的不确定性（原文采用均值与方差的双重视觉编码）。
+5.2 MAVRL 的性质（Properties of MAVRL）可扩展性（Extensibility）。 MAVRL 的一个核心性质是：它能使用任何只要可以指定似然的人类反馈形式。每种反馈类型都仅通过其似然项   对目标做出贡献。因此，加入一种新的反馈模态只需要定义它的似然，而无需改动奖励编码器、辅助价值函数或优化过程。
+无需跨模态损失平衡的统一目标（Unified Objective Without Cross-Modal Loss Balancing）。 MAVRL 不假设不同反馈模态除了奖励函数之外还共享某种公共中间表示或监督信号。反馈专属似然通过不同的统计关系把观测与奖励联系起来——例如动作概率、回报比较、序数阈值或累积遗憾（cumulative regret）。由于所有反馈都以对数似然项的形式出现在同一个变分目标中，每个模态的相对影响力由数据与反馈模型决定，而非由手工调节的跨模态权重决定。因此，MAVRL 完全消除了”每种反馈类型在奖励估计中该占多大比重”的选择难题：举例来说，当有   条示范和   个偏好、且噪声参数已知时，它们在一个组合损失或事后集成中的相对权重在一般 MDP 中是任意的。MAVRL 彻底避免了这一问题。
+剩余的参数有两类：
+
+似然专属的噪声参数（例如 Bradley–Terry 温度 、评分切点 、停止风险参数 ）刻画标注者的行为，它们植根于成熟的人类反馈模型；这些参数可以（可选地）被当作潜变量，在行为上合理的先验下被推断。
+正则化系数  与  控制后验正则化与”奖励–Q 值”一致性；我们通过标准模型选择调参，性能在很宽取值范围内都很稳定；其中基于 Q 值的反馈（示范与停止信号）需要非零的 。
+
+顺序无关与异步训练（Order-Invariant and Asynchronous Training）。 训练目标与反馈模态的顺序、频率和交错方式无关。来自各个类型反馈数据集的 mini-batch 被独立采样，并且可以在优化过程中任意组合。
+
+6. 实验（Experiments）我们在多种环境与反馈配置下评估 MAVRL，回答三个问题：
+
+学习奖励函数时，不同反馈类型如何在性质上互补（第 6.1 节）；
+这种互补性如何转化为下游策略性能与奖励保真度（第 6.2 节）；
+从多类型反馈推断出的奖励，是否会在环境扰动或奖励错误设定下带来更鲁棒的行为（第 6.3 节）。
+
+我们的实验横跨表格型网格世界域与连续控制基准，并把示范、成对比较、评分和停止反馈在单独使用与组合使用两种情形下都纳入考察。
+除特别说明外，所有方法都在每个环境固定的反馈预算下训练，且每种模态被分配相同数量的反馈样本，以保证公平比较。记 、、、 分别为偏好、示范、评分与停止信号的样本数。在网格世界环境中，我们设置   、 、 ；在 Acrobot-v1 与 CartPole-v1 中，  、 、 ；在 LunarLander-v3 中，   、 。
+6.1 反馈类型互补（Feedback Types Complement One Another）在 [图 1]（原文第 6 页，图题见上文）中，我们可视化 MAVRL 基于不同单一反馈类型及其组合在网格世界环境中学习到的奖励估计。我们同时报告学习到的奖励均值估计及相应的、以方差量化的不确定性。更多示例见附录 F。
+我们发现每种反馈类型都会在推断出的奖励与不确定性估计上引起一种特征性的模式：
+
+示范在专家轨迹沿线给出低不确定性的奖励估计，但会留下大片状态空间区域”欠确定”（underdetermined）；
+成对偏好提供更广的覆盖，但可能把较高的奖励赋给那些被频繁访问、却并非全局最优的中间状态；
+评分能可靠地识别出目标状态，但对其周围奖励地形的信息有限；
+停止信号强烈约束不安全或低奖励区域，但在”避开之外什么行为是值得要的”这一点上提供相对较少的指引。
+
+这些局限恰好说明了不同反馈类型的互补本质——当它们被组合时，上述局限得以缓解。我们基于组合反馈训练的奖励模型能够以很高的保真度重建原始的真实奖励函数，并可靠地同时识别高奖励与低奖励状态。
+6.2 组合反馈提升策略性能与奖励识别（Combining Feedback Improves Policy Performance and Reward Identification）我们在 [表 1]（原文第 8 页，跨栏表格）中评估不同反馈组合在一系列网格世界与连续控制环境中的下游策略性能。对每种组合，我们都针对学习到的奖励估计优化一个策略，并报告该策略关于真实奖励函数的总回报。
+所有结果在 10 次运行上取平均；回报按环境线性缩放，使得 100 对应于用真实奖励训练出的近似最优策略的性能，0 对应于均匀随机策略的回报。因此，超过 100 的数值表示学习策略优于用真实奖励训练的策略。虽然这些归一化指标刻画了下游策略性能，但它们并不整体反映奖励恢复的质量。为此，我们还报告 EPIC 距离（Gleave et al., 2021）：对仅在基于势的塑形（potential-based shaping）、正缩放与常数平移意义下等价的奖励函数，EPIC 距离为 0。我们只在可精确比较奖励的表格型环境中报告 EPIC 距离。
+[表 1] 说明：主表分为上下两部分——上部分为”归一化平均回报（越高越好）”，下部分为”平均 EPIC 距离（越低越好）”，环境行依次为 grid_cliff、grid_sparse、grid_trap、Acrobot-v1、CartPole-v1、LunarLander-v3；列对应各种单模态与多模态反馈组合（深灰底为最优，浅灰底为次优）。原文表格位于第 8 页，请对照原 PDF 查看逐列数值。
+组合全部反馈类型获得最强的整体性能。 总体上，PDR（偏好＋示范＋评分等组合）在各环境中表现强劲，在 6 个环境中的 4 个取得最好或接近最好的性能，例外是 Acrobot-v1 与 LunarLander-v3。这支持我们的核心假设：MAVRL 能够利用不同反馈类型中包含的互补信息。
+没有任何单一类型基线在所有环境中占优。 或许并不令人意外：示范（D）在稀疏奖励设置中表现出色——例如 grid_sparse（95.0）与 LunarLander-v3（115.7）；评分（R）在 CartPole-v1 的单一反馈方法中表现最好（100）。偏好（P）作为独立模态表现相对温和，但在与其他模态组合时贡献显著——这与以往”成对比较需要大量样本才能达到有竞争力的性能”的发现一致（Christiano et al., 2017）。
+停止反馈与其他反馈互补。 在若干环境中，包含停止反馈的组合通常优于不含停止反馈的对应组合。例如在 grid_sparse 中，加入停止反馈的组合（100.0）优于仅用示范 D（95.0）；含停止反馈的偏好组合（70.6）也优于仅偏好（58.8）。这说明停止信号提供了关于轨迹次优性的宝贵信息，而这种信息很难从其他反馈中获取。
+EPIC 距离揭示策略性能之外的奖励恢复质量。 在计算 EPIC 的三个表格型环境中，PDR 取得最低（grid_cliff：0.481；grid_trap：0.520）或次低（grid_sparse：0.383）的 EPIC 距离。EPIC 与性能的偏差只出现在 grid_sparse 上：某一组合达到最低 EPIC（0.380）却只有中等的策略性能（82.3），这表明”忠实的奖励恢复”与”较高的下游性能”虽不完全等价，但通过组合所有反馈模态可以同时实现。
+相对非变分基线，MAVRL 既有效又高效。 [表 2]（原文第 8 页底部）把 MAVRL 与两种自然的替代方法对比：
+
+MCMC：一种非摊销的贝叶斯奖励学习方法，代表后验推断的”金标准”；
+事后奖励平均（Post-Hoc Reward Averaging）：一种非变分启发式，通过集成平均组合多个独立训练的奖励估计（参见 Metz et al., 2025）。
+
+[表 2] 说明：表列依次为 Post-Hoc Avg 与 MCMC 与 MAVRL 的性能（归一化回报，n=10，越高越好）与每轮奖励模型训练的墙钟时间；环境行 grid_sparse / grid_cliff / grid_trap / LunarLander-v3。原文数值请对照原 PDF。
+与 MCMC 相比，MAVRL 在网格环境中以约 30 倍更低的计算量取得相当或更优的性能；并且与 MCMC 不同，它不需要内循环 MDP 求解，因此在 MCMC 不可行的连续控制设定下依然可解。与事后平均相比，MAVRL 在所有环境上都大幅优于朴素集成——这表明独立训练的奖励模型会把尺度与塑形各异的信号混在一起，错失了联合推断才能捕捉到的跨模态互补性。
+在匹配的反馈预算下增益仍然成立。 为检验组合反馈带来的改进反映的是”真正的互补性”而非”更大的总监督量”，我们做了等预算消融：用贝叶斯优化把固定总样本量分配到各模态之间（附录 C，表 4）。在连续控制基准上，组合方式一致地达到或超过最强的单一模态，PDR 位列顶尖。在表格型网格上，单一信息模态在满预算下往往胜过被切碎的多种模态分配；而像 D 或某些双模态组合则成为最强组合。总体而言，组合反馈带来真正的跨模态互补性——是否纳入某个模态，取决于它在目标环境中的信息量。
+6.3 从多类型反馈学习到的奖励更鲁棒（Rewards Learned from Multi-Type Feedback are More Robust）我们沿两条互补的轴评估用 MAVRL 推断的奖励函数的鲁棒性：(i) 部署时环境动力学发生偏移的鲁棒性；(ii) 训练时所用反馈含噪声或被错误设定的鲁棒性。在两种设定下，奖励模型都在名义配置下只训练一次，之后保持固定；策略则在不做任何进一步奖励适配的情况下重训——从而把奖励质量的影响与策略优化的影响分离开。我们比较单一反馈模态、其组合（PDR）以及行为克隆（BC）基线。完整实验细节与所有反馈组合的结果见附录 E。
+在动力学扰动下，多类型反馈衰减得更平缓。 我们在奖励学习完成后扰动每个环境的转移动力学：在 grid_cliff 与 grid_trap 中增加动作随机性，在 Acrobot-v1 中改变系统动力学的结构性参数，在 LunarLander-v3 中改变重力与风。[图 2]（原文第 9 页）展示了这些扰动下的性能。
+[图 2] 内容说明（中文）：该图是三组子图的组合，纵轴均为”归一化回报”（n=10，误差棒为标准误），横轴为扰动强度。
+
+左：grid_cliff 与 grid_trap 的”环境随机性”从 0 增大到 0.8 时，各方法的归一化回报曲线；
+中：Acrobot-v1 中摆杆两段长度之比（link length asymmetry，约 1.0→2.0）增大时的表现；
+右：LunarLander-v3 中重力（g 从 −10 到 −12）与风（wind 0→25）增强时的表现（横轴同时示意了仅重力变化与固定 g=−12 时变化风两段）。
+
+图中奖励模型与基线都在未扰动设定下训练并在整个变化过程中保持固定。可以观察到：在网格环境中，由多类型反馈推断的奖励训练出的策略在扰动下比由单一反馈模态或仅靠模仿训练的策略衰减得更平缓。虽然组合反馈的下游性能仍比模仿基线衰减得更平缓，但某些单模态（例如 R）的性能反而超过它——这与未扰动设定下的情况一致。在网格世界中，动作随机性增大导致模仿与单反馈奖励模型（例如 R、P、D）快速恶化，而从组合反馈学到的奖励能保持更高的平均回报。Acrobot-v1 中也有类似模式：系统动力学的结构性变化对模仿策略与单反馈奖励模型的冲击不成比例地大，而组合反馈在各级扰动下给出持续更稳定的性能。在 LunarLander-v3 中，重力与风扰动严重削弱了 BC 的性能；相比之下，MAVRL——尤其是用多类型反馈（PDR）和示范反馈（D）训练时——在越来越有挑战性的动力学下依然显著更鲁棒。
+多类型反馈能补偿大多数被错误设定的模态。 接下来我们检验多类型优势能否延伸到”反馈信号本身被污染”的情形——采用与第 6.2 节相同的固定分配反馈预算。我们施加四种错误设定（分别或联合）：低估偏好（）与示范（）的标注者理性程度、在评分效用上加性高斯噪声、以及停止倾向被误校准。grid_cliff 与 grid_sparse 的结果见 [表 3]（原文第 9 页；grid_trap 上的同样结论见表 5）。
+[表 3] 说明：上半部分为单模态模型，下半部分为使用完整反馈集合的 MAVRL；每一行把指定通道的数据侧参数破坏掉，而模型仍假设其取值完好（被破坏的模态在原表中以模糊/灰色标出，例如 PDRS 表示偏好被错误设定）。列含义：Base＝完好设定的归一化回报；Misspec.＝均值±标准误；Rat.＝Misspec./Base。原文数值请对照原 PDF。
+两点观察很突出。第一，在四种污染中的三种（偏好、评分与停止）下，PDR 保留了其完好设定性能的 ≥90%，而相应的单模态基线则崩塌到低至 0.10 的比例。这表明存在很强的补偿效应：在多个反馈类型上的联合推断吸收来自单一来源的污染，而不是把它传播开。第二，例外是示范：污染示范把 PDR 打到 0.38–0.50 的比例；同时污染全部四个通道也大致达到同一水平（0.43–0.50）。因此 PDR 的最坏情况退化受限于示范通道，而不是在各通道之间叠加恶化。总体而言，多类型优势可延伸到四个反馈通道中三个的上游污染场景，而示范仍是结构性的薄弱点。
+
+7. 结论（Conclusion）本文将”从多类型反馈学习奖励”表述为对共享潜在奖励函数的贝叶斯推断：每种反馈模态都通过显式似然作出贡献。我们提出了 MAVRL——一种可扩展的摊销变分推断算法，它优化单一统一目标。经验上我们发现：不同反馈类型会诱导出不同的奖励与不确定性结构，而从多个模态联合推断奖励能够利用它们的互补优势，从而提升奖励恢复、下游策略性能与鲁棒性。
+局限性（Limitations）。 我们的评估局限于仿真环境——虽然这允许对不同类型的反馈做受控分析，但并未捕捉真实世界任务的完整复杂性。此外，我们依赖合成生成的反馈；把 MAVRL 应用到可能表现出系统性偏差、不一致或依赖上下文的判断的真实人类反馈，仍是未来工作的重要方向。最后，尽管我们的框架能推断奖励不确定性，我们尚未利用这种不确定性来引导反馈采集，因此把异质反馈的主动学习（active learning）留作一个有前景的未来方向。
+
+致谢（Acknowledgments）本研究主要由 ETH AI Center 资助：其中 Raphaël Baur 获得 ETH AI Center 博士奖学金，Thomas Kleine Buening 获得 ETH AI Center 博士后奖学金。
+影响声明（Impact Statement）本文工作旨在推动机器学习领域的发展。我们的工作可能存在许多潜在的社会影响，但我们认为其中没有哪一项需要在此特别强调。
+
+参考文献（References）
+以下按惯例保留英文原文（按原 PDF 整理，作者与年份信息供检索）。
+
+
+Abbeel, P. and Ng, A. Y. Apprenticeship learning via inverse reinforcement learning. ICML, 2004.
+
+Abouelazm, A., Michel, J., and Zöllner, J. M. A review of reward functions for reinforcement learning in the context of autonomous driving. IEEE IV, 2024.
+
+Akiba, T., Sano, S., Yanase, T., Ohta, T., and Koyama, M. Optuna: A next-generation hyperparameter optimization framework. ACM SIGKDD, 2019.
+
+Amodei, D., Olah, C., Steinhardt, J., Christiano, P., Schulman, J., and Mané, D. Concrete problems in AI safety. arXiv:1606.06565, 2016.
+
+Bajcsy, A., Losey, D. P., O’Malley, M. K., and Dragan, A. D. Learning robot objectives from physical human interaction. CoRL, PMLR 78, pp. 217–226, 2017.
+
+Brown, D., Goo, W., Nagarajan, P., and Niekum, S. Extrapolating beyond suboptimal demonstrations via inverse reinforcement learning from observations. ICML, PMLR 97, pp. 783–792, 2019.
+
+Brown, D. S., Coleman, R., Srinivasan, R., and Niekum, S. Safe imitation learning via fast Bayesian reward inference from preferences. ICML, 2020.
+
+Bıyık, E., Losey, D. P., Palan, M., Landolfi, N. C., Shevchuk, G., and Sadigh, D. Learning reward functions from diverse sources of human feedback: Optimally integrating demonstrations and preferences. IJRR, 41(1):45–67, 2022.
+
+Cai, Y., Yuan, Y., Shi, J., and Lin, Q. Approximated variational Bayesian inverse reinforcement learning for large language model alignment. AAAI, vol. 39, pp. 23505–23513, 2025.
+
+Chan, A. J. and van der Schaar, M. Scalable Bayesian inverse reinforcement learning. ICLR, 2021.
+
+Christiano, P. F., Leike, J., Brown, T. B., Martic, M., Legg, S., and Amodei, D. Deep reinforcement learning from human preferences. NIPS, pp. 4302–4310, 2017.
+
+Gershman, S. J. and Niv, Y. Novelty and inductive generalization in human reinforcement learning. Topics in Cognitive Science, 7(3):391–415, 2015.
+
+Ghosal, G. R., Zurek, M., Brown, D. S., and Dragan, A. D. The effect of modeling human rationality level on learning rewards from multiple feedback types. AAAI, 2023.
+
+Gleave, A., Dennis, M. D., Legg, S., Russell, S., and Leike, J. Quantifying differences in reward functions. ICLR, 2021.
+
+Hadfield-Menell, D., Dragan, A., Abbeel, P., and Russell, S. The off-switch game. IJCAI, pp. 220–227, 2017.
+
+Hendrycks, D., Carlini, N., Schulman, J., and Steinhardt, J. Unsolved problems in ML safety. arXiv:2109.13916, 2021.
+
+Ibarz, B., Leike, J., Pohlen, T., Irving, G., Legg, S., and Amodei, D. Reward learning from human preferences and demonstrations in Atari. NeurIPS, 31, 2018.
+
+Jeon, H. J., Milli, S., and Dragan, A. D. Reward-rational (implicit) choice: A unifying formalism for reward learning. arXiv:2002.04833, 2020.
+
+Kingma, D. P. and Welling, M. Auto-Encoding Variational Bayes. ICLR, 2014.
+
+Knox, W. B. and Stone, P. Interactively shaping agents via human reinforcement: The TAMER framework. K-CAP ‘09, pp. 9–16, 2009.
+
+Knox, W. B., Allievi, A., Banzhaf, H., Schmitt, F., and Stone, P. Reward (mis)design for autonomous driving. Artificial Intelligence, 316:103829, 2023.
+
+Likert, R. A technique for the measurement of attitudes. Archives of Psychology, 140:1–55, 1932.
+
+Losey, D. P., Bajcsy, A., O’Malley, M. K., and Dragan, A. D. Physical interaction as communication: Learning robot objectives online from human corrections. IJRR, 41(1):20–44, 2022.
+
+Loshchilov, I. and Hutter, F. Decoupled weight decay regularization. arXiv:1711.05101, 2019.
+
+Macuglia, M., Friedrich, P., and Ramponi, G. Fine-tuning behavioral cloning policies with preference-based reinforcement learning. arXiv:2509.26605, 2025.
+
+McCullagh, P. Regression models for ordinal data. JRSS-B, 42(2):109–127, 1980.
+
+Mehta, S. A. and Losey, D. P. Unified learning from demonstrations, corrections, and preferences during physical human–robot interaction. J. Hum.-Robot Interact., 13(3), 2024.
+
+Metz, Y., Lindner, D., Baur, R., Keim, D. A., and El-Assady, M. RLHF-Blender: A configurable interactive interface for learning from diverse human feedback. Interactive Learning with Implicit Human Feedback Workshop at ICML, 2023.
+
+Metz, Y., Geiszl, A., Baur, R., and El-Assady, M. Reward learning from multiple feedback types. ICLR, 2025.
+
+Myers, V., Bıyık, E., Anari, N., and Sadigh, D. Learning multimodal rewards from rankings. CoRL, 2021.
+
+Ng, A. Y., Harada, D., and Russell, S. J. Policy invariance under reward transformations: Theory and application to reward shaping. ICML, 1999.
+
+Ng, A. Y., Russell, S., et al. Algorithms for inverse reinforcement learning. ICML, vol. 1, 2000.
+
+Ouyang, L., Wu, J., Jiang, X., et al. Training language models to follow instructions with human feedback. arXiv:2203.02155, 2022.
+
+Palan, M., Landolfi, N. C., Shevchuk, G., and Sadigh, D. Learning reward functions by integrating human demonstrations and preferences. RSS, 2019.
+
+Paszke, A., Gross, S., Massa, F., et al. PyTorch: An imperative style, high-performance deep learning library. NeurIPS, 2019.
+
+Poddar, S., Wan, Y., Ivison, H., Gupta, A., and Jaques, N. Personalizing reinforcement learning from human feedback with variational preference learning. NeurIPS (NIPS ‘24), 2024.
+
+Raffin, A., Hill, A., Gleave, A., Kanervisto, A., Ernestus, M., and Dormann, N. Stable-Baselines3: Reliable reinforcement learning implementations. JMLR, 22(268):1–8, 2021.
+
+Ramachandran, D. and Amir, E. Bayesian inverse reinforcement learning. IJCAI’07, pp. 2586–2591, 2007.
+
+Rothkopf, C. A. and Dimitrakakis, C. Preference elicitation and inverse reinforcement learning. ECML/PKDD, pp. 34–48, Springer, 2011.
+
+Wirth, C., Fürnkranz, J., and Neumann, G. Model-free preference-based reinforcement learning. AAAI’16, pp. 2222–2228, 2016.
+
+Yuan, Y., Hao, J., Ma, Y., Dong, Z., Liang, H., Liu, J., Feng, Z., Zhao, K., and Zheng, Y. Uni-RLHF: Universal platform and benchmark suite for reinforcement learning with diverse human feedback. ICLR, 2024.
 
 
 
-质量 
-转动惯量 
-惯性大小
+附录（Appendix）附录 A 实现细节（Implementation Details）A.1 模型结构（Model Architecture）奖励编码器  与 Q 值估计器  都实现为两层 MLP，激活函数为 Leaky ReLU。对于网格环境，使用学习率  、批大小 32，奖励只依赖状态：。对于控制任务（CartPole-v1、Acrobot-v1、LunarLander-v3），使用学习率 、批大小 128，奖励依赖状态–动作对：。所有模型都用带梯度裁剪（最大范数 1.0）的 AdamW 训练（Loshchilov &amp; Hutter, 2019）。奖励编码器参数化一个以标准正态分布为先验的高斯后验，并用重参数化技巧训练。专家参考策略用 Stable-Baselines3 的 DQN（LunarLander-v3 以外）与 PPO（LunarLander-v3）训练（Raffin et al., 2021）。
+超参数优化。 对每个环境与反馈组合，用 Optuna 的多元 TPE 采样器（constant_liar=True，20 个启动试验）调优超参数（Akiba et al., 2019）。每个试验在采样配置下、跨多个随机种子训练模型，并按所选验证指标打分。联合搜索空间包括：
+
+损失权重  与 ，在  上对数均匀采样；
+奖励编码器宽度：网格为每层 16 / 32 / 64 个隐单元，控制任务为 64 / 128 / 256；
+奖励模型优化器：学习率（对数均匀 ）、批大小（网格为 16 / 32 / 64 / 128，控制任务为 32 / 64 / 128 / 256）；
+对 LunarLander-v3，还包括 PPO 重训的超参数（学习率、裁剪范围、熵/价值系数、GAE-、梯度范数上界等）。
+
+调优在两种”反馈分配模式”下进行：
+
+等预算（Dirichlet）模式：把固定的总反馈预算通过平坦-Dirichlet 分配（由 Optuna 建议）切分到各个激活模态。每种模态设置上限（例如网格/控制任务分别 ≤16/≤32 条示范，因为示范似然会很快饱和），通过裁剪 Dirichlet 比例并重新分配超出的部分来实施。
+固定分配模式：每个模态被分配规定的样本数（FIXED_SAMPLE_COUNTS），只搜索上述优化超参数。该模式用于在”有用且可比”的预算下刻画每个模态的贡献，而不与分配选择相混淆。
+
+对同一环境内的所有方法统一施加相同的调优协议（采样器、搜索空间、每试验种子数、验证指标），从而保证所报数字反映的是匹配计算量下的最佳搜索性能。模型与训练代码基于 PyTorch 实现（Paszke et al., 2019）。
+A.2 反馈模拟（Feedback Simulation）我们用温度参数为  的 Boltzmann 理性策略 rollout 收集轨迹，并从中模拟人类反馈。下面给出各类反馈的生成过程。
+偏好（Preferences）。 从收集到的轨迹中随机提取固定长度  的片段。对每对片段 ，计算其归一化回报  ，并按 Bradley–Terry 模型生成一个偏好：
+
+其中  表示 logistic sigmoid， 控制偏好理性程度。观测偏好按该概率作为 Bernoulli 随机变量采样。取值： ；片段长度  （网格）或  （其余环境）；轨迹理性  （网格，均匀策略）或 （其余环境）。
+示范（Demonstrations）。 专家示范通过 rollout Boltzmann 理性策略    生成，其中  为最优 Q 函数。示范理性  控制专家最优程度。取值： （网格）， （其余所有环境）。
+评分（Ratings）。 从轨迹中提取随机片段并计算其归一化回报。切点  放在逐步片段回报的   百分位处。随后在累积 logit 模型下随机采样评分：
+
+该式产生近似均衡的类别。典型参数：  个类别，片段长度  （网格；其余环境），轨迹理性    （分别对应网格、Acrobot-v1 与 CartPole-v1、LunarLander-v3）。
+停止信号（Stops）。 用基于累积遗憾的离散时间风险模型模拟停止反馈。对一条轨迹片段，在每个时间步计算瞬时遗憾   ，并维护一个折扣累积遗憾：
+
+其中   是遗憾折扣因子，控制过去次优性被”遗忘”的速度。风险率（给定此前未停止时在时刻  停止的概率）为
+
+灵敏度参数  从数据校准为  ，其中  是缩放常数， 是参考遗憾水平（通常取所有片段最大累积遗憾的第 50 百分位）。 越大，停止行为越激进。停止时间顺序采样：在每个时间步  以概率  采样一个停止事件；若片段内没有停止发生，则观测右删失。参数： ，遗憾折扣  ，参考百分位 50%，片段长度  （网格；其余环境），轨迹理性  。
+附录 B 硬件与计算资源（Hardware and Computational Resources）由于第 6 节要评估大量配置，单个奖励模型的训练与评估运行被分发到由 SLURM 管理的机构集群上，每个 worker 分配 4 个 CPU 核与 8 GB 内存。由于奖励编码器与 Q 值估计器网络很小，无需 GPU 加速。最终实验总计算量约为   CPU·小时。
+需要说明的是，在单机上，单次奖励模型训练大约耗时：网格环境 2 分钟，其余环境约 15 分钟；其中大部分计算时间花在”用推断出的奖励函数重训策略以进行评估”上。
+附录 C 等预算结果（Equal Budget Results）对每个环境，我们固定一个总反馈预算 ，由等预算表中的全部 11 个模态子集共享：四种反馈各自单独使用（P、D、R、S）、全部六种两两组合，以及四者的完整组合（PDRS）。预算为：三个表格型网格（grid_cliff、grid_sparse、grid_trap）、Acrobot-v1 与 CartPole-v1 取   个样本；LunarLander-v3 取   个样本。
+对每一对（环境，模态子集），我们运行一次独立的 TPE（Tree-structured Parzen Estimator）搜索，联合调节 (i)  分配给每个激活反馈类型的比例，以及 (ii) 奖励模型的训练超参数（编码器大小、学习率、批大小、重要性加权开关、KL 权重、TD 权重）；对非表格环境，搜索还额外调节下游 PPO 重训超参数。每个试验在表格环境下用 20 个随机种子、非表格环境下用 10 个随机种子训练奖励模型，并按”逐种子归一化折扣回报均值”（表格）或”平均回合回报”（非表格）打分；每个研究运行 125–200 个试验。最佳试验的奖励模型 checkpoint 就是本文所有下游迁移与误设实验所使用的那一批。
+[表 4] 位置与内容说明：原文第 15 页。该表给出等预算设定下、跨环境的各反馈组合的归一化平均回报与平均 EPIC 距离（ ）。表结构同表 1（上半部分为回报、下半部分为 EPIC，越低越好）。回报按环境归一化，100 对应真实奖励训练出的近似最优策略、0 对应均匀随机策略；深灰底为该环境最优（回报在 1% 以内），浅灰底为该区间外次优。具体数值请对照原 PDF。
+附录 D 完整误设结果（Full Misspecification Results）我们考虑四种误设变体，可单独或联合施加：
+
+偏好：低估标注者噪声——  而模型假设  ；
+示范：同样低估标注者噪声——  而模型假设  ；
+
+（上述两者都表示：数据在高度含噪标注下生成，而模型假设标注者近乎理性。）
+
+评分：在评分分配之前给片段效用叠加高斯噪声  ，而模型假设效用无噪声；
+停止倾向：误校准——  而模型假设  。
+
+在所有情况下，奖励模型都用与主表相同的、良好设定的参数训练，因此未扰动基线不变。
+[表 5] 位置与内容说明：原文第 15 页（表 3 的补全版，包含 grid_trap 一列）。表结构同表 3：上为单模态模型，下为完整反馈集合的 MAVRL；每行破坏指定通道的数据侧参数，被破坏的模态在原表中以模糊方式标出（例如 PDRS 表示偏好被误设）。列：Base（完好设定归一化回报）、Misspec.（均值±标准误）、Rat.（=Misspec./Base）。正文第 6.3 节所述规律在 grid_trap 上同样成立，具体数值请对照原 PDF。
+附录 E 额外迁移结果与扰动详细描述（Additional Transfer Results and Detailed Perturbation Description）所有反馈组合的迁移性能结果见 [图 3]（原文第 17 页）。
+[图 3] 内容说明（中文）：该图展示三种动力学扰动场景下、由各方法推断的奖励训练出的策略的归一化平均回报（ ）。奖励模型与基线在未扰动设定下训练、并在整个变化过程中保持固定。图 (a)(b) 分别对应 grid_cliff 与 grid_trap 中”环境随机性”（0→0.8）的逐步增强；(c) 为 Acrobot-v1 摆杆两段长度之比的增大（约 1.0→2.0）；(d) 为 LunarLander-v3 重力与风力的增强。回报按”未扰动设定下用真实奖励训练出的近似最优策略＝100.0、均匀随机策略＝0.0”归一化，误差棒为标准误。各曲线对应本文全部单模态与多模态组合以及行为克隆基线，请对照原 PDF 查看逐条曲线。
+下面总结用于评估”系统动力学系统性变化下下游策略性能鲁棒性”的环境扰动。
+网格世界环境（grid_cliff、grid_sparse、grid_trap）。 通过在智能体的动作执行中引入随机性来扰动转移动力学：具体地，提高执行随机动作的概率  ，其中   对应确定性动力学。这些环境具有稀疏奖励以及悬崖或陷阱等惩罚区域，因此对动作噪声的鲁棒性尤为重要。
+在网格实验中，所有方法在   时收敛到相同性能。这一行为直接源于随机动作的定义方式。设  是确定性策略  选中的动作，即  。在动作噪声下（概率 ），实际执行的策略变为
+
+在   的网格环境中，令   会对所有动作  给出  ——等价于均匀随机策略。由于回报按”均匀策略取得 0.0”归一化，所有方法在   处都收敛到这个值。对于更大的 ，非意图动作获得比原始意图动作更高的概率质量，使确定性动作选择变得次优，因此我们把分析限制在  。
+LunarLander-v3。 我们通过联合增大重力大小与风的强度来扰动动力学。具体地，重力参数在     中变化（默认 ），风力在  中变化（默认 0.0）。这些扰动产生越来越有挑战性的动力学：智能体既要缓解更强重力导致的快速下落，又要补偿风引起的横向漂移。
+Acrobot-v1。 我们通过改变双摆两段连杆长度的比例来扰动系统。连杆间不对称性增大改变了系统的惯量与耦合，从而相对未扰动设定产生逐步不同且更具挑战性的动力学。
+附录 F 额外定性结果（Additional Qualitative Results）本节给出所有网格环境的额外定性结果。[图 4]（grid_sparse，原文第 18 页）、[图 5]（grid_cliff，原文第 19 页）、[图 6]（grid_trap，原文第 20 页） 每幅都展示了同一推断奖励模型的两种可视化：
+
+(a) 均值与方差的联合视觉编码（与图 1 一致）；
+(b) 对同一数据，均值与方差的分离视觉编码。
+
+每幅图都由   网格上、来自 2 条示范、256 对成对比较、128 条评分 的推断结果组成；最右列展示组合全部反馈模态后的结果（各子图上方或图内标注了对应反馈模态与数据量，请对照原 PDF）。
+
+需要说明的是，原文按反馈类型对推断出的奖励值做了线性归一化（这不会影响策略性能，因为最优策略诱导的行为对奖励函数的正缩放与常数平移不变，见 Ng et al., 1999）。
 
 
-速度 Undefined control sequence \boldsymbol
-角速度 Undefined control sequence \boldsymbol
-运动快慢（矢量）
+译后小结（供学习参考）
+一句话概括：MAVRL 把”从人类反馈学奖励”统一成一个贝叶斯问题——共享一个潜在奖励函数 ，每种反馈（示范 D、偏好 P、评分 R、停止 S）都用自己的概率似然说话，全部放进一个 ELBO 里端到端训练，不再需要手工配损失权重。
+方法骨架：奖励编码器   ＋ 辅助 Q 函数 （支持示范/停止这类需要价值估计的反馈）＋ 各类反馈的似然解码器  ＋ TD 正则把奖励与 Bellman 差分对齐。
+四个似然：偏好＝Bradley–Terry；示范＝Boltzmann 理性策略；评分＝有序 logit（切点不等距）；停止＝关于终止时间的风险模型（几何分布，右删失）。
+核心结论：(1) 组合反馈优于任何单模态；(2) 示范在稀疏奖励环境最强，评分在 CartPole 最好，偏好单用平庸但组合时贡献大，停止信号补充”次优性”信息；(3) 多类型联合推断对动力学扰动和大部分反馈误设（偏好/评分/停止）都很鲁棒，唯独示范通道被污染时仍是结构性短板；(4) 相对 MCMC 快约 30 倍、且能做连续控制，相对事后平均大幅更优。
+阅读时建议对照原图：图 1 / 图 4–6 的”热力图”直观展示各类反馈留下的”不确定性模式”；图 2 / 图 3 的”鲁棒性曲线”直观展示组合反馈衰减更平缓。
 
 
-动量 Undefined control sequence \boldsymbol
-角动量 Undefined control sequence \boldsymbol
-运动的“量”
+本翻译由学习者整理发布，仅供学习交流；原文版权归作者所有。若用于正式引用，请引用原论文。
+]]></content>
+      <categories>
+        <category>论文学习</category>
+      </categories>
+      <tags>
+        <tag>论文</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>BNRM的研究思路</title>
+    <url>/2026/10/16/BNRM%E7%9A%84%E7%A0%94%E7%A9%B6%E6%80%9D%E8%B7%AF/</url>
+    <content><![CDATA[
+来源说明：本文整理自老师提供的研究方案（ChatGPT 对话全文），凝练了在 BNRM 与 MAVRL 基础上提出的新方向 MF-BNRM（Multi-Feedback Bayesian Non-negative Reward Modeling）。文末附研究方案自带的 PyTorch 原型代码 mbnrm_demo.py。
+配套阅读：本站《reward_model原文》《reward_model中文翻译》《agent对reward_model的理解》，以及《agent对BNRM研究思路的整理》。
 
 
-力 Undefined control sequence \boldsymbol
-力矩 Undefined control sequence \boldsymbol
-改变运动状态的外因
+面向 ICML 的研究方案：多类型反馈驱动的稀疏贝叶斯奖励建模建议将研究方向凝练为：
+
+Multi-Feedback Bayesian Non-negative Reward Modeling with Shared Sparse Representations and Task-Specific Bayesian Decoders，简称 MF-BNRM。
+
+其核心思想是：不同类型的人类反馈并非对应完全独立的奖励函数，而是对一组潜在奖励语义因子的不同观测。 通过共享稀疏贝叶斯隐变量、构建反馈类型专属的稀疏概率解码器，可以同时学习不同反馈之间的共性与差异。
+研究应围绕三个问题展开：
+
+表示问题：不同反馈类型能否共享低维稀疏概率表示，同时保持各自的奖励判断机制？
+统计问题：共享稀疏结构能否减少多任务奖励学习的有效复杂度，尤其是少样本反馈类型的估计误差？
+不确定性问题：多种反馈是否能够提供互补的统计信息，提高潜在奖励表示的可辨识性和后验收缩效率？
+
+研究方案自带的 PyTorch 原型（含四类反馈、Gamma–Weibull 隐变量及任务专属概率解码器，单文件、合成数据、可直接运行）见文末。
+
+一、两篇已有工作的理论基础已有的 BNRM 论文采用非负局部潜变量 Undefined control sequence \boldsymbol、全局概率字典 Undefined control sequence \boldsymbol，以及 Gamma 先验和 Weibull 变分后验，将传统的 Bradley–Terry 奖励函数扩展为具有稀疏表示和不确定性的概率奖励模型。其基本形式是：
+Undefined control sequence \boldsymbol
+并通过 BT 似然学习人类偏好。
+另一方面，MAVRL（Learning Reward Functions from Multiple Feedback Types with Amortized Variational Inference）已经提出共享概率奖励编码器和反馈专属似然解码器，可以统一学习偏好、示范、评分和停止反馈。
+因此，仅仅将 BNRM 的概率表示接入 MAVRL 的四个反馈头，不足以构成很强的 ICML 创新。 建议建立如下区别：
 
 
-牛顿第二定律 Undefined control sequence \boldsymbol
-转动定律 Undefined control sequence \boldsymbol
-动力学根本式
+
+研究维度
+BNRM
+MAVRL
+MF-BNRM
 
 
+
+反馈类型
+主要为成对偏好
+多种反馈
+多种反馈
+
+
+潜变量
+稀疏非负概率因子
+共享概率奖励
+共享稀疏概率因子
+
+
+解码器
+全局概率奖励字典
+专属似然模型
+专属稀疏贝叶斯字典
+
+
+多任务结构
+未显式建模
+隐式共享
+共享与任务特有支持集
+
+
+理论目标
+稀疏性、鲁棒性
+多反馈贝叶斯融合
+多任务统计复杂度、信息互补与后验收缩
+
+
+从第三列（MAVRL）到第四列（MF-BNRM）的推进，才是新研究的主体。
+二、MF-BNRM 的统一模型MF-BNRM 概念架构：每个解码器均包含类型专属的稀疏贝叶斯参数，而非仅使用固定似然函数。
+2.1 共享稀疏概率隐变量对于输入  ，使用编码器产生非负随机表示：
 Undefined control sequence \boldsymbol
 Undefined control sequence \boldsymbol
-加速度 / 角加速度形式（不变才成立）
+其中 Undefined control sequence \boldsymbol 由编码器  生成。
+关键在于：偏好、示范、评分和停止这四类反馈共享同一个隐变量空间 Undefined control sequence \boldsymbol，但不要求它们对每个因子的依赖强度相同。
+2.2 任务专属稀疏贝叶斯解码器令   表示反馈类型。建议定义：
+Undefined control sequence \boldsymbol
+其中
+
+通过两组非负概率字典的差表示带符号奖励，可以保持非负因子的可解释性，同时允许正向奖励与惩罚项。
+进一步，建议显式引入支持集层次：
 
 
-动能  
-转动动能  
-动能
+其中  决定语义因子是否具有全局共享价值， 决定反馈类型  是否需要该因子。这把原 BNRM 的连续收缩稀疏性进一步扩展为共享支持集—任务专属支持集的层次贝叶斯结构。
+
+注意：Bernoulli 掩码是建议增加的完整模型组件，当前简单代码尚未实现显式离散支持集。
+
+2.3 不同类型反馈的似然在共同隐变量基础上构建四种观测机制：
+偏好反馈（Preference）
+
+示范反馈（Demonstration）：在动作空间为  的环境中，
+
+其中可令  与奖励模型通过 Bellman 一致性约束联系，避免将示范仅作为独立分类任务。
+评分反馈（Rating）：对于等级评分，引入有序 Logistic 解码器：
+
+停止反馈（Stopping）：构造离散时间风险率：
+
+实际研究中可以进一步把停止机制改写为依赖行动后悔值或历史累计次优性的风险函数。
+这四种似然对应不同的观测信息，并不要求奖励数值在不同反馈类型之间直接相等。
+2.4 统一变分目标令  ，支持集为 ，数据集为   ，则联合 ELBO 可以定义为：
+
+这里的一个重要优点是，四类数据通过各自的概率似然进入统一学习目标，不必仅凭经验把不同损失手动转换为同一类标签。
+但这一目标的 KL 项必须针对实际的全局和局部随机变量正确计数，不能把不同批次上的所有局部 KL 无差别重复累加。
+三、核心理论创新：从稀疏多任务学习证明优势这里是整篇论文最值得加强的部分。建议不要直接声称”Gamma 先验带来更强泛化”。更严谨的逻辑应该是：
+结构化贝叶斯先验后验支持集集中有效统计维度降低多任务估计误差降低
+同时建立第二条理论路径：
+异质反馈互补信息可辨识性增强后验不确定性收缩
+定理一：共享稀疏支持集的多任务复杂度优势考虑多任务广义线性奖励模型：
+
+这里先将共享特征  视为给定的表示，以隔离研究解码器的统计性质。定义行支持集：
+
+假设所有任务系数共享这一大小为  的候选支持集，并采用具有正质量或充分浓度的结构稀疏先验。在以下条件下：
+
+不同反馈观测条件独立，且对应似然正确指定；
+特征有界，联合经验设计满足限制强凸性；
+各反馈似然在相关参数邻域内具有统一正曲率；
+所用估计器满足适当的稀疏模型选择或后验集中条件；
+
+对于总样本数  ，可建立如下目标形式的高概率超额风险界：
+
+其中  是按观测比例加权的联合预测超额风险，常数依赖似然曲率和设计条件。这是需要针对 MF-BNRM 完成严格证明的候选定理，而不是已经由现有非线性 BNRM 直接得到的结论。
+相比之下，如果每个任务独立选择大小为  的支持集，典型复杂度量级是：
+
+区别在于：
+
+独立模型需要重复进行  次支持集搜索；
+共享模型只进行一次公共支持集搜索，同时估计  个任务系数。
+
+当  、任务支持高度重叠，并且各任务都有足够的有效观测时，共享学习具有理论优势。
+
+例如，设    ，忽略共同常数及置信度项：独立稀疏任务复杂度约 120.7，共享稀疏任务复杂度约 62.2，理论复杂度主项约减少 44%。这并不代表真实模型的泛化误差一定减少相同比例，但可以作为实验验证的明确假设。
+
+定理二：异质反馈的信息互补与后验收缩这部分可能比单纯的复杂度界更有 ICML 理论价值。设共享潜在参数为 ，不同类型反馈对应的 Fisher 信息矩阵为：
+
+当不同类型数据条件独立时：
+
+考虑固定参数维度、正确指定、局部可辨识、正则且满足 Bernstein–von Mises 条件的参数模型，其渐近后验协方差为：
+
+这说明，当增加一类有效反馈且原有样本不变时，联合信息矩阵按半正定顺序增加，相应的渐近参数不确定性不会增加。
+更重要的是：即使单一反馈无法识别某个潜在语义因子，其他反馈也可能补充缺失的信息方向。
+
+示例（两类反馈的互补性）：仅偏好反馈时，部分参数方向约束较弱；偏好 + 评分反馈时，互补观测收缩不确定性。（概念性协方差椭圆，不是实际实验结果。）
+
+对于偏好反馈，还必须处理奖励整体平移不变性带来的辨识问题。这给出一个很强的理论命题：多反馈学习的优势不仅来自增加样本数量，还来自不同观测机制对潜在奖励参数提供互补的信息方向。
+但需要特别处理两个问题。第一，如果固定总标注预算，用新反馈替换旧反馈，信息矩阵不一定更大。第二，潜因子模型具有尺度变换、置换等对称性，必须在可辨识参数空间或施加规范化约束后讨论后验协方差。
+定理三：共享与专属稀疏的误差分解现实中，各任务不一定完全共享同一支持集。建议将解码器写成：
+
+其中共享项为行稀疏结构，任务特有项具有额外稀疏支持。设共享支持大小为 ，任务特有支持大小为 ，则候选的误差分解为：
+表示近似误差结构化估计复杂度变分近似误差
+这是更接近实际模型的研究方向。其意义在于明确回答：什么时候应该共享，什么时候应该允许任务差异？ 如果不同反馈的真实支持集高度重叠，共享模型可以降低复杂度；如果支持集差异很大，强制共享可能带来负迁移。因此，支持集交叠度应当成为理论假设和实验自变量。
+
+以上三个定理建议分别作为论文的：Shared Sparse Multi-task Generalization（定理一）、Complementary Feedback Information and Posterior Contraction（定理二）、Adaptive Shared–Specific Decomposition（定理三）。正式证明时，优先从冻结编码器的多任务广义线性模型出发，再加入后验收缩和变分推断误差，不建议一次性声称对任意深度网络都能成立。
+
+四、PyTorch 原型：实现与初步测试已经实现的原型包括：
+
+共享 Weibull 隐变量编码器及 Gamma 先验 KL 散度；
+四种任务独立的概率字典，每种字典包含正、负两个非负分量；
+偏好 BT、连续评分 Gaussian、示范 Softmax、逐时刻停止 Bernoulli 似然；
+联合训练目标、合成数据生成及独立测试集评估。
+
+需要明确区分：代码是用于验证训练链路的简化 MF-BNRM 原型，不是完整理论模型。 其中连续评分暂未实现有序 Logistic；停止反馈也尚未引入基于  的历史风险率；共享与任务专属的显式支持集掩码、正确缩放的完整数据集 ELBO 仍需要增加。
+实际运行结果（1,400 个合成训练样本、400 个合成测试样本、160 次 Adam 更新）：
+
+
+
+指标
+结果
+
+
+
+偏好预测准确率
+79.5%
+
+
+示范动作准确率
+65.5%
+
+
+评分 RMSE
+1.083
+
+
+停止预测准确率
+71.8%
+
+
+这组结果说明原型能够完成四种反馈的联合概率训练，且训练目标下降。但它尚未验证多任务共享的理论优势——因为当前没有独立任务学习、非稀疏共享学习等对照组，也没有支持集恢复或后验校准测试。因此不能据此声称 MF-BNRM 优于 BNRM 或 MAVRL。
+运行方式：
+pip install torchpython mbnrm_demo.py --steps 160
+
+也可以调整 KL 系数：
+python mbnrm_demo.py --steps 300 --beta 0.005
+
+
+五、ICML 实验设计建议将实验分为四个部分，而不是仅比较最终奖励准确率。
+实验一：验证稀疏共享能否降低样本复杂度使用可控合成模型，设置潜变量维度  ，真实支持集大小  ，反馈数量  。重点控制不同任务的真实支持集交叠比例，并比较：
+
+
+
+模型
+共享表示
+任务稀疏
+贝叶斯
+
+
+
+Independent RM
+否
+否
+否
+
+
+Shared Multi-task RM
+是
+否
+否
+
+
+Group Lasso Multi-task RM
+是
+是
+否
+
+
+Multi-feedback BNRM
+是
+否
+是
+
+
+MF-BNRM
+是
+是
+是
+
+
+以样本数为横轴，绘制测试预测误差、共享支持集恢复 F1、平均活跃因子数及预测 NLL。这个实验直接对应定理一。
+实验二：验证不同反馈的互补信息设计两类潜在语义因子  ，让偏好反馈主要揭示质量方向、停止反馈主要揭示安全方向，再加入评分和示范。观察联合 Fisher 信息矩阵的最小特征值、后验协方差及潜在因子的恢复误差。如果联合反馈能够改善单一反馈无法识别的方向，就可以为定理二提供直接证据。
+实验三：与 MAVRL 在环境任务上比较建议优先基于 MAVRL 官方代码开展可重复的环境实验。重点使用其离散网格世界，再扩展到连续控制环境。比较预测奖励误差、奖励不确定性校准、策略回报及环境扰动下的稳定性。特别要设计等标注预算和等训练计算预算两套实验，以避免把增加反馈数量产生的收益误判为稀疏共享的收益。
+实验四：消融与鲁棒性重点控制三项变量：
+
+
+
+消融变量
+待验证问题
+
+
+
+去除共享稀疏支持
+复杂度优势是否消失
+
+
+去除任务专属稀疏结构
+是否出现负迁移
+
+
+去除贝叶斯后验，改为点估计
+不确定性校准是否变差
+
+
+还可以加入人为污染的偏好和评分反馈，验证不同任务之间的信息共享是否造成噪声传播。
+
+六、面向 ICML 的论文组织建议采用如下结构：
+
+Title: Sparse Bayesian Multi-Task Reward Learning from Heterogeneous Human Feedback
+Section 1. Introduction：从异质反馈的信息不完备、任务间共享与冲突、奖励估计的不确定性切入。
+Section 2. Related Work：覆盖 BNRM、MAVRL、稀疏多任务学习、贝叶斯因子模型及多反馈奖励学习。
+Section 3. Bayesian Multi-Feedback Reward Factorization：给出完整概率图模型、共享稀疏表示及四类任务专属的生成似然。
+Section 4. Theoretical Analysis：提出三类结果——共享稀疏复杂度界、异质反馈信息互补、共享—专属支持集的误差分解。
+Section 5. Variational Inference：介绍 Gamma–Weibull 推断、层次支持集学习、联合 ELBO 和训练算法。
+Section 6. Experiments：按照理论验证、环境实验、鲁棒性和消融四个层次展开。
+
+论文的核心创新可以归纳为三点：
+
+Probabilistic Representation Sharing：提出面向异质人类反馈的共享稀疏非负奖励表示及任务专属贝叶斯解码结构。
+Sparse Multi-task Statistical Learning：研究共享与任务特有支持集如何影响估计复杂度、模型失配及多任务泛化。
+Complementary Bayesian Evidence：从 Fisher 信息和后验收缩角度，刻画异质反馈提升奖励因子可辨识性的条件。
+
+
+七、最值得优先推进的理论突破对于 ICML，更建议把论文的主理论凝练为一个统一结论：
+多反馈统计误差共享支持复杂度稀疏归纳偏置任务特有复杂度异质性代价后验变分近似误差贝叶斯推断模型失配误差鲁棒性限制
+其中，各复杂度项的系数进一步依赖联合反馈似然的限制曲率或 Fisher 信息。这可以同时解释两个重要现象：
+
+其一，为什么共享有益：相似反馈机制可以复用潜在语义支持集，降低重复进行变量选择的复杂度。
+其二，为什么异质反馈有益：不同反馈提供互补的观测信息，增强某些潜在方向的可辨识性，进而改善后验估计。
+
+但如果任务间支持集差异过大，或反馈存在系统性冲突，则优势可能不成立。理论应明确这种适用边界，而不是宣称共享总能改善性能。
+研究优先级建议：首先完成共享支持集下的稀疏多任务风险界与信息互补定理；其次补全层次 Gamma–Weibull 推断；最后将原型迁移到 MAVRL 基准上，进行严格对照实验。这将使 MF-BNRM 从一个多反馈概率模型，发展为具有明确统计理论贡献的 Sparse Bayesian Multi-Task Reward Learning 框架。
+
+附：研究方案自带的 PyTorch 原型（mbnrm_demo.py）"""Minimal Multi-feedback Bayesian Nonnegative Reward Model (M-BNRM).Synthetic data only. Run: python mbnrm_demo.py --steps 160Requires torch; numpy is not needed."""import argparse, math, torchfrom torch import nnfrom torch.nn import functional as Ftorch.set_num_threads(2)def weibull_sample(shape, scale, stochastic=True):    if not stochastic:        return scale * torch.exp(torch.lgamma(1 + shape.reciprocal()))    u = torch.rand_like(shape).clamp(1e-6, 1-1e-6)    return scale * (-torch.log1p(-u)).pow(shape.reciprocal())def kl_weibull_gamma(k, lam, alpha=.65, rate=1.):    # Gamma(shape=alpha, rate=rate), exact KL; Euler-Mascheroni gamma    euler=.5772156649015329    return (k.log() - alpha * lam.log() + euler*(alpha/k-1) -1            -alpha*math.log(rate)+math.lgamma(alpha)            +rate*lam*torch.exp(torch.lgamma(1+1/k)))class MBNRM(nn.Module):    def __init__(self, d=12, k=12, tasks=4):        super().__init__()        self.encoder=nn.Sequential(nn.Linear(d,48),nn.Tanh(),nn.Linear(48,2*k))        # independent nonnegative positive and negative task dictionary components        self.log_shape=nn.Parameter(torch.zeros(tasks,2,k))        self.log_scale=nn.Parameter(torch.full((tasks,2,k),-0.8))        self.k=k    def latent(self,x,stochastic=True):        pars=self.encoder(x)        k=F.softplus(pars[...,:self.k])+0.3        scale=F.softplus(pars[...,self.k:])+1e-4        return weibull_sample(k,scale,stochastic),kl_weibull_gamma(k,scale).sum(-1).mean()    def dictionary(self,stochastic=True):        k=F.softplus(self.log_shape)+0.35        scale=F.softplus(self.log_scale)+1e-4        w=weibull_sample(k,scale,stochastic)        signed=w[:,0]-w[:,1]        return signed,kl_weibull_gamma(k,scale).sum()    def reward(self,x,t,w,stochastic=True):        z,kl=self.latent(x,stochastic)        return (z*w[t]).sum(-1),kl@torch.no_grad()def synthesize(n=1400,d=12,device='cpu',seed=123):    g=torch.Generator(device=device).manual_seed(seed)    # Shared sparse semantic support, with different task coefficients    support=torch.tensor([0,2,5,8])    W=torch.zeros(4,d,device=device)    W[0,support]=torch.tensor([1.5,-1.0,.8,.7])    W[1,support]=torch.tensor([1.1,-.7,1.1,.6])    W[2,support]=torch.tensor([.8,-1.4,.6,1.])    W[3,support]=torch.tensor([1.2,-.6,.9,.5])    def feature(*shape): return torch.randn(*shape,d,generator=g,device=device)    pair=feature(n,2); rpair=(pair*W[0]).sum(-1)    ypref=torch.bernoulli(torch.sigmoid(rpair[:,0]-rpair[:,1]),generator=g)    ratex=feature(n); rating=(ratex*W[1]).sum(-1)+.4*torch.randn(n,generator=g,device=device)    actions=feature(n,4); action_logits=(actions*W[2]).sum(-1)    chosen=torch.multinomial(F.softmax(action_logits,-1),1,generator=g).squeeze(1)    stopx=feature(n,5); hazard=torch.sigmoid(.15-(stopx*W[3]).sum(-1))    stops=torch.bernoulli(hazard,generator=g)    return pair,ypref,ratex,rating,actions,chosen,stopx,stopsdef objective(model,data,beta=.002,stochastic=True):    pair,ypref,ratex,rating,actions,chosen,stopx,stops=data    w,kld=model.dictionary(stochastic)    p,kp=model.reward(pair,0,w,stochastic)    lp=F.binary_cross_entropy_with_logits(p[:,0]-p[:,1],ypref)    r,kr=model.reward(ratex,1,w,stochastic)    lr=.5*((r-rating)/.4).square().mean()+math.log(.4*math.sqrt(2*math.pi))    a,ka=model.reward(actions,2,w,stochastic)    ld=F.cross_entropy(a,chosen)    s,ks=model.reward(stopx,3,w,stochastic)    ls=F.binary_cross_entropy_with_logits(.15-s,stops)    # Normalized ELBO-inspired KL regularized surrogate (not an exactly scaled dataset ELBO).    data_loss=lp+lr+ld+ls    kl=kp+kr+ka+ks+kld/len(pair)    return data_loss+beta*kl, (lp.item(),lr.item(),ld.item(),ls.item(),kl.item())@torch.no_grad()def evaluate(model,data):    pair,ypref,ratex,rating,actions,chosen,stopx,stops=data    w,_=model.dictionary(False)    p,_=model.reward(pair,0,w,False)    r,_=model.reward(ratex,1,w,False)    a,_=model.reward(actions,2,w,False)    s,_=model.reward(stopx,3,w,False)    return dict(pref_acc=((p[:,0]&gt;p[:,1])==ypref.bool()).float().mean().item(),                rating_rmse=(r-rating).square().mean().sqrt().item(),                demo_acc=(a.argmax(-1)==chosen).float().mean().item(),                stop_acc=((s&lt;.15)==stops.bool()).float().mean().item(),                weight_abs_mean=w.abs().mean().item())def main():    p=argparse.ArgumentParser();p.add_argument('--steps',type=int,default=160)    p.add_argument('--seed',type=int,default=42);p.add_argument('--beta',type=float,default=.002)    args=p.parse_args(); torch.manual_seed(args.seed)    train=synthesize(seed=21); test=synthesize(n=400,seed=31)    model=MBNRM();optim=torch.optim.Adam(model.parameters(),lr=.009)    for step in range(args.steps):        model.train();optim.zero_grad();loss,parts=objective(model,train,args.beta)        loss.backward();nn.utils.clip_grad_norm_(model.parameters(),5.)        optim.step()        if step==0 or (step+1)%40==0:            print(f'step={step+1:3d} loss={loss.item():.3f} likelihoods={tuple(round(x,3) for x in parts[:4])}')    print('TEST (synthetic):',evaluate(model,test))    print('CAUTION: synthetic tasks use different linear coefficients; neural latent-factor recovery is not identified by these metrics.')if __name__=='__main__':main()
+
+
 
 
 ]]></content>
       <categories>
-        <category>专业课笔记</category>
+        <category>论文学习</category>
       </categories>
       <tags>
-        <tag>专业课学习</tag>
+        <tag>论文</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>agent对BNRM研究思路的整理</title>
+    <url>/2026/10/16/agent%E5%AF%B9BNRM%E7%A0%94%E7%A9%B6%E6%80%9D%E8%B7%AF%E7%9A%84%E6%95%B4%E7%90%86/</url>
+    <content><![CDATA[
+配套阅读：本文是对《BNRM的研究思路》的解读与整理，建议先读那篇原始方案，再回来看这篇”理解向”梳理。
+一句话背景：老师给的方向叫 MF-BNRM（Multi-Feedback Bayesian Non-negative Reward Modeling），目标是把 BNRM 的”稀疏非负贝叶斯表示”和 MAVRL 的”多反馈统一学习”结合起来，做出一个有理论贡献的 ICML 级工作。
+
+
+1. 这个研究思路到底想干什么1.1 用一句话说清核心创新先看老师方案里最关键的一句话：
+
+不同类型的人类反馈并非对应完全独立的奖励函数，而是对一组潜在奖励语义因子的不同观测。
+
+把它翻译成人话，同时结合你已经会的两篇论文：
+
+BNRM 教会我们：奖励可以表示成”稀疏非负语义因子”的内积  ，稀疏 + 非负让它可解释、抗虚假相关（治”奖励黑客”）。但它只处理”偏好”这一种反馈。
+MAVRL 教会我们：偏好、示范、评分、停止这四种反馈可以共享同一个奖励，各自用一个似然头去解释，统一进一个 ELBO。但它用的是稠密的高斯奖励，没有”稀疏非负因子”这种结构。
+
+MF-BNRM 的创新点：把这两件事合起来——让四种反馈共享同一套稀疏非负因子表示 θ，但每个反馈类型  拥有自己专属的稀疏贝叶斯解码器 。
+关键就这一句，其余都是围绕它展开的：
+
+“共享”负责共性（同一个语义因子空间），”专属”负责差异（不同反馈对因子的依赖强度不同）。
+
+1.2 为什么”光把 BNRM 接进 MAVRL 四个头”不够创新老师的方案里有一段非常清醒的自我定位（这恰恰是很多学生容易忽略的）：
+
+仅仅将 BNRM 的概率表示接入 MAVRL 的四个反馈头，不足以构成很强的 ICML 创新。
+
+因为那样做，BNRM 就只是变成了 MAVRL 的”偏好头”——是把两篇已有工作拼起来，没有新的理论增量。
+真正的增量在于从”隐式共享”升级到”显式的共享 + 任务专属支持集”：
+
+
+
+
+MAVRL
+MF-BNRM
+
+
+
+四类反馈怎么共享
+隐式共享同一个奖励编码器
+显式共享稀疏因子支持集，但允许任务专属支持集
+
+
+有没有理论
+主要是经验/形式化
+明确的多任务统计复杂度、Fisher 信息互补、后验收缩
+
+
+所以这个方向的”主战场”其实是理论，不是模型架构。这是理解整个方案的关键。
+
+2. 三个定理用大白话讲方案里最硬核的部分是三个定理。它们其实对应三个非常朴素的问题，我把每个定理”翻译”成一句话：
+定理一（共享稀疏支持集的多任务复杂度优势）→ “为什么要共享？”大白话：如果四个反馈任务用的大多是同一组少数几个语义因子（支持集重叠），那么”让它们共享这一个支持集、只做一次变量选择”比”每个任务各自做一次变量选择”统计上更省样本。
+
+独立学习：要做  次变量选择，复杂度带一个  的因子重复  次；
+共享学习：只做 1 次公共变量选择，同时估  个系数。
+
+例子：    时，理论复杂度主项从约 120.7 降到 62.2，减少约 44%。注意方案自己强调：这是”理论复杂度主项”，不是”实测误差一定降 44%”。
+定理二（异质反馈的信息互补与后验收缩）→ “为什么要多种反馈？”大白话：每种反馈能”照亮”奖励参数的某些方向，但看不清另一些方向（比如偏好反馈对”奖励整体平移”不敏感）。把多种反馈的 Fisher 信息加起来，能照亮更多方向，后验不确定性就收缩得更快。
+关键命题：多反馈的优势不只是”样本变多了”，更是”不同观测机制提供了互补的信息方向”。 这是最有 ICML 理论价值的一条，也是我最推荐优先攻的方向（方案自己也这么说）。
+定理三（共享与专属稀疏的误差分解）→ “什么时候该共享，什么时候该各自为政？”大白话：现实里四个任务的支持集不完全一样。把解码器写成”共享部分 + 专属部分”，误差就能拆成”表示误差 + 结构复杂度 + 变分误差”三项。这直接回答了一个实用问题：支持集重叠大 → 共享划算；重叠小 → 强行共享会负迁移。
+这三条合起来，就是方案第七节那个”统一结论”：
+
+多反馈统计误差 ≲ 共享支持复杂度 + 任务特有复杂度 + 变分近似误差 + 模型失配误差。
+
+
+3. PyTorch 原型代码在干什么（以及它缺什么）3.1 代码的本质：一个”能跑通”的最小验证我读了一遍 mbnrm_demo.py，它做的事很朴素：
+
+编码器（self.encoder）：一个两层 MLP，输入 （12 维合成特征），输出  个数，经 softplus 变成 Weibull 的形状  和尺度 ，再采样出共享隐变量 。
+四个任务专属字典（self.log_shape / self.log_scale，形状 (tasks=4, 2, k)）：每个任务有”正、负”两个非负分量，相减得到带符号的字典 。
+奖励 r = z · w[t]：共享隐变量  点乘第  个任务的字典。
+四种损失：
+偏好：binary_cross_entropy_with_logits(p1 - p2, label)（即 BT）；
+评分：Gaussian 负对数似然（0.5*((r-rating)/0.4)^2 + log(...)）；
+示范：cross_entropy（softmax 分类）；
+停止：binary_cross_entropy_with_logits(0.15 - s, stop)（一个简化的 Bernoulli 风险）。
+
+
+总损失 = 四项似然相加 + beta * KL（Weibull–Gamma 的 KL 散度），然后 Adam 反向传播。
+
+一句话：这就是 MAVRL 那套”共享编码器 + 多个似然头 + ELBO”的骨架，只是把编码器换成了 Weibull、把奖励表示换成了非负因子、把”奖励头”换成了”稀疏非负字典”。
+3.2 代码缺什么（方案自己都点明了，很重要）方案非常诚实地列出了当前代码没实现的东西，这些恰恰是”从原型到论文”的距离：
+
+连续评分没做有序 Logistic（现在只是 Gaussian 回归，不是真正的”评分”似然）；
+停止反馈没引入基于 Q 的历史风险率（现在只是个简化的逐时刻 Bernoulli）；
+没有显式的共享/任务专属支持集掩码（即方案 2.2 节里的 Bernoulli 掩码  没实现）；
+ELBO 的 KL 项没有正确缩放（代码注释里明说 “not an exactly scaled dataset ELBO”）。
+
+所以：代码证明了”训练链路能跑通、四种反馈能联合训练”，但还没证明任何理论优势。 方案自己说得很清楚——不能据此声称 MF-BNRM 优于 BNRM 或 MAVRL。
+
+4. 我的评估与建议4.1 这个方向最值得做的地方理论（尤其定理二）是这个方向真正的护城河。 原因很简单：模型架构上，MF-BNRM 是 BNRM 和 MAVRL 的自然组合，工程增量有限；但”异质反馈如何通过互补 Fisher 信息提升可辨识性、加速后验收缩”这个问题，之前没有干净的结论。如果把这个定理做扎实，论文就有了不可替代的贡献。
+4.2 需要特别小心的三个坑（方案自己已经点出）
+预算混淆：多反馈带来收益，到底是因为”反馈变多了”还是”稀疏共享”？必须做等标注预算和等计算预算的对照（实验三里强调的）。这是审稿人最爱挑的毛病。
+可辨识性：偏好反馈有”整体平移不变性”，潜因子模型有”尺度/置换对称性”。不讲清楚可辨识条件，定理二的协方差结论站不住。
+负迁移：共享不是万能的。支持集差异大时强行共享会变差。必须把”支持集交叠度”作为自变量来做实验（定理三的意义所在）。
+
+4.3 给你的落地建议按方案第七节的优先级，我的建议顺序是：
+
+先做理论：从”冻结编码器的多任务广义线性模型”出发，把定理一（复杂度界）和定理二（Fisher 互补）证清楚。不要一开始就声称对任意深度网络成立——先从最简单的线性模型下手。
+再补原型：把四个”缺的东西”补上（有序 Logistic、Q 风险率、支持集掩码、正确缩放的 ELBO）。
+最后做对照实验：在 MAVRL 的网格世界上做等预算对照 + 消融（去共享/去稀疏/去贝叶斯）。
+
+
+5. 一句话总结
+MF-BNRM = 让四种反馈共享”稀疏非负贝叶斯表示 θ”，但各自拥有”任务专属的稀疏贝叶斯解码器 Φ_t”，并用三个定理（共享复杂度 / 互补 Fisher 信息 / 共享-专属误差分解）回答”为什么共享有益、为什么多反馈有益、什么时候该共享”。 它的创新重心在理论，不在模型架构；模型架构是 BNRM × MAVRL 的自然组合，理论才是新东西。
+
+]]></content>
+      <categories>
+        <category>论文学习</category>
+      </categories>
+      <tags>
+        <tag>论文</tag>
       </tags>
   </entry>
   <entry>
@@ -147,12 +844,12 @@ input: Multi-type feedback , hyperparameters , learning rate
 while not converged do
 
 Sample mini-batches for all feedback types:  
-Encode all transitions:  
-Reparameterize rewards:      
-Evaluate -values:  
-Compute feedback-specific negative log-likelihoods:    
-   , with prior  
- 
+Encode all transitions: Undefined control sequence \boldsymbol
+Reparameterize rewards: Undefined control sequence \boldsymbol
+Evaluate -values: Undefined control sequence \boldsymbol
+Compute feedback-specific negative log-likelihoods: Undefined control sequence \boldsymbol
+   , with prior Undefined control sequence \boldsymbol
+Undefined control sequence \boldsymbol
 Aggregate losses:    
 Update parameters:   
 
@@ -990,6 +1687,497 @@ Note that we linearly normalize the inferred reward values per feedback type. Th
       </tags>
   </entry>
   <entry>
+    <title>agent对reward_model的理解</title>
+    <url>/2026/10/16/agent%E5%AF%B9reward_model%E7%9A%84%E7%90%86%E8%A7%A3/</url>
+    <content><![CDATA[
+配套资源：本站另有《reward_model原文》《reward_model中文翻译》，本文是”理解向”讲解。
+原文信息：Mitigating Reward Hacking in RLHF via Bayesian Non-negative Reward Modeling（BNRM），ICML 2026。作者 Zhibin Duan、Guowei Rong 等。代码：https://github.com/GuoweiRong/Bayesian-Non-negative-Reward-Model
+
+
+本文的阅读方式：上次学 MAVRL 时，”先讲贝叶斯公式”把你绕晕了，后面看模型才明白。所以这次我反着来——先看模型就是几块东西拼起来、前向一步步怎么算、损失怎么加，把”为什么非要用贝叶斯/不确定性”放到最后一节当进阶。想彻底搞懂，建议你就像读代码一样跟着第 0 节走一遍。
+
+
+0. 先看模型长什么样（工程视角）0.1 整个模型就三样东西
+一个编码器 = LLM 主干 + 一个小 MLP 头；
+一个”字典”参数 Φ（一组要学的向量，非负）；
+一个 Bradley–Terry 偏好头（就是 sigmoid(r1 − r2)）。
+
+没了。比 MAVRL 还简单——因为它只有”偏好”这一种反馈，不需要四个头。
+0.2 前向传播，一步步走给你一条回答 （ 是提示， 是回答），要算它的奖励分：
+# 1. 主干把 (x,y) 压成一个向量 zz = backbone(x, y)              # 形状 [d_model]# 2. 小 MLP 头把 z 变成两个数：k（形状）和 λ（尺度）k, lam = head(z)                # 各 [K]，都用 softplus 保证 &gt; 0# 3. 从 Weibull(k, λ) 采样出一个 θ（非负、稀疏的 K 维向量）theta = weibull_sample(k, lam)# 4. 拿 θ 点乘全局字典 Φ，得到标量奖励（非负）r = (theta * Phi).sum()         # r = θᵀΦ
+
+每一步都在干什么：
+
+第 1–2 步：和 MAVRL 一样，编码器不直接给奖励，而是给”一个分布的参数”。区别是 MAVRL 给的是高斯分布（μ, σ），这里给的是 Weibull 分布（k, λ）。为什么换？因为 θ 要非负（奖励因子不能是负的），Weibull 天生只输出正数。
+第 3 步：采样出 θ。θ 就是”这条回答激活了哪些语义因子、激活多强”，因为稀疏，所以大多数分量接近 0，只有少数几个是大的。
+第 4 步：θ 点乘 Φ 得到奖励 r。Φ 是全局共享的，每个分量代表”某个语义因子值多少分”。
+
+0.3 偏好头 + 损失比较两条回答  和 ：
+r1 = reward(x, y1)              # 回答1的奖励r2 = reward(x, y2)              # 回答2的奖励p_prefer_1 = sigmoid(r1 - r2)   # "人更偏好回答1"的概率# 损失 = 偏好似然 + KL 正则loss = -log p_prefer_1 \     + eta * KL(q(theta) || Gamma先验) \     + eta * KL(q(Phi)   || Gamma先验)loss.backward()                 # 梯度流回 backbone、head、Phi
+
+看明白了吗？这和 MAVRL 是同一套骨架：
+
+
+
+
+MAVRL
+BNRM
+
+
+
+编码器输出
+高斯 (μ, σ)
+Weibull (k, λ)
+
+
+采样出的东西
+奖励值 R
+稀疏非负因子 θ
+
+
+奖励怎么来
+直接用 R
+θ 点乘字典 Φ
+
+
+偏好头
+sigmoid(R1−R2)
+sigmoid(r1−r2)
+
+
+损失
+似然 − KL
+似然 − KL
+
+
+唯一实质差别：MAVRL 的奖励是”直接采样的一个数”，BNRM 的奖励是”稀疏非负因子 θ 和字典 Φ 的内积”。就这一处。其余全是同一个套路。所以这篇论文真正的新东西，不是”贝叶斯”，而是”把奖励表示成稀疏非负因子“这件事——下面讲它为什么有用。
+1. 它要解决的问题：奖励黑客（reward hacking）1.1 场景大模型对齐（RLHF）最后一步是训练一个奖励模型，给回答打分，再用分数引导模型优化。奖励模型从”人类偏好”里学：人看两个回答说”A 比 B 好”，模型就学”什么样的回答分高”。
+问题是人类偏好数据里混进了噪声和偏置，最典型的是”越长越好“——标注者下意识觉得长回答更靠谱。于是奖励模型偷偷学到一个捷径：给长回答打高分。
+结果就是奖励黑客：被优化的模型发现”只要把回答写长，分数就涨”，于是疯狂堆字数，分数虚高，但质量、安全、真实意图全跑偏了。
+1.2 论文的主张：问题出在”稠密、黑箱”的奖励表示之前大家缓解奖励黑客的办法（模型集成、信息瓶颈、标签平滑……）都在治标。论文说根本问题在于：标准奖励模型的表示是稠密、黑箱、确定性的——一个几百上千维的向量 ，乘一个线性头  得到标量  。这种表示：
+
+不稀疏：每个维度都参与，真信号和”长度”这种假信号纠缠在一起；
+不透明：你不知道哪个维度对应”质量”、哪个对应”长度”；
+确定性：只给一个分数，不知道自己有没有把握。
+
+所以模型会把”长度”混进”质量”一起学。BNRM 的办法：把奖励换成”稀疏 + 非负 + 带不确定性”的表示。
+2. 为什么”非负 + 稀疏”能治奖励黑客2.1 用主题模型打比方（NFA 的思想来源）BNRM 借用的工具叫非负因子分析（NFA），它最经典的应用是主题模型。一句话：
+
+一篇文章由若干主题混合而成。文章可以表示成一个稀疏非负向量 θ，每个分量代表”这个主题在文章里有多强”；每个主题本身是一个词分布 Φ（字典），说明”这个主题喜欢用哪些词”。
+
+比如一篇讲篮球的文章，θ 里只有”体育””篮球”几个分量是大的，其余全 0。
+2.2 搬到奖励模型上，两个好处直接命中要害
+稀疏 → 天然去虚假相关：如果只有少数几个”语义因子”能被激活，”长度”这种想搭便车的假信号就很难挤进来——它没有专属的因子位。
+非负 → 可解释：每个因子能对应一个可解释语义（”回答是否完整””是否有帮助”），不像黑箱向量不可名状。
+
+这就是论文反复说的 “解耦（disentangle）+ 去偏（debias）”：
+
+
+
+层
+谁稀疏
+作用
+
+
+
+局部 θ
+每个样本只激活少数因子
+实例级解耦
+
+
+全局 Φ
+只保留少数语义因子
+总体级去偏（把虚假因子权重压到 0）
+
+
+所以”非负稀疏”不是装饰，是这篇论文对抗奖励黑客的核心机制——它靠”让假信号没有容身之处”来防黑客。
+3. 实验说明了什么（三个关键词）
+更鲁棒：在 ID/OOD、低资源（1K–20K 样本）、标签噪声（10%–40%）下，BNRM 都稳定超过 BT、GRM、InfoRM 等基线。最亮眼的是：在 RewardBench 上，只用 1K 样本的 BNRM ≈ 用 20K 样本的 BT，数据效率极高；40% 噪声下还能比 BT 高出最多 16.7%。
+
+真能抗”长度偏置”：在 RM-Bench Hard 子集上，BT 的”长度-分数”相关系数高达 0.488，BNRM 降到 0.123——奖励基本不再”看长度给分”。这直接验证了”稀疏去偏”的初衷。
+
+可解释：论文图 6 展示了两个机制——“信号放大”（正确因子被 Φ 放大，占 64.9%）和”纠错”（虚假因子被 Φ 压到 0，占 25.5%），说明 BNRM 的行为可被解释，不是黑箱。
+
+
+4. 和 MAVRL 的关系（呼应”第一个反馈头”）两篇并排看：
+
+
+
+
+MAVRL
+BNRM
+
+
+
+目标
+从多种反馈（偏好/示范/评分/停止）学奖励
+从偏好学奖励，防奖励黑客
+
+
+编码器输出
+高斯 (μ, σ)
+Weibull (k, λ)
+
+
+奖励表示
+直接采样 R
+稀疏非负因子 θᵀΦ
+
+
+先验
+标准正态 N(0,1)
+Gamma
+
+
+损失
+Σ 似然 − KL
+似然 − KL
+
+
+反馈头
+四种（P/D/R/S）
+一种（偏好 BT）
+
+
+关键联系：MAVRL 的第一个反馈头（偏好/Bradley–Terry），本质上就是 BNRM——一个”用贝叶斯方式输出带不确定性的奖励、用 Bradley–Terry 似然训练”的奖励模型。所以老师说”BNRM 可以作为第一个反馈头”，意思就是：P 头 ≈ BNRM。
+这也是下一篇《BNRM 的研究思路》的起点——光把 BNRM 当 MAVRL 的偏好头不够创新，真正的创新是”让四种反馈共享同一套稀疏非负表示、各自拥有任务专属解码器”。
+5. 一句话总结
+BNRM = 把奖励从”稠密黑箱的确定性分数”改成”稀疏非负因子的内积 θᵀΦ”，让假信号（长度等）没有容身之处，从而从根上抑制奖励黑客。 它的骨架（编码器出分布 → 采样 → 似然 + KL → 反向）和 MAVRL 一模一样，只是把高斯换成了 Weibull、把奖励换成了非负因子。
+
+6. 进阶：那”贝叶斯”到底起了什么用（可选读）如果你只是想把模型看懂，上面第 0–5 节已经够了，完全可以不看这节。这节只回答一个问题：为什么编码器不直接输出奖励，而要输出一个分布（k, λ）、再采样？
+6.1 一句话答案：因为奖励”没把握”，想让模型老实说出来回忆第 0 节：编码器输出 Weibull 分布的参数 (k, λ)，再采样出 θ。如果只输出一个确定的 θ，模型就只能说”奖励是多少”，没法说”我对这个奖励有多没底”。
+而”没底”这件事，正是奖励模型需要的——因为人类偏好数据又少又吵。举个例子：
+
+某条回答 A 很像训练里见过的”高质量长回答”→ 模型有把握，θ 采样出来比较稳定；
+某条回答 B 是没见过的风格 → 模型没把握，θ 采样出来会”抖”。
+
+θ 抖不抖，就是”不确定性”。 这跟 MAVRL 里的 σ 是同一个东西，只是这里换成了 Weibull 分布来体现”非负 + 稀疏”。
+6.2 两种”没把握”，论文分得很清楚（这里不用公式）论文 4.1 节其实就是在说，奖励的”没把握”有两个来源：
+
+数据本身吵（偶然不确定性 / aleatoric）：同一条回答，人可能今天打 4 分明天打 3 分——这是数据里的噪声，没法消除。
+模型自己没底（认知不确定性 / epistemic）：全局字典 Φ 到底该是多少，模型拿不准——这是模型缺数据/缺证据，多给数据能改善。
+
+论文的做法：θ 用随机变量 → 建模第 1 种；Φ 也用随机变量 → 建模第 2 种。 就这么简单，别被原文那三个积分式吓到，它们只是把这句话写成了数学。
+6.3 KL 项到底在干嘛（为什么损失里要减它）损失里那两项 KL(q(θ) || Gamma先验) 和 KL(q(Φ) || Gamma先验)，作用就一个：把 θ、Φ 往”稀疏”上拽。
+
+Gamma 先验的形状参数设得小，就会让大多数 θ、Φ 的分量趋向 0（稀疏）；
+KL 项就是”逼着模型真的变稀疏”的那个力量。
+
+这和我们上次聊 MAVRL 时说的是同一件事：KL 项 = 一个带”来历”的正则项。在 MAVRL 里它防 σ 塌缩，在 BNRM 里它强制稀疏。贝叶斯在这里的身份仍然是”出生证明”——它解释了”为什么损失长这样、为什么用 Gamma 先验”，但你把它当普通正则项来理解，功能一点不差。
+
+最后再强调一遍阅读顺序：先跟着第 0 节把”模型长什么样、前向怎么算”走通，再回来看第 2 节”为什么要非负稀疏”，最后这第 6 节”贝叶斯”当锦上添花。这样就不会再被公式绕晕了。
+]]></content>
+      <categories>
+        <category>论文学习</category>
+      </categories>
+      <tags>
+        <tag>论文</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>reward_model中文翻译</title>
+    <url>/2026/10/16/reward_model%E4%B8%AD%E6%96%87%E7%BF%BB%E8%AF%91/</url>
+    <content><![CDATA[
+原文信息
+标题：Mitigating Reward Hacking in RLHF via Bayesian Non-negative Reward Modeling（通过贝叶斯非负奖励建模缓解 RLHF 中的奖励黑客）
+作者：Zhibin Duan、Guowei Rong（共同一作）、Zhuo Li、Bo Chen、Mingyuan Zhou、Dandan Guo
+会议：ICML 2026，PMLR 306 ｜ arXiv：2602.10623v2 ｜ 代码：https://github.com/GuoweiRong/Bayesian-Non-negative-Reward-Model
+
+
+阅读说明：本文为论文的完整中文翻译，与本站《reward_model原文》配套阅读。符号约定：θ = 实例级（局部）稀疏非负表示，Φ = 全局非负奖励字典，BT = Bradley–Terry，NFA/PFA = 非负/泊松因子分析。
+
+
+摘要从人类偏好中学习的奖励模型（RM）是通过人类反馈强化学习（RLHF）对齐大语言模型（LLM）的核心，然而由于标注噪声以及响应长度、风格等系统性偏置，它们往往容易受到”奖励黑客（reward hacking）”的攻击。我们提出贝叶斯非负奖励模型（Bayesian Non-Negative Reward Model，BNRM），这是一个有原则的奖励建模框架，将非负因子分析整合进 Bradley–Terry（BT）偏好模型。BNRM 通过一个稀疏、非负的潜因子生成过程来表示奖励，该过程在两个互补的层次上运作：实例级潜变量诱导出解耦的奖励表示，而对全局潜因子的稀疏性则作为一种隐式去偏机制，抑制虚假相关。这种”先解耦、后去偏”的结构共同实现了鲁棒的、感知不确定性的奖励学习。为了将 BNRM 扩展到现代 LLM，我们开发了一个以深度模型表示为条件的摊销变分推断网络，实现高效的端到端训练。大量实验结果表明，BNRM 显著缓解了奖励过度优化，提升了分布偏移下的鲁棒性，并产生比强基线更具可解释性的奖励分解。
+1. 引言随着大语言模型（LLM）的出现，基于人类反馈的强化学习（RLHF）已成为使模型行为与人类价值观对齐的核心范式。RLHF 的核心是奖励模型（RM），它将嘈杂的人类偏好标注蒸馏成一个可微信号，用于策略优化。尽管取得了经验上的成功，学习既可靠又可泛化的奖励模型仍然是一个根本性挑战。一种普遍存在的失效模式——通常被称为”奖励过度优化（reward over-optimization）”或”奖励黑客（reward hacking）”——发生在策略利用代理 RM 中编码的虚假相关时：此时行为在所学奖励下得分很高，却偏离了真实的人类目标。
+奖励建模中奖励过度优化的一个主要来源是”奖励错误泛化（reward misgeneralization）”，即 RM 在训练分布之外错误地外推，从而形成真实人类偏好的糟糕代理。这由两个相互作用的因素引起：一方面，人类标注是嘈杂、主观且异质的；另一方面，深度神经网络倾向于利用捷径特征、学习绕过其本意语义目标的虚假相关。因此，RM 往往过度强调表面线索——如响应长度、措辞模式或风格化痕迹——这些线索易于优化，却与真实的人类意图不一致，最终损害 RLHF 的可靠性与安全性。
+为了缓解奖励黑客，近期工作探索了贝叶斯原理，以缓解高度过参数化奖励模型中的过拟合。诸如奖励模型集成（reward model ensembling）之类的实用方法通过聚合多个预测器来提升鲁棒性，但代价是训练和维护多个大规模模型，带来巨大的计算与内存开销。除集成外，信息论方法引入了变分信息瓶颈目标以抑制虚假潜特征，但这些方法依赖隐式的”相关性”概念，往往无法明确地把语义意图与干扰因素分离开来。另一些工作通过有监督干预来纠正特定偏置（最典型的是响应长度偏置），但这类方法通常难以推广到狭窄设定之外。
+为了更根本地解决这些局限，我们重新审视了感知稀疏的贝叶斯模型（SBM），例如非负因子分析（NFA）。这些模型提供两个关键优势。第一，概率潜因子建模能显式地同时处理认知不确定性（epistemic）与偶然不确定性（aleatoric），这对于从嘈杂、不一致的人类反馈中学习至关重要。第二，稀疏性作为一种隐式正则化器，抑制对虚假或非不变特征的依赖，从而提升对捷径相关的鲁棒性。此外，这些模型中固有的非负约束诱导出解耦的、”基于部件（parts-based）”的表示，相比稠密且不透明的嵌入，可解释性显著提升。
+受这些洞见启发，我们从 NFA 视角重新审视 RM，并提出贝叶斯非负奖励模型（BNRM）。BNRM 将 NFA 的概率结构与 LLM 的表达性表示相结合，把奖励学习形式化为一个对潜在非负奖励因子的随机生成过程，显式地捕捉不确定性。此外，如图 1 所示，BNRM 通过施加感知稀疏的结构，区别于传统的稠密奖励函数：局部稀疏促进语义偏好因子的解耦表示，全局稀疏抑制虚假相关并促进系统性的去偏。为把 BNRM 扩展到现代 LLM，我们开发了一个以主干表示为条件的摊销变分推断网络。通过用可重参数化的 Weibull 分布参数化变分后验，BNRM 能够通过标准反向传播实现端到端训练。大量实验表明，BNRM 显著提升了对奖励过度优化的鲁棒性，增强了可解释性，并在分布偏移下泛化得更好。我们的贡献总结如下：
+
+我们提出 BNRM，一个同时施加稀疏性并建模不确定性的贝叶斯非负奖励建模框架，以缓解奖励黑客。
+我们引入一种可扩展的摊销变分推断方案，采用可重参数化的 Weibull 后验，实现与大语言模型的高效集成。
+我们通过实验证明 BNRM 在鲁棒性、可解释性和分布外泛化方面优于强基线。
+
+2. 相关工作缓解 RLHF 中的奖励过度优化。 奖励模型容易在训练数据上过拟合，导致奖励过度优化——策略利用所学代理而非真实人类目标。现有的缓解工作大致可分为几类。一类工作聚焦于感知不确定性的建模，主要通过计算密集的模型集成，或在奖励信号上添加事后不确定性惩罚。另一类涉及数据与策略层面的正则化，使用标签平滑、自适应 margin、以及在策略优化过程中加入基于 SFT 的约束等技术。虽然这些方法有效地缓解了症状，但我们认为问题的根源在于奖励模型对稠密、不可解释特征的依赖。因此，我们提出一种根本不同的方法：通过把非负因子分析（NFA）的原理注入奖励建模过程，重塑奖励表示本身，从而直接学到一个稀疏且鲁棒的奖励函数，本质上更不易受虚假相关影响。
+非负因子分析。 非负因子分析模型，如潜在狄利克雷分配（LDA）和泊松因子分析（PFA），是从数据中学习”基于部件”表示的经典概率工具。它们能够揭示稀疏潜结构，使其在主题建模等任务中非常有效。近期工作已探索将 NFA 的好处整合进通用深度神经网络；我们的贡献则是将 NFA 的生成结构有原则地综合进现代 RLHF 管线。与此前研究不同的是，我们专门利用 NFA 的稀疏归纳偏置来对抗奖励过度优化，并增强对分布偏移的鲁棒性。
+
+[图 1] 关于缓解奖励建模中虚假相关的”解耦与去偏”动机说明。（占位）
+
+3. 预备知识3.1. RLHF 中的标量偏好奖励模型奖励模型（RM）旨在基于参数化模型 ，在人类偏好数据集   上学习人类偏好，其中  是用户输入提示， 和  分别是被偏好（选中）和被不偏好（拒绝）的响应，通过最小化遵循 Bradley–Terry（BT）目标的排序损失：
+
+其中   是 Sigmoid 函数。优化后的奖励模型充当人类偏好的代理，用于后续的 RL 微调阶段。 通常由一个主干特征提取器  和一个最终的线性头  组成，其中主干  常用预训练 LLM 参数  初始化，把提示和对应响应投影成一个因子向量   。然后新增一个线性头  ，把特征表示  投影为标量奖励值：
+
+RM 的训练涉及在偏好数据集  上微调  和  的参数。然而，这种标准实现有两个根本局限：
+
+确定性且过度自信的打分：模型输出单一的确定性奖励，无法捕捉人类偏好中的不确定性，导致过度优化。
+虚假相关：特征  与权重  的稠密”黑箱”性质使模型容易通过利用虚假相关而被奖励黑客攻击（如图 1 顶部所示）。
+
+最终目标是在最后的 RL 阶段用这个学到的奖励信号  优化策略。一个有缺陷、确定性且易被黑客攻击的 RM 必然导致失准的策略，这凸显了更鲁棒奖励建模框架的必要性——这正是我们在后续章节引入的内容。
+
+[图 2] 图模型表示。(a) 标准 BT 模型；(b) 我们提出的 BNRM。其中  表示提示， 是候选响应，节点表示偏好   的预测过程。（占位）
+
+3.2. 非负因子分析（NFA）非负因子分析方法，如泊松因子分析（PFA），被广泛用作主题模型。它们在模型参数上施加非负随机潜变量，以学习可解释的、基于部件的数据表示。具体地，把文档  表示为词袋（BOW）向量  ，其中   且  是词表大小，PFA 在泊松似然下对  建模：
+
+这里矩阵   是字典，每列代表一个主题（词上的分布）。向量   包含文档专属的主题占比（即文档特征），表示每个主题在文档中的强度。得益于潜变量的稀疏性（通常通过在  上放置超参数为  的 Gamma 先验来鼓励），NFA 能有效处理过度离散的数据，并展现出很强的泛化能力。
+4. 贝叶斯非负奖励模型我们的方法植根于贝叶斯视角，包含一个生成过程（描述我们对偏好如何形成的理想化假设）和一个推断过程（详述我们在实践中如何用深度神经网络近似该模型）。
+4.1. 从贝叶斯视角看 BT上一节直观引入的 BNRM 框架，可以形式化地推导为标准 Bradley–Terry（BT）模型的分层贝叶斯扩展。这一视角澄清了 BNRM 如何系统地解决确定性方法的局限。从贝叶斯角度看（如图 2a），标准 BT 模型是如下积分形式的特例：
+
+这里，底层神经网络  的确定性意味着条件概率   是一个 Dirac delta 分布，   ，它没有捕捉不确定性的机制。我们的 BNRM 分两步推广该模型：
+建模偶然不确定性（Aleatoric）。 首先用随机潜变量  替换确定性的潜表示 。这使模型能够捕捉人类偏好数据中固有的随机性和歧义性。偏好概率现在对  的分布进行边缘化：
+
+建模认知不确定性（Epistemic）。 为了进一步考虑模型自身关于全局奖励因子的不确定性，我们把最后一层权重（记为 ）视为一个全局随机变量。这得到 BNRM 完整的、形式化的生成过程（如图 2b）：
+
+最后一个积分代表我们所提模型的完整生成过程。
+4.2. BNRM 的生成过程回顾式 4，其设计目的就是系统地捕捉奖励建模中的偶然与认知不确定性。基于这一形式化，我们提出一个完全概率化的生成模型，其中人类偏好由稀疏、非负的潜因子产生。该框架用结构化的贝叶斯替代方案，取代了标准的确定性奖励公式  ，显式地建模不确定性、解耦与偏置。生成过程引入两组互补的潜变量：
+
+局部稀疏表示（解耦）。 对每个提示–响应对 ，我们引入一个非负潜向量  ，捕捉该  专属的全局奖励因子的稀疏激活。 中的稀疏性通过只激活一小部分潜因子来鼓励实例级解耦，从而提升可辨识性、减少对纠缠或虚假特征的依赖。
+
+全局奖励字典（去偏）。 我们进一步引入一个全局奖励因子字典  ，在所有数据点之间共享，它定义了一个用于评估响应质量的通用非负基。施加在  上的稀疏性充当总体层面的正则化器，选择性地保留不变且语义有意义的因子，同时抑制奖励估计中的虚假相关。
+
+
+为了同时强制非负性和稀疏性，我们在两组潜变量上都放置 Gamma 先验（这是非负因子分析中的标准选择）：
+
+给定这些潜因子，与响应  关联的标量奖励生成为
+
+这产生一个由稀疏因子激活构造的非负、可解释的奖励。最后，对于一对具有相应奖励  的候选响应 ，观测到的人类偏好通过 Bradley–Terry 似然生成：
+
+其中   表示 logistic sigmoid 函数。这完成了关于人类偏好如何从稀疏、非负潜奖励因子中产生的一个连贯概率描述，在统一的贝叶斯框架内自然地支持不确定性量化、解耦与去偏。
+4.3. 变分推断与训练目标给定式 4、式 5 所定义的 BNRM 生成公式，潜变量上的精确后验分布   与   是解析不可解的。因此我们采用变分推断（VI）来获得可扩展的近似。具体地，我们引入可处理的变分分布   与  来近似真实后验。重要的是，我们把深度 LLM 主干  重新定位为——不是生成模型的一部分，而是用于局部潜变量摊销推断的一个强大推断网络（编码器）。如图 3 所示，对每个提示–响应对 ，推断过程如下：
+我们首先用参数为  的 LLM 主干提取一个确定性、高维且稠密的特征表示：  。然后用特征向量  来参数化对应局部潜变量  的变分分布。遵循此前关于非负潜变量模型可扩展推断的工作，我们采用 Weibull 分布，因为它具有方便的重参数化特性，并能建模稀疏的正随机变量：
+
+其中  ，  分别表示形状与尺度参数。在推断网络内，我们用 Softplus 激活来参数化形状参数 ，以保证可微性和数值稳定性；而尺度参数  用 ReLU 激活参数化，这在经验上鼓励采样潜变量的稀疏性。
+
+[图 3] BNRM 的变分推断器。（占位）
+
+全局潜变量的变分分布  类似地参数化为一个 Weibull 分布，拥有自己的一组可学习参数 。我们通过最大化偏好数据集  对数似然的证据下界（ELBO）来训练整个模型（包括 LLM 主干  和所有变分分布的参数）：
+
+第一项对应重构似然，确保推断出的潜变量能够解释观测到的人类偏好。KL 散度把变分后验正则化向各自的先验靠拢，从而强制稀疏性、控制模型复杂度，并提升对奖励过度优化的鲁棒性。 是平衡似然与 KL 散度的折中系数。算法总结见附录 A.1。
+4.4. 关于”先解耦、后去偏”奖励建模的直觉我们对 BNRM 为何能有效缓解奖励建模中的虚假相关给出直觉分析。如图 1（底部）所示，施加在局部与全局潜变量上的稀疏约束发挥着互补且协同的作用。具体地，局部潜变量  的稀疏性通过只激活足以解释给定提示–响应对的一小部分语义因子来鼓励实例级解耦。这种选择性激活抑制了偶然或特异性的特征，从而在单样本层面提升可解释性、降低对虚假模式的敏感性。相反，全局潜变量  的稀疏性强制总体层面的不变性，有效地识别并降低整个数据集中持续存在、但非因果的系统性偏置的权重。关键的是，局部与全局稀疏之间的交互产生了一个既可解释又鲁棒的结构化奖励函数。
+5. 实验5.1. 实验设置训练与评估数据集。 遵循 Yang et al. (2024b)，我们的 BNRM 在 Unified-Feedback (UF) 偏好数据集上训练，该数据集包含覆盖广泛对话场景与奖励信号的多样化人类偏好标注。具体地，我们从 UF 数据集中随机采样 40K 与 400K 样本用于训练，并在留出的 8K 验证划分上评估。此外，我们在若干分布外（OOD）数据集上进一步评估，包括 RM-Bench、RewardBench、HHH-Alignment 和 MT-Bench，它们能更好地模拟真实场景。此外我们还考虑了 Skywork-Preference-v0.2 (SP) 训练数据集，并与先进的奖励建模方法对比。代码见 https://github.com/GuoweiRong/Bayesian-Non-negative-Reward-Model。
+基础模型与训练细节。 在奖励建模实验中，我们首先用 gemma-2b-it 与 gemma-2-2b-it 作为基础模型，通过低秩适配（LoRA）加速训练 2 个 epoch。此外，我们在 SP 数据集上对更大的 Skywork-Reward-Llama-3.1-8B 奖励模型做 1 个 epoch 的全参数微调。Best-of-N (BoN) 采样测试仅用两个 Gemma 模型进行，并采用通过 LoRA 得到的 BNRM 作为代理奖励模型。在真实 LLM 微调的近端策略优化（PPO）中，我们对 Llama3.1-8B-Instruct 与 OpenRLHF-Llama3-8B-SFT 应用 LoRA 微调 1 个 epoch。更详细的训练配置见附录 C。
+基线。 如附录 C.4 所述，我们考虑以下基线：(1) BT 及其变体，包括 BT、BT-Margin、BT-Frozen、BT-Ensemble、BT-Label Smoothing；(2) GRM；(3) InfoRM。
+5.2. 奖励建模评估分布内与分布外（ID/OOD）评估。 表 1 清楚地表明，无论训练数据规模如何，BNRM 都能一致地提升相应的基础奖励模型，并在大多数 ID 与 OOD 评估任务上进一步超越先进基线。例如，在 40K 训练样本下，基于 BT 的 BNRM 在 Unified-Feedback、HHH Alignment 和 MT-Bench 上分别达到 74.2%、83.6% 和 75.2% 的准确率，相比对应 BT 基线分别提升 5.4、13.3 和 6.1 个百分点。同样，基于 GRM 的 BNRM 在相同基准上达到 74.1%、82.4% 和 75.1%，相比 GRM-SFT 分别提升 2.6、3.7 和 2.1 个百分点。在 RewardBench 上，BT-BNRM 与 GRM-BNRM 在 40/400K 两种训练划分下都相比强基线取得显著提升。表 1 表明，我们的贝叶斯非负框架能有效帮助奖励模型抑制对虚假特征的依赖，从而提升泛化能力。关于标签噪声设置、 的影响分析以及收敛曲线的额外实验见附录 A.6。
+
+[表 1] 40/400K UF 训练样本、LoRA 下的 ID 与 OOD 评估结果。加粗为最优，下划线为次优。BT-BNRM 与 GRM-BNRM 分别基于 BT 与 GRM-SFT。UF、HHH、MT 分别表示 Unified Feedback、HHH Alignment、MT Bench。（数据见原文 PDF）
+
+在 SP 上的全参数训练结果。 与 UF 数据集相比，Skywork-Preference-v0.2 (SP) 提供了更高质量的偏好数据。我们进一步精炼已经很强的 Skywork-Reward-Llama-3.1-8B 模型，训练细节见附录 C。表 2 给出了全面的 RewardBench 评估，我们的奖励模型总分为 93.6，在 Chat-hard 与 Safety 子集上分别达到 89.7% 和 92.6%。总之，这些结果表明，我们的贝叶斯非负奖励模型不仅表现出很强的独立偏好建模性能，还作为一个”即插即用”模块，进一步增强了现有强大奖励模型的泛化能力。
+
+[表 2] 与基线（包括生成式与判别式奖励模型）的 RewardBench 性能对比。最优加粗，基线结果引自 Liu et al. (2024b)。（数据见原文 PDF）
+
+低资源与噪声设置下的优势。 一个鲁棒的奖励模型应在标注有限和标签噪声（两者在实践中都很常见）下仍能良好泛化。我们用 Gemma-2B-it 主干在两种挑战性设置下评估 BT-BNRM：(1) 低资源：用 1K 到 20K UF 样本训练；(2) 标签噪声：用噪声率 0.1 到 0.4 的 40K 样本训练。图 4a 显示，BNRM 始终优于 BT，且随着数据量减少，性能差距扩大。值得注意的是，仅在 1K 样本上训练的 BNRM，在 RewardBench 上就与在 20K 样本上训练的 BT 性能相当，在其他数据集上趋势类似。在标签噪声下（图 4b），BNRM 展现出更强的韧性：在 40% 噪声率下，BNRM 相比 BT 最多提升 16.7%，并可与只在 10%–20% 噪声下训练的 BT 相媲美。这些结果表明我们的 BNRM 既数据高效又噪声容忍，非常适合高质量偏好数据稀缺的现实场景。
+
+[图 4] BT-BNRM 的 ID 与 OOD 评估结果。(a) 不同训练样本数下的性能；(b) 不同标签噪声率下的性能。实心柱表示 BT 基线，斜线柱表示我们的 BT-BNRM。（占位）
+
+5.3. RLHF 评估为了进一步研究 BNRM 能否在真实 RLHF 中有效缓解奖励黑客，我们基于 LoRA，用近端策略优化（PPO）在 alpaca-gpt4-data-en 数据集的 20K 样本上微调 Llama-3.1-8B-Instruct 与 OpenRLHF-Llama3-8B-SFT。我们使用在 SP 数据集上全参数微调的 BNBT-Reward-Llama-3.1-8B，优化后的策略在广泛使用的基准上评估，并报告准确率（%）。如表 3 所示，两个 BNRM 微调策略相比各自基线达到更高性能，分别达到 74.98% 和 62.25%，表明 BNRM 能有效模拟人类偏好，引导 LLM 微调走向更好性能。额外的训练与评估细节见附录 C。此外，我们在附录 D 中进行 Best-of-N (BoN) 测试，结果显示基于 BT 的 RM 在 KL 增大时受到奖励黑客攻击，而我们的 BNRM 仍与黄金奖励保持一致。
+
+[表 3] RLHF（PPO）下游基准结果。每列最优加粗，次优下划线。（数据见原文 PDF）
+
+Arena-Hard 与人工评估。 为检验奖励黑客的缓解是否带来与人类偏好更好的对齐（而非仅仅更高的代理分数），我们进一步在 Arena-Hard 上评估并进行人工评估，报告了相比基线的一致提升（细节见附录 B）。
+5.4. 长度去偏与鲁棒性在 RM-Bench Hard 子集上（图 5），BNRM 显著降低了响应长度与代理奖励分数之间的 Pearson 相关系数（例如 BT-BNRM 为  ，而 BT 为  ），且 BNRM 的分长度桶平均奖励曲线近乎平坦且非负，直观地确认奖励不再过度奖励长响应。在刻意混淆长度信号的 Hard 子集上（表 5），BT-BNRM 与 GRM-BNRM 仍达到 60.4% 和 59.2% 的准确率，相比各自对应方法分别提升 2.7 和 2.0 个百分点，提供了具体证据：即便表面线索被刻意与响应质量混淆，BNRM 仍保持其优势。
+
+[图 5] RM-Bench Hard 子集上响应长度与奖励分数之间的 Pearson 相关与平均奖励分数。上图展示长度与奖励分数的相关性；下图报告每个长度桶内的平均奖励分数，凸显 BT-BNRM 的非负性质。（占位）
+
+5.5. 稀疏性、非负性与可解释性为了更好地研究框架的稀疏性与非负性如何有效缓解奖励黑客与响应偏置，我们在图 6 中可视化了一部分  与  因子，揭示了 BNRM 运作的两个主要机制：(1) 信号放大：当  正确捕捉到偏好信号（即选中响应在 F-433、F-491、F-238 等因子上比拒绝响应有更高激活）时，全局因子  进一步放大偏好差距。(2) 纠错：相反，对于 F-455、F-189、F-890 这类仅靠  会误排的因子， 的稀疏性通过把它们的全局权重推向零来有效抑制这些错误信号。在我们的分析中，这两种情形分别出现在 1,936 和 761 个样本中，占测试集的 64.9% 和 25.5%。这提供了强有力的经验证据：在噪声和数据受限条件下，BNRM 是真实人类偏好的鲁棒代理，同时提供了此前标量奖励模型通常无法获得的可解释性机制。此外，我们用 GPT-5 对按其  权重识别出的 top- 因子及其关联响应做语义分析；具体提示见附录 B 表 10，因子级语义总结见表 11。
+
+[图 6] RewardBench 上选中与拒绝响应的部分 θ 与 Φ 因子激活。左 y 轴表示 θ 的激活强度，右 y 轴表示 Φ 的激活强度（即每个潜因子的全局权重）。Φ 值接近零的柱对应实际无效的因子。（占位）
+
+6. 结论在本文中，我们提出了贝叶斯非负奖励模型（BNRM），它将非负因子分析的可解释性与大语言模型的可扩展性相结合。通过引入 Weibull 参数化的摊销推断网络，BNRM 以最小的参数开销实现了高效的后验推断，同时提供有原则的不确定性估计。实验结果表明，BNRM 有效缓解了奖励过度优化，提升了分布偏移下的鲁棒性，并产生了比集成式或纯神经网络基线更具可解释性的奖励分解。这些发现表明，概率稀疏性与不确定性建模可以成为构建可靠奖励模型的强大归纳偏置。
+局限性。 尽管 BNRM 通过贝叶斯非负分解提升了奖励建模的鲁棒性，仍存在若干局限。第一，BNRM 引入了一个方法专属的超参数——KL 系数 ，它控制变分后验与先验之间贝叶斯正则化的强度。虽然 BNRM 在极端的  取值下仍保持鲁棒，且在所有数据集上都优于强基线，但要达到最佳整体性能可能仍需调节  以平衡先验正则化与后验适配。在我们的实验中，  提供了较好的平衡。第二，尽管我们的 OOD、噪声标签、Arena-Hard 与人工评估结果提供了 BNRM 在代理奖励分数之外缓解奖励黑客的证据，开放式的 RLHF 设置可能暴露更多样、更自适应的奖励黑客形式。在更广泛的多轮、工具使用与长程对齐场景下评估 BNRM，仍是未来工作的重要方向。
+致谢作者感谢匿名审稿人提出的宝贵意见与建设性建议。G. Rong 与 D. Guo 的工作受国家自然科学基金（NSFC，No. 62306125）资助。Z. Duan 与 B. Chen 的工作部分受国家自然科学基金（62576266 与 U21B2006）资助，部分受中央高校基本科研业务费（QTZX24003 与 QTZX23018）资助，部分受 111 计划（B18039）资助。部分工作在 Dandan Guo 访问阿卜杜拉国王科技大学（KAUST）期间完成。
+影响声明本文的工作目标是推动机器学习领域的发展，其潜在的社会影响是多方面的。本工作旨在通过缓解奖励黑客、减少对虚假偏好信号的依赖，来提升 RLHF 奖励建模的鲁棒性与可解释性。这些改进有助于支持大语言模型更安全、更可靠的对齐，尤其是在奖励模型暴露于嘈杂、有偏或分布偏移的偏好数据时。与此同时，更鲁棒的奖励优化技术具有双重用途：如果奖励目标被错误设定或带有恶意，使优化更有效的方法也可能被用于把模型推向不良或恶意的目标。因此，BNRM 应配合谨慎的奖励设计、数据审计、人工监督与下游安全评估来使用，尤其是在开放式部署场景中。
+]]></content>
+      <categories>
+        <category>论文学习</category>
+      </categories>
+      <tags>
+        <tag>论文</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>reward_model原文</title>
+    <url>/2026/10/16/reward_model%E5%8E%9F%E6%96%87/</url>
+    <content><![CDATA[
+原文信息
+标题：Mitigating Reward Hacking in RLHF via Bayesian Non-negative Reward Modeling
+作者：Zhibin Duan¹、Guowei Rong²（共同一作）、Zhuo Li³⁴、Bo Chen⁵、Mingyuan Zhou⁶、Dandan Guo²⁷
+机构：¹ 西安交通大学数学与统计学院；² 吉林大学人工智能学院；³ 深圳大数据研究院；⁴ 香港中文大学（深圳）；⁵ 西安电子科技大学雷达信号处理全国重点实验室；⁶ 德克萨斯大学奥斯汀分校 McCombs 商学院；⁷ 阿卜杜拉国王科技大学（KAUST）
+会议：Proceedings of the 43rd International Conference on Machine Learning (ICML 2026), Seoul, South Korea. PMLR 306, 2026.
+arXiv：2602.10623v2 ｜ 代码：https://github.com/GuoweiRong/Bayesian-Non-negative-Reward-Model ｜ 通讯作者：Dandan Guo (guodandan@jlu.edu.cn)
+
+
+阅读说明（本站整理，非论文原文）
+
+本文是论文的英文原文（Abstract、正文第 1–6 节、Limitations、Acknowledgments、Impact Statement、References、附录 A–D 要点），不是翻译。内容由论文 PDF 逐节还原，正文措辞未作改译。
+公式已还原为 LaTeX 并交给 MathJax 渲染：行内公式用一对美元符号包裹，行间公式用两对美元符号包裹。
+图片请自行补充：每张图的位置留了占位块；表格为原文表格的 Markdown 复刻或表位占位。
+符号约定：θ = 实例级（局部）稀疏非负表示，Φ = 全局非负奖励字典，BT = Bradley–Terry，NFA/PFA = 非负/泊松因子分析，BNRM = Bayesian Non-negative Reward Model。
+
+
+
+AbstractReward models learned from human preferences are central to aligning large language models (LLMs) via reinforcement learning from human feedback, yet they are often vulnerable to reward hacking due to noisy annotations and systematic biases such as response length or style. We propose Bayesian Non-Negative Reward Model (BNRM), a principled reward modeling framework that integrates non-negative factor analysis into Bradley–Terry (BT) preference model. BNRM represents rewards through a sparse, non-negative latent factor generative process that operates at two complementary levels: instance-specific latent variables induce disentangled reward representations, while sparsity over global latent factors acts as an implicit de-biasing mechanism that suppresses spurious correlations. Together, this disentanglement-then-debiasing structure enables robust uncertainty-aware reward learning. To scale BNRM to modern LLMs, we develop an amortized variational inference network conditioned on deep model representations, allowing efficient end-to-end training. Extensive empirical results demonstrate that BNRM substantially mitigates reward over-optimization, improves robustness under distribution shifts, and yields more interpretable reward decompositions than strong baselines.
+1. IntroductionWith the advent of Large Language Models (LLMs), reinforcement learning from human feedback (RLHF) has emerged as a central paradigm for aligning model behavior with human values (Stiennon et al., 2020; Ouyang et al., 2022a; He et al., 2026; Wu et al., 2025). At the core of RLHF lies the reward models (RMs), which distill noisy human preference annotations into a differentiable signal for policy optimization (Ziegler et al., 2019; Ouyang et al., 2022a; Gao et al., 2023; Liu et al., 2024a). Despite the empirical success, learning reward models that are both reliable and generalizable remains a fundamental challenge (Casper et al., 2023; Touvron et al., 2023a; Liu et al., 2024a; Li et al., 2025b). A prevalent failure mode, commonly referred to as reward over-optimization or reward hacking, occurs when the policy exploits spurious correlations encoded in the proxy RM, yielding behavior that scores highly under the learned reward but deviates from true human objectives (Gao et al., 2023; Coste et al., 2024).
+A primary source of reward over-optimization in reward modeling is reward misgeneralization (Casper et al., 2023; Miao et al., 2024), whereby RMs extrapolate incorrectly beyond the training distribution and thus form poor proxies for true human preferences, which arises from two interacting factors: on the one hand, noisy, subjective, and heterogeneous human annotations (Gao et al., 2024); on the other hand, the tendency of deep neural networks to exploit shortcut features and learn spurious correlations that bypass their intended semantic objectives (Geirhos et al., 2020; Zhang et al., 2016). As a result, RMs often overemphasize superficial cues, like response length (Singhal et al., 2023), phrasing patterns, or stylistic artifacts (Zhang et al., 2025; Miao et al., 2024; Wang et al., 2024), which are easy to optimize but misaligned with genuine human intent, ultimately undermining the reliability and safety of RLHF (Casper et al., 2023; Gao et al., 2023).
+To mitigate reward hacking, recent work has explored Bayesian principles to alleviate overfitting in highly over-parameterized reward models (Wang &amp; Yeung, 2016; Wilson &amp; Izmailov, 2020). Practical approaches such as reward model ensembling (Lakshminarayanan et al., 2017; Coste et al., 2024; Eisenstein et al., 2023; Ramé et al., 2024; Zhang et al., 2024a) improve robustness by aggregating multiple predictors, but at the cost of training and maintaining several large-scale models, resulting in substantial computational and memory overhead. Beyond ensembles, information-theoretic methods introduce variational information bottleneck objectives to suppress spurious latent features (Miao et al., 2024; Li et al., 2025a). However, these approaches rely on implicit notions of relevance and often fail to explicitly disentangle semantic intent from nuisance factors (Yang et al., 2022). Other lines of work address robustness by correcting specific biases through supervised interventions (Chen et al., 2024), most notably response-length bias, but such methods typically generalize poorly beyond narrowly defined settings.
+To address these limitations more fundamentally, we revisit sparsity-aware Bayesian models (SBMs) (Wipf &amp; Rao, 2004), such as non-negative factor analysis (NFA) (Blei et al., 2003; Zhou et al., 2012). These models offer two key advantages. First, probabilistic latent factor modeling enables explicit treatment of both epistemic and aleatoric uncertainty, which is essential when learning from noisy and inconsistent human feedback (Gao et al., 2023). Second, sparsity acts as an implicit regularizer that discourages reliance on spurious or non-invariant features, thereby improving robustness to shortcut correlations (Zhou et al., 2022). Moreover, the inherent non-negativity constraints in these models induce disentangled, parts-based representations, yielding substantially improved interpretability compared to dense and opaque embeddings (Lee &amp; Seung, 1999; Nguyen et al., 2016).
+Inspired by these insights, we revisit RMs from an NFA perspective and propose the Bayesian Non-Negative Reward Model (BNRM). BNRM integrates the probabilistic structure of NFA with the expressive representations of large language models, formulating reward learning as a stochastic generative process over latent, non-negative reward factors that explicitly capture uncertainty. Besides, as illustrated in Figure 1, BNRM departs from conventional dense reward functions by imposing sparsity-aware structure: local sparsity promotes disentangled representations of semantic preference factors, while global sparsity suppresses spurious correlations and facilitates systematic de-biasing. To scale BNRM to modern LLMs, we develop an amortized variational inference network conditioned on backbone representations. By parameterizing the variational posterior with a reparameterizable Weibull distribution (Zhang et al., 2020), BNRM enables end-to-end training via standard backpropagation. Extensive experiments demonstrate that BNRM substantially improves robustness to reward over-optimization, enhances interpretability, and generalizes better under distribution shifts. Our contributions are summarized as follows:
+
+We propose BNRM, a Bayesian non-negative reward modeling framework that jointly enforces sparsity and models uncertainty to mitigate reward hacking.
+We introduce a scalable amortized variational inference scheme with reparameterizable Weibull posteriors, enabling efficient integration with large language models.
+We empirically show that BNRM outperforms strong baselines in robustness, interpretability, and out-of-distribution generalization.
+
+2. Related WorkMitigating Reward Overoptimization in RLHF. Reward models are prone to overfitting on training data, leading to reward overoptimization where policies exploit the learned proxy instead of the true human objective (Gao et al., 2023). Existing mitigation efforts can be broadly categorized. One major line of work focuses on uncertainty-aware modeling, primarily through computationally intensive model ensembles or by adding post-hoc uncertainty penalties to the reward signal (Coste et al., 2024; Eisenstein et al., 2023; Lin et al., 2023; Zhang et al., 2024b; Yang et al., 2024a; Lou et al., 2024; Sun et al., 2025; Li et al., 2026). Another category involves data and policy-level regularization, using techniques like label smoothing, adaptive margin, and adding SFT-based constraints during policy optimization (Wang et al., 2024; Liu et al., 2024c; Li et al., 2025b). While these methods effectively mitigate the symptoms, our work posits that the problem’s root is the reward model’s reliance on dense, non-interpretable features. We therefore propose a fundamentally different approach that reshapes the reward representation itself by injecting the principles of Non-Negative Factor Analysis (NFA) into the reward modeling process, allowing us to directly learn a sparse and robust reward function that is inherently less susceptible to spurious correlations.
+Non-negative Factor Analysis. NFA models, such as latent Dirichlet allocation (Blei et al., 2003) and Poisson factor analysis (Zhou et al., 2012), are classical probabilistic tools for learning parts-based representations from data. Their ability to uncover sparse latent structures has made them highly effective for tasks like topic modeling (Zhou et al., 2015). While recent work has explored integrating NFA’s benefits into general deep neural networks (Duan et al., 2021; 2026; Hu et al., 2025), our contribution is the principled synthesis of NFA’s generative structure within the modern RLHF pipeline. Distinct from prior studies, we leverage NFA’s sparse inductive bias specifically to combat reward over-optimization (Gao et al., 2023; Zhou et al., 2022) and enhance robustness against distributional shifts (Wilson &amp; Izmailov, 2020).
+
+[图 1] Motivation on disentanglement and debiasing for alleviating spurious correlations in reward modeling.（占位，请自行插入原文图片）
+
+3. Preliminaries3.1. Scalar Preference Reward Model in RLHFA reward model (RM) aims at learning human preferences based on a parameterized model  on a human preference dataset  , where  is a user input prompt,  and  are the preferred (chosen) and non-preferred (rejected) responses, by minimizing a ranking loss following the Bradley–Terry (BT) objective (Bradley &amp; Terry, 1952):
+
+where   is the Sigmoid function. The optimized reward model serves as a proxy for human preferences, enabling the subsequent RL fine-tuning phase.
+ typically consists of a backbone feature extractor  and a final linear head  (Stiennon et al., 2022; Ouyang et al., 2022b; Yang et al., 2024b), where the backbone  is often initialized with a pretrained LLM parameter  and projects the prompt and the corresponding response into a factor vector, denoted as   , where  is the hidden dimension. A new linear head,  , is then added to project the feature representation  into a scalar reward value, expressed as
+
+The training of the RM involves fine-tuning the parameters of  and  on the preference dataset . However, this standard implementation suffers from two fundamental limitations:
+
+Deterministic and Overconfident Scoring: The model produces a single, deterministic reward, failing to capture uncertainty in human preferences and leading to over-optimization.
+Specious Correlation: The dense, “black-box” nature of the features  and weights  makes the model prone to reward hacking by exploiting spurious correlations, as shown in Fig. 1 (Top).
+
+The ultimate goal is to use this learned reward signal  to optimize the policy in the final RL stage. A flawed, deterministic, and easily hackable RM inevitably leads to a misaligned policy, underscoring the necessity for a more robust reward modeling framework, which we introduce in the subsequent sections.
+
+[图 2] Graphical model representations. (a) The standard BT model; (b) our proposed BNRM. Here,  denotes the prompt,  are candidate responses, and nodes represent the predictive process for the preference  .（占位，请自行插入原文图片）
+
+3.2. Non-negative Factor Analysis (NFA)Non-negative factor analysis methods, such as Poisson factor analysis (PFA) (Zhou et al., 2012), are widely used as topic models (Blei &amp; Lafferty, 2009). They impose non-negative stochastic latent variables on the model parameters to learn interpretable, parts-based representations of data. Specifically, representing document  as a bag-of-words (BOW) vector  , where   and  is the vocabulary size, PFA models  under the Poisson likelihood as
+
+Here, the matrix   is the dictionary, where each column represents a topic as a distribution over words. The vector   contains the document-specific topic proportions (i.e., document features) that represent the strength of each topic in the document. Benefiting from the sparsity of latent variables, which is often encouraged by placing Gamma priors with hyperparameter  on , NFA effectively handles overdispersed data and exhibits strong generalization ability.
+4. The Bayesian Non-negative Reward ModelOur methodology is rooted in a Bayesian perspective, comprising a generative process that describes our idealized assumptions about how preferences are formed, and an inference process that details how we approximate this model in practice using deep neural networks.
+4.1. BT from a Bayesian ViewpointThe BNRM framework, introduced intuitively in the previous section, can be formally derived as a hierarchical Bayesian extension of the standard Bradley-Terry (BT) model (Bradley &amp; Terry, 1952). This viewpoint clarifies how BNRM systematically addresses the limitations of the deterministic approach. From a Bayesian perspective, as shown in Figure 2a, the standard BT model is a special case of the following integral formulation:
+
+Here, the deterministic nature of the underlying neural network  means that the conditional probability   is a Dirac delta distribution,    , which offers no mechanism to capture uncertainty. Our BNRM generalizes this model in two steps:
+Modeling Aleatoric Uncertainty. We first replace the deterministic latent representation  with a stochastic latent variable . This allows the model to capture the inherent randomness and ambiguity in human preference data. The preference probability is now marginalized over the distribution of :
+
+Modeling Epistemic Uncertainty. To further account for the model’s own uncertainty about the global reward factors, we treat the final layer weights (denoted as ) as a global stochastic variable. This leads to the full, formal generative process for BNRM, as shown in Figure 2b:
+
+which final integral represents the complete generative process of our proposed model.
+4.2. The BNRM Generative ProcessRecall that Eq. 4 is designed to systematically capture both aleatoric and epistemic uncertainty in reward modeling. Building on this formulation, we propose a fully probabilistic generative model in which human preferences arise from sparse, non-negative latent factors. This framework replaces the standard deterministic reward formulation,  , with a structured Bayesian alternative that explicitly models uncertainty, disentanglement, and bias. The generative process introduces two complementary sets of latent variables:
+
+Local Sparse Representation (Disentanglement). For each prompt–response pair , we introduce a non-negative latent vector   that captures the sparse activations of global reward factors specific to . Sparsity in  encourages instance-level disentanglement by activating only a small subset of latent factors, thereby improving identifiability and reducing reliance on entangled or spurious features (Zheng et al., 2022).
+
+Global Reward Dictionary (Debiasing). We further introduce a global dictionary of reward factors  , shared across all data points, which defines a universal non-negative basis for evaluating response quality. Sparsity imposed on  acts as a population-level regularizer, selectively retaining invariant and semantically meaningful factors while suppressing spurious correlations in reward estimation (Zhang et al., 2021; Zhou et al., 2022).
+
+
+To jointly enforce non-negativity and sparsity, we place Gamma priors, a standard choice in non-negative factor analysis (Zhou et al., 2012), on both sets of latent variables:
+
+Given these latent factors, the scalar reward associated with a response  is generated as
+
+which yields a non-negative, interpretable reward constructed from sparse factor activations.
+Finally, for a pair of candidate responses  with corresponding rewards , the observed human preference is generated via a Bradley–Terry likelihood:
+
+where   denotes the logistic sigmoid function. This completes a coherent probabilistic account of how human preferences emerge from sparse, non-negative latent reward factors, naturally supporting uncertainty quantification, disentanglement, and debiasing within a unified Bayesian framework.
+4.3. Variational Inference and Training ObjectiveGiven the generative formulation of BNRM defined in Eqs. 4 and 5, the exact posterior distributions over the latent variables,   and  , are analytically intractable. We therefore resort to variational inference (VI) to obtain a scalable approximation. Specifically, we introduce tractable variational distributions   and  to approximate the true posteriors. Importantly, we re-purpose the deep LLM backbone  not as part of the generative model, but as a powerful inference network (encoder) for amortized inference of the local latent variables. As illustrated in Figure 3, for each prompt–response pair , the inference proceeds as follows:
+We first extract a deterministic, high-dimensional and dense feature representation using the LLM backbone with parameter :   . The feature vector  is then used to parameterize the variational distribution of the corresponding local latent variable . Following prior work on scalable inference for non-negative latent variable models (Zhang et al., 2020), we adopt a Weibull distribution due to its convenient reparameterization and its ability to model sparse, positive random variables:
+
+where  ,   denote the shape and scale parameters, respectively. Within the inference network, we parameterize the shape parameter  using a Softplus activation to ensure differentiability and numerical stability, while the scale parameter  is parameterized using a ReLU activation, which empirically encourages sparsity in the sampled latent variables.
+
+[图 3] Variational Inferencer for BNRM.（占位，请自行插入原文图片）
+
+The variational distribution for the global latent variable  is parameterized analogously as a Weibull distribution with its own set of learnable parameters . We train the entire model, including the LLM backbone  and the parameters of all variational distributions, by maximizing the evidence lower bound (ELBO) on the log-likelihood of the preference dataset :
+
+The first term corresponds to the reconstruction likelihood, ensuring that the inferred latent variables explain the observed human preferences. The KL divergence regularizes the variational posteriors toward the respective priors, thereby enforcing sparsity, controlling model complexity, and improving robustness against reward over-optimization.  is a trade-off balancing likelihood and KL divergence. We summarize the algorithm in Appendix A.1.
+4.4. Intuition on Disentanglement and then Debias for Reward ModelingWe provide an intuitive analysis of why BNRM effectively mitigates spurious correlations in reward modeling. As illustrated in Figure 1 (bottom), sparsity constraints imposed on the local and global latent variables play complementary and synergistic roles. Specifically, sparsity in the local latent variables  encourages instance-level disentanglement by activating only a small subset of semantic factors that are sufficient to explain a given prompt–response pair. This selective activation suppresses incidental or idiosyncratic features, thereby improving interpretability and reducing sensitivity to spurious patterns at the individual sample level. In contrast, sparsity in the global latent variables  enforces population-level invariance, effectively identifying and down-weighting systematic but non-causal biases that persist across the dataset. Crucially, the interaction between local and global sparsity yields a structured reward function that is both interpretable and robust.
+5. Experiment5.1. Experiment SetupTraining and Evaluation Datasets. Following Yang et al. (2024b), our BNRM was trained on the Unified-feedback (UF) preference dataset that contains diverse human preference annotations that cover a wide range of dialogue scenarios and reward signals. Specifically, we randomly sampled 40K and 400K samples from the UF dataset for model training, and assessed the performance on a held-out 8K validation split. In addition, we further evaluated the models on several out-of-distribution (OOD) datasets, including RM-Bench (Liu et al., 2024b), RewardBench (Lambert et al., 2024), HHH-Alignment (Askell et al., 2021), and MT-Bench (Zheng et al., 2023), which better simulate real-world scenarios. Besides, we also consider Skywork-Preference-v0.2 (SP) training dataset (Liu et al., 2025) and compare it with advanced reward modeling approaches. The code is available at https://github.com/GuoweiRong/Bayesian-Non-negative-Reward-Model.
+Base Models and Training Details. In reward modeling experiments, we firstly used gemma-2b-it (Gemma, 2024b) and gemma-2-2b-it (Gemma, 2024a) as base models, accelerated by Low-Rank Adaptation (LoRA) (Hu et al., 2021) for 2 epochs. In addition, we fully fine-tune the larger Skywork-Reward-Llama-3.1-8B (Liu et al., 2024a) reward model on the Skywork-Preference-v0.2 (SP) dataset within 1 epoch. Best-of-N (BoN) sampling test was performed exclusively with the two Gemma models, and our BNRM obtained via LoRA as proxy reward models. In the Proximal Policy Optimization (PPO) (Schulman et al., 2017) of real LLM fine-tuning, we applied LoRA to fine-tune Llama3.1-8B-Instruct (Meta, 2024) and OpenRLHF-Llama3-8B-SFT (Dong et al., 2024) for 1 epoch. More detailed training configurations are provided in Appendix C.
+Baselines. As detailed in Appendix C.4, we consider the following baselines: (1) BT and its variants, including BT (Bradley &amp; Terry, 1952), BT-Margin (Touvron et al., 2023b), BT-Frozen, BT-Ensemble (Coste et al., 2024), and BT-Label Smoothing (Wang et al., 2024); (2) GRM (Yang et al., 2024b); (3) InfoRM (Miao et al., 2024).
+5.2. Evaluation on Reward ModelingID and OOD Evaluation. Table 1 clearly shows that BNRM consistently boosts the corresponding base reward models and further outperforms advanced baselines across most ID and OOD evaluation tasks, regardless of training data scales. For example, with 40K training examples, the BT-based BNRM achieves accuracies of 74.2%, 83.6%, and 75.2% on Unified-Feedback, HHH Alignment, and MT-Bench, respectively, corresponding to improvements of 5.4%, 13.3%, and 6.1% points over the corresponding BT baseline. Likewise, the GRM-based BNRM attains 74.1%, 82.4%, and 75.1% on the same benchmarks, improving over GRM-SFT by 2.6%, 3.7%, and 2.1% points. In RewardBench, both BT-BNRM and GRM-BNRM achieve significant improvement over strong baselines under both 40/400K training splits, respectively. Table 1 indicates that our Bayesian non-negative framework effectively helps the reward model suppress reliance on spurious features, thereby improving generalization. Additional experiments on label noise setting, influence analysis of , and convergence curve can be found in Appendix A.6.
+
+[表 1] Results on ID and OOD evaluation with 40/400K UF training examples using LoRA. Best is bold and second-best is underlined. BT-BNRM and GRM-BNRM are based on BT and GRM-SFT, respectively. UF, HHH, and MT denote Unified Feedback, HHH Alignment, MT Bench, respectively.（数据见原文 PDF）
+
+Full Parameter Training Results On the SP. Skywork-Preference-v0.2 (SP) provides higher-quality preference data compared with UF dataset. We further refine the already strong Skywork-Reward-Llama-3.1-8B model and give training details in the Appendix C. Table 2 presents a comprehensive RewardBench evaluation, where our reward model achieves an overall score of 93.6 and reaches 89.7% and 92.6% on the Chat-hard and Safety subsets, respectively. In conclusion, these results show that our Bayesian non-negative reward model not only exhibits strong standalone preference modeling performance but also acts as a “plug-and-play” module that further enhances the generalization of existing powerful reward models.
+
+[表 2] RewardBench performance comparison over baselines, including both generative and discriminative reward models. The best performance is highlighted in bold, and we cite baseline results from Liu et al. (2024b).（数据见原文 PDF）
+
+Advantages in Low-Resource and Noisy Settings. A robust reward model should generalize well despite limited annotations and label noise—both common in practice. We evaluate BT-BNRM using a Gemma-2B-it backbone under two challenging settings: (1) Low-resource: training on 1K to 20K UF samples; (2) Label noise: training on 40K samples with noise rates from 0.1 to 0.4. Figure 4a shows that BNRM consistently outperforms BT with the performance gap widening as data volume decreases. Remarkably, BNRM trained on only 1K examples matches the performance of BT trained on 20K on RewardBench, with similar trends across other datasets. Under label noise (Figure 4b), BNRM demonstrates even greater resilience. At a 40% rate, BNRM improves BT by up to 16.7% and rivals the performance of BT trained with only 10%-20% noise. These results show that our BNRM is both data-efficient and noise-tolerant, making it highly suitable for real-world scenarios with scarce high-quality preference data.
+
+[图 4] ID and OOD evaluation results for BT-BNRM. (a): performance when training on a varying number of samples. (b): performance under different label-noise ratios. Solid bars denote the BT baseline, hatched bars denote our BT-BNRM.（占位，请自行插入原文图片）
+
+5.3. RLHF EvaluationTo further investigate whether BNRM can effectively mitigate reward hacking in real RLHF, we fine-tune Llama-3.1-8B-Instruct and OpenRLHF-Llama3-8B-SFT based on LoRA using Proximal Policy Optimization (PPO) (Schulman et al., 2017) on 20K samples from the alpaca-gpt4-data-en dataset (Peng et al., 2023). We use BNBT-Reward-Llama-3.1-8B fully fine-tuned on the SP dataset, and optimized policies are evaluated on widely used benchmarks, where we report Accuracy (%). As shown in Table 3, the two BNRM-fine-tuned policies achieve higher performance than their respective baselines, reaching 74.98% and 62.25%, indicating that BNRM can effectively simulate human preferences to guide LLM fine-tuning toward better performance. Additional training and evaluation details can be found in Appendix C. Further, we conduct the Best-of-N (BoN) test in Appendix D, which shows that the BT-based RM suffers from reward hacking as KL increases, while our BNRM remains aligned with the gold reward.
+
+[表 3] RLHF (PPO) downstream benchmark results. Best in each column is in bold, second-best is underlined.（数据见原文 PDF）
+
+Arena-Hard and Human Assessment. To examine whether the mitigation of reward hacking leads to better alignment with human preferences rather than merely higher proxy scores, we further evaluate on Arena-Hard and conduct human assessment, reporting consistent gains over the baselines (details in Appendix B).
+5.4. Length Debiasing and RobustnessOn the RM-Bench Hard subset (Figure 5), BNRM substantially reduces the Pearson correlation between response length and proxy reward score (e.g., BT-BNRM attains   versus BT’s  ), and the per-length-bucket mean reward curve of BNRM is nearly flat and non-negative, visually confirming that the reward no longer over-rewards long responses. On the Hard subset under deliberately confounded length signals (Table 5), BT-BNRM and GRM-BNRM still achieve 60.4% and 59.2% accuracy, gaining 2.7 and 2.0 points over their counterparts, providing concrete evidence that BNRM maintains its advantage even when superficial cues are deliberately confounded with response quality.
+
+[图 5] Pearson correlation and mean reward score between response length and reward score on the RM-Bench Hard subset. The top plot shows the correlation between response length and reward score; the bottom plot reports the average reward score within each length bucket, highlighting the non-negative property of our BT-BNRM.（占位，请自行插入原文图片）
+
+5.5. Sparsity, Non-negativity, and InterpretabilityTo better investigate how the sparsity and non-negativity of our framework effectively mitigate reward hacking and response biases, we visualize a subset of the  and  factors in Figure 6, revealing two primary mechanisms through which BNRM operates: (1) Signal Amplification: When  correctly captures the preference signal (i.e., the chosen response exhibits higher activations than the rejected one on factors such as F-433, F-491, and F-238), the global factors  further enlarge the preference margin. (2) Error Rectification: Conversely, for factors like F-455, F-189, and F-890 where  alone would mis-rank the pair, the sparsity of  effectively suppresses these erroneous signals by driving their global weights toward zero. In our analysis, these two scenarios occur in 1,936 and 761 samples, accounting for 64.9% and 25.5% of the test set, respectively. This provides strong empirical evidence that BNRM serves as a robust proxy for true human preferences under noisy and data-limited conditions, while offering mechanistic interpretability typically unattainable by previous scalar-based reward models. Furthermore, we employ GPT-5 to perform semantic analysis on the top- factors identified by their  weights and their associated responses; the specific prompts are detailed in Table 10, and the resulting factor-level semantics are summarized in Table 11 of Appendix B.
+
+[图 6] Partial θ and Φ factor activations for the chosen and rejected responses on RewardBench. The left y-axis denotes the activation strength of θ, and the right y-axis denotes the activation strength of Φ, which represents the global weight of each latent factor. Bars with Φ values close to zero correspond to factors that are effectively inactive.（占位，请自行插入原文图片）
+
+6. ConclusionIn this paper, we proposed Bayesian Non-Negative Reward Model (BNRM), which integrates the interpretability of non-negative factor analysis with the scalability of large language models. By introducing a Weibull-parameterized amortized inference network, BNRM achieves efficient posterior inference with minimal parameter overhead, while providing principled uncertainty estimates. Empirical results demonstrate that BNRM effectively mitigates reward overoptimization, improves robustness under distributional shift, and yields more interpretable reward decompositions than ensemble-based or purely neural baselines. These findings suggest that probabilistic sparsity and uncertainty modeling can serve as powerful inductive biases for building reliable reward models.
+Limitations. Although BNRM improves reward modeling robustness through Bayesian non-negative factorization, several limitations remain. First, BNRM introduces an additional method-specific hyperparameter, the KL coefficient , which controls the strength of Bayesian regularization between the variational posterior and the prior. Although BNRM remains robust under extreme choices of  and still outperforms the strong baseline across all datasets, achieving the best overall performance may still require tuning  to balance prior regularization and posterior adaptation. In our experiments,   provides a favorable balance. Second, although our OOD, noisy-label, Arena-Hard, and human evaluation results provide evidence that BNRM mitigates reward hacking beyond proxy-based reward scores, open-ended RLHF settings may expose more diverse and adaptive forms of reward hacking. Evaluating BNRM under broader multi-turn, tool-use, and long-horizon alignment scenarios remains an important direction for future work.
+AcknowledgmentsThe authors would like to thank the anonymous reviewers for their valuable comments and constructive suggestions. This work of G. Rong and D. Guo was supported by the National Natural Science Foundation of China (NSFC) under Grant (No. 62306125). This work of Z. Duan, B. Chen was supported in part by the National Natural Science Foundation of China under Grant 62576266 and U21B2006; in part by the Fundamental Research Funds for the Central Universities QTZX24003 and QTZX23018; in part by the 111 Project under Grant B18039. Part of this work was carried out during Dandan Guo’s visit to King Abdullah University of Science and Technology (KAUST).
+Impact StatementThis paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work. This work aims to improve the robustness and interpretability of reward modeling for RLHF by mitigating reward hacking and reducing reliance on spurious preference signals. These improvements can support safer and more reliable alignment of large language models, especially in settings where reward models are exposed to noisy, biased, or distribution-shifted preference data. At the same time, more robust reward optimization techniques are dual-use. If the reward objective is misspecified or intentionally harmful, methods that make optimization more effective could also be used to improve models toward undesirable or malicious goals. Therefore, BNRM should be applied with careful reward design, data auditing, human oversight, and downstream safety evaluation, particularly in open-ended deployment settings.
+]]></content>
+      <categories>
+        <category>论文学习</category>
+      </categories>
+      <tags>
+        <tag>论文</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>大学物理I</title>
+    <url>/2026/10/06/%E5%A4%A7%E5%AD%A6%E7%89%A9%E7%90%86I/</url>
+    <content><![CDATA[刚体运动
+
+
+平动
+转动（定轴）
+核心方程
+
+
+
+质量 
+转动惯量 
+惯性大小
+
+
+速度 
+角速度 
+运动快慢（矢量）
+
+
+动量  
+角动量  
+运动的“量”
+
+
+力 
+力矩 
+改变运动状态的外因
+
+
+牛顿第二定律  
+转动定律  
+动力学根本式
+
+
+ 
+ 
+加速度 / 角加速度形式（不变才成立）
+
+
+动能  
+转动动能  
+动能
+
+
+]]></content>
+      <categories>
+        <category>专业课笔记</category>
+      </categories>
+      <tags>
+        <tag>专业课学习</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>agent对MAVRL论文的理解与总结</title>
     <url>/2026/09/05/%E5%AF%B9MAVRL%E8%AE%BA%E6%96%87%E7%9A%84%E5%AD%A6%E4%B9%A0/</url>
     <content><![CDATA[
@@ -1485,369 +2673,51 @@ MAVRL 和 RLHF 的奖励模型、和 VAE、和 AVRIL 各是什么关系？
       </categories>
   </entry>
   <entry>
-    <title>电子系统与技术</title>
-    <url>/2026/10/06/%E7%94%B5%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%8E%E6%8A%80%E6%9C%AF/</url>
-    <content><![CDATA[模拟电路半导体顾名思义，半导体就是有时候导电，有时候不导电。比如有的高温导电，低温不导电
-本征半导体：高度提纯、结构完整的半导体单晶体。用人话来讲，就是不认为人为掺杂别的原子，纯靠热激发载流子（自由电子，空穴）
-N型半导体：给本征半导体中掺杂5价原子，于是就有自由电子。所以说N型半导体中多数载流子是自由电子P型半导体跟N型正好相反
-掺杂之后不管N还是P都是电中性
-如果把N型P型放一块，N中的电子会往P跑，这叫扩散运动，这样N就会有带正电的离子，P中有带负电的离子，N-&gt;P会有电场，也就有电压，叫做势垒电压，这个电压会压力电子回到N，这叫漂移运动
-总结：P型半导体和N型半导体的交界面通过扩散运动和漂移运动形成PN结，PN结施加正向电压（从P型到N型）时，耗尽层变薄；施加反向电压（从N型到P型）时，耗尽层变厚
-二极管二极管具有单向导电性，硅二极管的正向导通电压约为0.7V
-正向导通时，我们认为硅二极管有恒定压降0.7V
-反向没导通我们认为是断路，稳压二极管工作在反向击穿区域，配合合适的限流电阻可输出稳定的电压
-双极型晶体管：BJT
-BJT晶体管具有3个端口：基极(Base), 集电极(Collector), 发射极(Emitter)；有2个相互影响的PN结：发射结和集电结。
+    <title>大模型</title>
+    <url>/2026/09/08/%E5%A4%A7%E6%A8%A1%E5%9E%8B/</url>
+    <content><![CDATA[Transformer基本架构词嵌入与位置编码模型首先将输入文本拆分为一个个 Token，再通过词嵌入矩阵将每个 Token 映射为高维词向量。所谓词嵌入矩阵其实就是Token list，只不过矩阵的参数会不断更新，查表的时候直接 one-hot向量x词嵌入矩阵。词嵌入矩阵可以从零开始训练，也可以直接加载预训练好的权重，通过查表快速完成 Token 到向量的转换词向量能够编码词汇的语义特征，且在向量空间中体现语义关联，比如说希特勒和墨索里尼的差值会跟德国和意大利相似，语义相近的词在空间中距离更近。模型没有办法读懂文字，但他可以通过这些向量展现文字的内容。词向量的维度往往很高，比如GPT-3有12288维。词嵌入本身不包含位置信息，Transformer 会额外引入位置编码，将位置信息与词向量逐元素相加，让模型感知词汇的顺序关系
+自注意力机制词嵌入能提取单个Token的特征，但无法结合上文提取更加符合语境的特征，自注意力的作用是让每个 Token 融合所有相关 Token 的信息，输出符合上下文的向量
+单头自注意力对于每个 Token，用三个独立的投影矩阵，将词向量分别映射为三类向量
 
+查询向量 Q (Query)：代表 “我要检索什么信息”
+键向量 K (Key)：代表 “我包含什么可匹配的特征”
+值向量 V (Value)：代表 “我携带的实际语义内容”
 
-BJT晶体管分为NPN和PNP两种类型，示意图和电路符号如下：
+通俗来说，每个Token会向所有Token发问（Query），我们有关系吗，即每一个Token的词嵌入向量乘以矩阵  得到查询向量 。每个词向量乘以键矩阵  得到 K 向量，与 维度相同。如果两个向量相似，就说明两个Token关系匪浅，我们用QK的点积乘来表示相关程度。得到所有Token的QK点积，即我们对Token两两之间的相关程度打了分,将得分除以 （  为键向量维度）做缩放，保证数值稳定性。然后用softmax把得分变成0~1的概率分布，作为两两之间的相关性权重。我们取值矩阵  乘以前面的词向量，得到这个Token携带的实际语义，并用相关性权重对所有Token的V向量加权求和，得到当前 Token 的注意力输出。这一步可以形象的理解成我们将当前Token的词向量移动到了更适合当前语境的地方
 
+同一层自注意力中，所有 Token 共享同一组    投影矩阵，他们并不是能有效预测下一个值，他们只是把某个词向量分别投影成“我想找什么”，“我是什么”，“我携带的信息是什么”。需要注意的是，以上是双向自注意力，可访问所有位置的Token。在现在的主流大模型，如GPT中，模型不能读取未来信息，因此加入因果掩码：将当前Token之后所有位置的QK得分设为 ，softmax后对应权重变为0，实现仅关注历史与当前Token。不过在推理过程中，我们不用先算出所有Token之间的QK值，只用算出当前Token和之前的，就不需要掩码了
+多头注意力多头注意力把原向量拆成很多分，每分独立计算注意力，最后将所有头的输出在维度上拼接，但直接拼接的向量头和头之间没有交流，所以我们再通过输出矩阵  线性投影一次，这样就可以把不同头之间信息共享。这样可以从不同角度提取注意力，得到词语间更多的信息和特征
+MLP经过多头注意力后，每个 Token 得到融合上下文的向量，我们把这个向量做一个简单的激活具体实现为：首先通过一个线性层将向量升维（通常为原维度的 4 倍）并加偏置，经过激活函数引入非线性，再通过第二个线性层将向量降维回原始维度并加偏置
+Transformer 层的完整结构Transformer的每一层，核心是注意力 + MLP，还搭配残差连接与层归一化，这俩是深度网络稳定训练的关键，残差连接可以将模块输入与输出直接相加，缓解梯度消失，层归一化对向量做特征归一化，加速训练收敛当前主流的一层：输入 → LayerNorm → 多头自注意力 → 残差连接 → LayerNorm → MLP → 残差连接 → 输出
+输出与损失函数经过多层Transformer解码器后，每个位置的向量都会先通过LM Head（线性投影层）映射到整个词表的维度，再经过softmax归一化，得到该位置下一个Token的概率分布其中LM Head主要干的事情就是把输入向量的维度变成词表的维度，这样softmax输出之后每个位置上的概率就能直接对应这个词的预测概率在训练阶段，所有位置同时输出概率分布，并行计算损失，推理生成阶段，仅取最后一个位置的概率分布，通过贪心、采样或束搜索等策略选出下一个输出 Token
+损失函数：
+
+: 整条文本一共多少个 Token（词片段）: 当前位置: 前面所有已经读过的 token: 真实的下一个 token : 模型看完上文之后，预测“下一个词刚好等于标准答案”的概率
+这种损失的本质就是标准的多分类交叉熵损失：每个位置都是一个分类任务，真实Token是标签，模型输出词表上的概率分布，计算两者的交叉熵
+RNN 的隐藏状态存在严格的时序依赖，t 时刻的计算必须等待 t-1 时刻完成，因此整条序列只能串行逐步前向传播，损失也只能分步计算。Transformer 的自注意力机制天然支持并行计算，所有位置的 QKV 投影、注意力计算可通过矩阵运算一次性完成
+具体实现需要注意的是，上述基本架构只是思路，实际实现远比这复杂，具体细节写在代码注释中
+以nanoGPT为例：
+1.prepare文件，获取文本，将文本转换为bin文件，其中train.bin为训练数据集，val.bin为测试数据集，meta.pkl记载元信息注意，nanoGPT每一个Token不是单词或者部分单词，而是一个个字母
+import os# 提供操作系统底层接口，让python代码可以跨平台操作文件import pickle# 进行序列化，反序列化# 序列化：把内存的python对象转成二进制存入磁盘# 反序列化：读取磁盘二进制，还原成python对象    import requests# 实现网页请求import numpy as np# 这一块是负责提取文本，将文本写入 input.txtinput_file_path = os.path.join(os.path.dirname(__file__), 'input.txt')# __file__：提供当前文件的路径# os.path.dirname：把文件名取掉，只保留路径# os.path.join：把路径和文件名字拼接到一起# 这行代码的意思就是，找当前文件同一文件夹下有没有input.txt这个文件，如果有就返回路径if not os.path.exists(input_file_path):    # os.path.exists(路径)：判断文件存不存在    data_url = 'https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt'    # 如果不存在，就从data_url这个网址上下载，这个链接指向的是nanoGPT 作者仓库里的原始文本文件，内容是莎士比亚的剧本合集，纯文本格式    with open(input_file_path, 'w') as f:        # with..f：操作系统有个文件钥匙，with表示拿钥匙，起名叫f，打开文件，代码离开with时自动归还钥匙关上文件        # open(input_file_path, 'w')：打开一个本地文件（注意这不是文件名，而是路径），准备写入，如果文件不存在，就新建一个；如果已经存在，就覆盖它        f.write(requests.get(data_url).text)        # 向网址发送一个请求，并提取文本内容# 这一块会把提取出的文本存入 data 变量并输出文本长度with open(input_file_path, 'r') as f:    # 打开文件 "r"表示只读    data = f.read()    # f.read()：一次性读取文件中的所有内容，返回超大字符串。这一步会把硬盘中的文件全部加载进内存print(f"length of dataset in characters: {len(data):,}")# 这一块会统计有多少不同的字符，来制作词表大小chars = sorted(list(set(data)))# set负责去重，转换成list格式再排序vocab_size = len(chars)# 统计词表长度print("all the unique characters:", ''.join(chars))# ''.join 把list拼成字符串输出print(f"vocab size: {vocab_size:,}")# 创建字符与整数的对照表stoi = { ch:i for i,ch in enumerate(chars) }# enumerate，遍历列表同时拿到内容与索引；stoi：string to integer，最终是字母到数字的字典itos = { i:ch for i,ch in enumerate(chars) }def encode(s):    return [stoi[c] for c in s] # encoder: take a string, output a list of integersdef decode(l):    return ''.join([itos[i] for i in l]) # decoder: take a list of integers, output a string# 分别为编码和解码函数，encode会把输入的文本变成整数数组，decode会把整数数组变成文本# 划分训练集和测试集n = len(data)train_data = data[:int(n*0.9)]# 90% 当训练集val_data = data[int(n*0.9):]# 10% 当训练集# 将文本转换为整数listtrain_ids = encode(train_data)val_ids = encode(val_data)print(f"train has {len(train_ids):,} tokens")# :,是python数字格式化语法，给大数添加千位分隔符print(f"val has {len(val_ids):,} tokens")# 导出二进制bin文件train_ids = np.array(train_ids, dtype=np.uint16)# 转换为无符号16位整数的numpy数组val_ids = np.array(val_ids, dtype=np.uint16)train_ids.tofile(os.path.join(os.path.dirname(__file__), 'train.bin'))# tofile：numpy 数组的写法，直接把数组原始二进制数据写入文件，不附带元信息（不保存 shape、dtype）val_ids.tofile(os.path.join(os.path.dirname(__file__), 'val.bin'))# 机器读取bin文件速度极快，并且bin文件体积小，所以把txt转换成bin# bin文件只有纯数字Token，这一步保存信息meta = {    'vocab_size': vocab_size,    'itos': itos,    'stoi': stoi,}with open(os.path.join(os.path.dirname(__file__), 'meta.pkl'), 'wb') as f:    # wb:w=write 写入,b=binary 二进制模式,pickle 必须用二进制模式读写    pickle.dump(meta, f)    # 把python对象直接打包存入文件
+
+输出：
+length of dataset in characters: 1,115,394all the unique characters:  !$&amp;',-.3:;?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzvocab size: 65train has 1,003,854 tokensval has 111,540 tokens
+
+2.model.py，里面是模型本身
+import mathimport inspect# 自省库，可以查看函数的源码，实现灵活传参，版本兼容from dataclasses import dataclass# @dataclass是数据类装饰器，省去手写__init__，__repr__import torchimport torch.nn as nnfrom torch.nn import functional as F# 直接导入nn下面的函数式，F.xx是纯函数，直接计算class LayerNorm(nn.Module):# 在层归一化中，有weight和bias两个参数，但bias参数在Transformer中价值很小，所以我们直接关掉bias# 但nanoGPT写的时候的torch还不支持只关bias不关weight，所以我们自己写    def __init__(self, ndim, bias):    # ndim：输入向量维数，bias：要不要带偏置        super().__init__()        self.weight = nn.Parameter(torch.ones(ndim))        # torch.ones(ndim)：创造一个全部为1，大小为ndim的张量        # nn.Parameter：把这个张量标记为可训练参数，训练时反向传播会自动更新它        self.bias = nn.Parameter(torch.zeros(ndim)) if bias else None    def forward(self, input):    # input：输入张量，一般为（B,T,C），B：批次，T：序列长度，有多少Token，C：维度，每个Token多长        return F.layer_norm(input, self.weight.shape, self.weight, self.bias, 1e-5)        # F.layer_norm(input, normalized_shape, weight=None, bias=None, eps=1e-5)        # normalized_shape：最后哪几个维度需要归一化，需要归一化的维度写上他的大小        # nn.LayerNorm不能单独关闭bias，但是F.layer_norm可以        class CausalSelfAttention(nn.Module):# 自注意力模块    def __init__(self, config):        # config：存放模型所有超参数的配置对象        # config.n_embd：向量维度数        # config.n_head：头数        # config.bias：线性层要不要偏置        # config.dropout：随机失活概率        # config.block_size：模型的最大上下文长度，即单个样本最多能读多少个token        super().__init__()        assert config.n_embd % config.n_head == 0        # 看看维度数能不能整除头数，如果不能直接终止程序        self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=config.bias)        # 一次性算出QKV三个矩阵        self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=config.bias)        # 把所有头的结果拼接后，用投影矩阵映射一遍        self.attn_dropout = nn.Dropout(config.dropout)        self.resid_dropout = nn.Dropout(config.dropout)        # 通过随机失活正则化        self.n_head = config.n_head        self.n_embd = config.n_embd        self.dropout = config.dropout        # config只是__init__传进来的参数，前向传播无法直接使用，所以我们把有用的值保留        self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')        # hasattr(对象, "属性名字符串")：判断这个对象有没有叫这个名字的成员        # 这句话检测当前环境torch版本，看有没有自带的 Flash Attention，如果没有就要自己写        # Flash Attention：原始的注意力机制会直接算出所有Token之间的QK值，但是句子一长就很慢（显存读写慢）        # 于是我们就分块做，每次拿一些Token算出局部QK分数，累加这块对最终输出的贡献，然后直接丢掉这块 QK 结果        # 我们不会单独对这块做softmax，全部块处理完，最后再做全局softmax归一化        # 虽然这样反向传播的时候需要重新计算QK矩阵，但相对于显存读取数据的时间这会快很多        # 至于softmax在没有完整的数据的情况下为什么可以求，豆包给了完整的数学证明，总之是可以求的        if not self.flash:        # 如果没有Flash，就老老实实用慢速版的原始注意力机制            print("WARNING: using slow attention. Flash Attention requires PyTorch &gt;= 2.0")            # 发现版本老旧，提醒用户该升级了            self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size))                                        .view(1, 1, config.block_size, config.block_size))            # torch.ones：生成全1矩阵，torch.tril：取下三角，.view：reshape 维度变成 [1,1,T,T]，适配多头注意力            # self.register_buffer("bias", tensor)：把这个下三角 mask 矩阵，挂靠到模型里面，变成模型自带的一块固定数据            # 他给这个mask起名叫bias，但他并不是偏置，有点挂羊头卖狗肉的感觉    def forward(self, x):    # 输入的x就是一组Token        B, T, C = x.size()         # B：batch size，一批有多少条样本，T：每条样本有多少Token，C：向量维度        q, k, v  = self.c_attn(x).split(self.n_embd, dim=2)        # nn.Linear只作用在最后一维，所以这一行会把x的最后一位拿出来算QKV，并切成三份        k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)         v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)         # .view在不改变张量数据的前提下改变维度，.transpose(1,2)：交换第1维和第2维        if self.flash:            y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=True)            # attn_mask：自定义的掩码矩阵，is_causal：自动生成上三角负无穷掩码，注意，is_causal为True，attn_mask必须是None            # dropout_p：训练时随机失活，推理时关闭                    else:            # 没有就要手写自注意力            att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))            # QK相乘再除以维度的根号            att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))            # 掩码            att = F.softmax(att, dim=-1)            # 做softmax            att = self.attn_dropout(att)            # 随机失活            y = att @ v             # 相关度乘以向量，得到最终的结果        y = y.transpose(1, 2).contiguous().view(B, T, C)         # transpose(1, 2)只是改变元信息，并非改变张量本身，而.view需要张量也连续，所以需要contiguous        y = self.resid_dropout(self.c_proj(y))        # c_proj：输出层，resid_dropout神经网络随机失活        return yclass MLP(nn.Module):    def __init__(self, config):        super().__init__()        self.c_fc    = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)        self.gelu    = nn.GELU()        self.c_proj  = nn.Linear(4 * config.n_embd, config.n_embd, bias=config.bias)        self.dropout = nn.Dropout(config.dropout)    def forward(self, x):        x = self.c_fc(x)        x = self.gelu(x)        x = self.c_proj(x)        x = self.dropout(x)        return xclass Block(nn.Module):# 一层Transformer    def __init__(self, config):        super().__init__()        self.ln_1 = LayerNorm(config.n_embd, bias=config.bias)        self.attn = CausalSelfAttention(config)        self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)        self.mlp = MLP(config)    def forward(self, x):        x = x + self.attn(self.ln_1(x))        x = x + self.mlp(self.ln_2(x))        # 两次残差连接        return x@dataclassclass GPTConfig:# 一次性配置所有参数，之前用的config就是他的实例    block_size: int = 1024    vocab_size: int = 50304     # 词表大小    n_layer: int = 12    # Transformer Block的层数    n_head: int = 12    n_embd: int = 768    dropout: float = 0.0    # 小模型不容易过拟合    bias: bool = True     # 不带偏置class GPT(nn.Module):    def __init__(self, config):        super().__init__()        assert config.vocab_size is not None        assert config.block_size is not None        # 如果这两个位置是空的，说明肯定有问题，直接终止程序        self.config = config        self.transformer = nn.ModuleDict(dict(        # nn.ModuleDict：PyTorch 专用的字典，专门用来存放神经网络层        # 普通字典Pytorch看不见，但这个Pytorch能识别参数            wte = nn.Embedding(config.vocab_size, config.n_embd),            # WTE：Word Token Embedding 词嵌入            # nn.Embedding本质就是一个查表，其中的参数也是反向传播学习                          wpe = nn.Embedding(config.block_size, config.n_embd),            # WPE：Word Position Embedding 位置嵌入            drop = nn.Dropout(config.dropout),            h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),            # 储存12层Block            ln_f = LayerNorm(config.n_embd, bias=config.bias),        ))        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)        # 语言模型输出头，输出对下一个词概率的打分        self.transformer.wte.weight = self.lm_head.weight        # 二者一个是词映射成向量，一个是向量映射回词的打分，内涵一样，所以共享权重        self.apply(self._init_weights)        # .apply：遍历所有层，每个层传给_init_weights函数执行一遍        for pn, p in self.named_parameters():        # 遍历具体的参数，给某些特定参数单独初始化        # named_parameters()：遍历模型里每一个可训练参数，pn参数的名字，p张量            if pn.endswith('c_proj.weight'):            # 只要参数名字是以c_proj.weight结尾                torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config.n_layer))                # normal_：直接修改张量值，把p变成均值为mean，方差为std的正态分布        print("number of parameters: %.2fM" % (self.get_num_params()/1e6,))        # get_num_params：自己写的函数，统计模型全部可训练参数总个数并打印    def get_num_params(self, non_embedding=True):        # non_embedding：是否减去WPE的参数量        n_params = sum(p.numel() for p in self.parameters())        # p.numel()：number of elements，统计张量里面全部元素个数        if non_embedding:            n_params -= self.transformer.wpe.weight.numel()        return n_params    def _init_weights(self, module):    # 对某个module初始化        if isinstance(module, nn.Linear):        # 判断这个module是不是全连接层            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)            if module.bias is not None:                torch.nn.init.zeros_(module.bias)        elif isinstance(module, nn.Embedding):            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)    def forward(self, idx, targets=None):    # idx：torch.Tensor类的实例对象，储存数据，形状（size），数据所存（device），数据类型（dtype），是否计算梯度（requires_grad）还有步长等等    # targets：训练的时候计算loss，推理时不计算loss        device = idx.device        b, t = idx.size()        # idxshape=[b, t]，批次大小（每批多少样本）x每个样本多少Token，每个位置是Token的编号            assert t &lt;= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"        # 输入文本不能超过block_size        pos = torch.arange(0, t, dtype=torch.long, device=device)         # 生成位置数组          tok_emb = self.transformer.wte(idx)         # 输入Token编号，得到词向量，tok_emb：三维张量[b, t, n_embd]        pos_emb = self.transformer.wpe(pos)         # 输入Token位置，得到位置向量，pos_emb：二维张量[t, n_embd]        x = self.transformer.drop(tok_emb + pos_emb)        # PyTorch有自动广播机制，二维加三维会给二维最前面加个虚拟维度        # x的shape是[b, t, n_embd]，并会随机失活一部分        for block in self.transformer.h:            x = block(x)        # 做完所有层        x = self.transformer.ln_f(x)        # 再次层归一化        if targets is not None:            logits = self.lm_head(x)            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)            # F.cross_entropy：logits（N,C），N：需要预测的Token数量，C：每个Token的预测结果            # target：标准答案，注意这里只有一维，是真实的下一个Token的编号        else:            logits = self.lm_head(x[:, [-1], :])             # 输出[b,1,vocab_size]            loss = None        return logits, loss    def crop_block_size(self, block_size):    # 这个函数能支持把block_size改短        assert block_size &lt;= self.config.block_size        self.config.block_size = block_size        self.transformer.wpe.weight = nn.Parameter(self.transformer.wpe.weight[:block_size])        for block in self.transformer.h:            if hasattr(block.attn, 'bias'):                block.attn.bias = block.attn.bias[:,:,:block_size,:block_size]    @classmethod    def from_pretrained(cls, model_type, override_args=None):    # 把HuggingFace已经训练好的权重数字复制粘贴到nanoGPT模型里面，不用从零训练。        assert model_type in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}        override_args = override_args or {}         assert all(k == 'dropout' for k in override_args)        from transformers import GPT2LMHeadModel        print("loading weights from pretrained gpt: %s" % model_type)        config_args = {            'gpt2':         dict(n_layer=12, n_head=12, n_embd=768),              'gpt2-medium':  dict(n_layer=24, n_head=16, n_embd=1024),             'gpt2-large':   dict(n_layer=36, n_head=20, n_embd=1280),             'gpt2-xl':      dict(n_layer=48, n_head=25, n_embd=1600),         }[model_type]        print("forcing vocab_size=50257, block_size=1024, bias=True")        config_args['vocab_size'] = 50257         config_args['block_size'] = 1024         config_args['bias'] = True         if 'dropout' in override_args:            print(f"overriding dropout rate to {override_args['dropout']}")            config_args['dropout'] = override_args['dropout']        config = GPTConfig(**config_args)        model = GPT(config)        sd = model.state_dict()        sd_keys = sd.keys()        sd_keys = [k for k in sd_keys if not k.endswith('.attn.bias')]                 model_hf = GPT2LMHeadModel.from_pretrained(model_type)        sd_hf = model_hf.state_dict()        sd_keys_hf = sd_hf.keys()        sd_keys_hf = [k for k in sd_keys_hf if not k.endswith('.attn.masked_bias')]         sd_keys_hf = [k for k in sd_keys_hf if not k.endswith('.attn.bias')]         transposed = ['attn.c_attn.weight', 'attn.c_proj.weight', 'mlp.c_fc.weight', 'mlp.c_proj.weight']        assert len(sd_keys_hf) == len(sd_keys), f"mismatched keys: {len(sd_keys_hf)} != {len(sd_keys)}"        for k in sd_keys_hf:            if any(k.endswith(w) for w in transposed):                assert sd_hf[k].shape[::-1] == sd[k].shape                with torch.no_grad():                    sd[k].copy_(sd_hf[k].t())            else:                assert sd_hf[k].shape == sd[k].shape                with torch.no_grad():                    sd[k].copy_(sd_hf[k])        return model    def configure_optimizers(self, weight_decay, learning_rate, betas, device_type):    # 得出优化器    # weight_decay：权重衰减系数 learning_rate：学习率 betas：动量梯度下降 device_type：设备类型        param_dict = {pn: p for pn, p in self.named_parameters()}        param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}        # 只保留需要更新的参数        decay_params = [p for n, p in param_dict.items() if p.dim() &gt;= 2]        nodecay_params = [p for n, p in param_dict.items() if p.dim() &lt; 2]        # 将权重分组，权重矩阵做群众衰减，bias、LayerNorm参数不做权重衰减        optim_groups = [            {'params': decay_params, 'weight_decay': weight_decay},            {'params': nodecay_params, 'weight_decay': 0.0}        ]        # 构建优化器        num_decay_params = sum(p.numel() for p in decay_params)        num_nodecay_params = sum(p.numel() for p in nodecay_params)        # p.numel()：统计张量里面一共有多少个数字（参数总量）        print(f"num decayed parameter tensors: {len(decay_params)}, with {num_decay_params:,} parameters")        print(f"num non-decayed parameter tensors: {len(nodecay_params)}, with {num_nodecay_params:,} parameters")        # 打印日志，看一下两类参数各有多少张量、多少参数，方便调试。        fused_available = 'fused' in inspect.signature(torch.optim.AdamW).parameters        # 判断Pytorch支不支持fused AdamW        use_fused = fused_available and device_type == 'cuda'        # 只有Pytorch支持fused并且模型在GPU才行        extra_args = dict(fused=True) if use_fused else dict()        optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)        print(f"using fused AdamW: {use_fused}")        return optimizer    def estimate_mfu(self, fwdbwd_per_iter, dt):    # 估算算力利用率 MFU=实际算力/GPU最大算力        N = self.get_num_params()        cfg = self.config        L, H, Q, T = cfg.n_layer, cfg.n_head, cfg.n_embd//cfg.n_head, cfg.block_size        flops_per_token = 6*N + 12*L*H*Q*T        flops_per_fwdbwd = flops_per_token * T        flops_per_iter = flops_per_fwdbwd * fwdbwd_per_iter        flops_achieved = flops_per_iter * (1.0/dt)         flops_promised = 312e12        mfu = flops_achieved / flops_promised        return mfu    @torch.no_grad()    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):    # 推理阶段：进行续写，以idx为开头，续写max_new_tokens个Token    # temperature：控制随机性，越大更容易跳出高概率词，更有创造力    # top_k：只在概率最高的k个Token里面选，屏蔽掉冷门离谱候选        for _ in range(max_new_tokens):            idx_cond = idx if idx.size(1) &lt;= self.config.block_size else idx[:, -self.config.block_size:]            # 只看最后block_size个Token            logits, _ = self(idx_cond)            logits = logits[:, -1, :] / temperature            # 取出最后一个位置的预测            if top_k is not None:                v, _ = torch.topk(logits, min(top_k, logits.size(-1)))                logits[logits &lt; v[:, [-1]]] = -float('Inf')            # 拿到分数最高的k个，其他设置为fuwuqiong            probs = F.softmax(logits, dim=-1)            idx_next = torch.multinomial(probs, num_samples=1)            # 挑一个，并不一定是挑概率最大的，而是概率大的抽到的可能大            idx = torch.cat((idx, idx_next), dim=1)            # 把刚生成的拼到末尾                    return idx
+
+微调大模型LLM 大体分为三个步骤：一：预训练，用Transformer架构训练海量文本，训练结束后他可以根据前面的词预测文本。二：SFT，预训练的大模型可以补全文本，但没办法听懂指令，即没办法进行问答，SFT教他听懂人类的指令三：RLHF，SFT训练后模型能回答，但是不一定答的对。所以要RLHF微调
+SFT的架构和预训练的 Transformer 一模一样，只是把输入变成了 prompt + 回答，进行微调
+SFT训练完了以后（就叫A模型）暂且封存，把整个模型的参数复制一遍，得到一个新的Transformer网络，暂且叫B，把B的 LM head 和之后的 softmax 那些全部删掉，改成 RM head，这个 RM head 就是一个单层神经网络 nn.Linear(n_embd, 1)，那到最后一个 Token 的向量作为输入，输出一个分数，就是对本次输入的打分。
+原版的损失函数是这样的：给定同一个 Prompt，让 SFT 输出两个解，人类比较这两个解谁好，注意，人类不打分，只是给出好坏关系，令人类更喜欢的是 ，不喜欢的是 。然后把这两条输入到刚刚得出来的 RM 模型，分别打分为  ，。损失函数为
+
+其中  为 sigmoid 函数， 
 ]]></content>
       <categories>
-        <category>专业课笔记</category>
+        <category>学习笔记</category>
       </categories>
       <tags>
-        <tag>专业课学习</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>MAVRL论文全文中文翻译 - 从多类型反馈学习奖励函数的摊销变分推断</title>
-    <url>/2026/09/05/MAVRL%E8%AE%BA%E6%96%87%E5%85%A8%E6%96%87%E4%B8%AD%E6%96%87%E7%BF%BB%E8%AF%91/</url>
-    <content><![CDATA[
-原文信息
-MAVRL: Learning Reward Functions from Multiple Feedback Types with Amortized Variational Inference（MAVRL：利用摊销变分推断从多类型反馈学习奖励函数）
-作者：Raphaël Baur、Yannick Metz、Maria Gkoulta、Mennatallah El-Assady、Giorgia Ramponi、Thomas Kleine Buening
-机构：¹ ETH AI Center, ETH Zurich；² ETH Zurich 计算机系；³ University of Zurich 信息学系
-会议：Proceedings of the 43rd International Conference on Machine Learning（ICML 2026），首尔，韩国。PMLR 306。
-代码与模型：https://github.com/rabaur/mavrl
-译者说明
-
-本页为论文正文与附录（A–F）的完整中文翻译；参考文献列表按惯例保留英文原文。
-为便于阅读，正文将原文中以数学花体排印的四种反馈类型统一记为：P＝偏好（成对比较）、D＝示范、R＝评分、S＝停止信号；组合记号（如 PDR、PDRS）一律照原文保留，其具体所指以原 PDF 中的图表为准。
-插图（图 1–6）与表格（表 1–5）在正文对应位置以 [图 X] / [表 X] 标注并给出中文图题、所在页码与内容说明，精确图形/数据请对照原 PDF。
-
-
-
-摘要（Abstract）奖励学习（reward learning）通常依赖单一类型的反馈，或者通过手动加权多个损失项来组合不同类型的反馈。目前，如何从异质反馈类型（例如示范、比较、评分与停止信号——它们提供性质上各不相同的信号）中联合学习奖励函数，仍然是一个悬而未决的问题。
-针对这一挑战，本文将”从多类型反馈学习奖励”形式化为对共享的潜在奖励函数进行贝叶斯推断：每种反馈类型都通过一个显式的似然函数（likelihood）贡献信息。我们提出了一种可扩展的摊销变分推断方法（amortized variational inference），它学习一个共享的奖励编码器（reward encoder）以及若干反馈专属的似然解码器（likelihood decoder），并通过优化**单一的证据下界（ELBO）**进行训练。我们的方法既不需要把不同反馈压缩到某种公共中间表示，也消除了手动平衡各项损失的需要。
-在离散（表格型）与连续控制基准上，我们证明：联合推断得到的奖励后验优于单一类型的基线，能够利用不同反馈类型之间的互补信息，并使最终策略对环境扰动更加鲁棒。此外，推断出的奖励不确定性还能提供可解释的信号，用于分析模型置信度以及不同反馈类型之间的一致性。
-
-1. 引言（Introduction）设计能够忠实刻画期望行为的奖励函数是出了名的困难。即使在定义良好的环境中，细微的偏好、安全性考量与各种权衡也很难通过手工编码实现；微小的错误设定就可能引发意料之外甚至不安全的行为（Abouelazm et al., 2024; Amodei et al., 2016; Gershman &amp; Niv, 2015; Hendrycks et al., 2021; Knox et al., 2023）。这一挑战催生了奖励学习这一广泛的研究方向：奖励函数不是被显式给定，而是从人类反馈中推断出来。这类方法之所以有吸引力，是因为它允许领域专家通过判断或干预来表达意图——这往往比给出完整的形式化规格更容易。
-然而，关于行为的人类反馈形式多种多样。以往工作研究了多种反馈形式下的学习，包括：示范学习（demonstrations）（Chan &amp; van der Schaar, 2021; Ng et al., 2000）、比较或偏好（comparisons/preferences）（Christiano et al., 2017; Wirth et al., 2016）、标量评分（scalar ratings）（Knox &amp; Stone, 2009）、排序（rankings）（Brown et al., 2019; Myers et al., 2021），以及纠正或紧急停止之类的干预（corrections / emergency stops）（Ghosal et al., 2023; Hadfield-Menell et al., 2017; Losey et al., 2022）等。每一种反馈类型都只提供了关于底层奖励函数的部分信息：示范对状态–动作空间的覆盖是稀疏的，且只沿着专家行为约束奖励；比较只提供关于回报的相对信息，无法完整刻画被比较备选方案之外的权衡；评分只给出序数信息（ordinal information），而不包含偏好的强度；停止信号通常只表明行为”不可接受”，却不说明此时怎样才算最优。因此，依赖任何单一反馈类型都可能使奖励的某些方面无法被确定。
-上述局限凸显了从多种反馈类型学习的必要性——不同模态能够提供互补信息，从而消解单一来源遗留下来的歧义。此外，不同反馈类型在可获得性、成本与信息量上各有差异，因而理解它们彼此之间的关系、各自携带多少信息、在何处重叠、在何时相互冲突，就显得十分重要。
-尽管潜力互补，从异质反馈类型中联合学习奖励函数仍然充满挑战。现有方法要么为每种反馈分别训练奖励模型、事后（post hoc）再加以组合（Ibarz et al., 2018; Macuglia et al., 2025; Metz et al., 2025），要么只关注一小部分模态（通常是示范与比较）（Bıyık et al., 2022）。这两种策略都会带来显著问题：事后聚合需要回答”如何调和不同反馈类型之间的奖励尺度与不确定性”；而把多样反馈折叠进单一中间表示（例如偏好）则可能抹掉模态专属信息，并且并不适用于所有反馈形式。因此，尽管各种反馈在潜力上互补，实践中要”联合地”从多种反馈学习奖励仍然困难。
-一个更有原则性的视角是：把每种反馈类型都看作对共享潜在奖励函数的一次概率观测。在这个框架下，从多类型反馈学习就自然地对应为贝叶斯推断：每种反馈模态通过其似然贡献信息。已有若干框架按此方式形式化人类反馈，例如把反馈建模为（可能是隐式的）选择集上的奖励理性选择（reward-rational choices）（Jeon et al., 2020）。这种基于似然的表述为异质反馈提供了概念上统一的处理方式，并清楚地揭示出不同反馈类型如何与同一个底层奖励相关联。然而，在此设定下进行精确贝叶斯推断通常不可行，因为需要对反馈实现与奖励函数两者同时做边缘化。
-为应对这些挑战，我们提出一种可扩展的摊销变分推断方法，用于从多类型反馈学习奖励函数。我们的方法建立在可扩展贝叶斯逆强化学习（Scalable Bayesian IRL）的既有工作之上（Chan &amp; van der Schaar, 2021），联合学习一个共享的变分奖励表示与若干反馈专属似然模型，并通过优化单一的证据下界完成训练。
-本文贡献具体如下：
-
-我们提出一个统一的贝叶斯形式化，用于从多类型反馈学习奖励函数：每种反馈模态通过显式似然贡献信息，且无需手动损失平衡（第 4 节）。
-我们提出一个可扩展的摊销变分推断算法，联合学习共享奖励表示与反馈专属似然模型（第 5 节）。
-我们通过实验证明：从多类型反馈联合学习能够利用互补信息、提升奖励恢复与策略鲁棒性，并在多个强化学习基准上产生可解释的奖励不确定性（第 6 节）¹。
-
-
-¹ 代码与训练好的模型见 https://github.com/rabaur/mavrl
-
-
-2. 相关工作（Related Work）奖励学习（Reward Learning）。 当显式指定奖励不切实际时，奖励学习旨在从人类反馈中推断奖励函数（Abbeel &amp; Ng, 2004; Christiano et al., 2017; Ng et al., 2000）。早期工作聚焦于从示范中做逆强化学习（inverse reinforcement learning, IRL），假设专家轨迹来自某个未知奖励下的（近似）最优行为（Abbeel &amp; Ng, 2004; Ng et al., 2000）。近年来，基于偏好的强化学习逐渐兴起，尤其是在语言建模中的应用：人类比较智能体产生的轨迹片段，奖励模型用 Bradley–Terry 模型或相关的概率选择形式化来训练（Christiano et al., 2017; Ouyang et al., 2022）。除示范与偏好之外，学界还探索了其他多种反馈类型，包括纠正（corrections）（Bajcsy et al., 2017; Losey et al., 2022）、排序（rankings）（Brown et al., 2020; Myers et al., 2021）和紧急停止（emergency stops）（Hadfield-Menell et al., 2017）。每种反馈范式都引入各自的建模假设与损失函数，并且通常被孤立地研究。Jeon et al.（2020）提出了一种统一视角，证明许多反馈类型都可以被解释为（可能是隐式的）选择集上的奖励理性选择。尽管这一框架给出了反馈的通用概率解释，但它本身并不产生一种能从异质反馈源联合学习的可扩展方法。
-贝叶斯 IRL 的近似推断（Approximate Inference for Bayesian IRL）。 与本文最密切相关的是可扩展贝叶斯 IRL 的相关文献。贝叶斯 IRL 把从示范学习奖励表述为后验推断，但早期方法依赖 MCMC 或其他基于采样的推断手段，限制了其只能应用于小规模任务（Ramachandran &amp; Amir, 2007; Rothkopf &amp; Dimitrakakis, 2011）。为解决这一问题，Chan &amp; van der Schaar（2021）提出 AVRIL，将摊销变分推断应用于贝叶斯 IRL：联合学习一个变分奖励编码器与一个示范似然解码器。该形式化无需在内循环中反复求解强化学习问题即可高效进行后验推断，并已被证明能扩展到高维控制任务，以及语言建模中基于 Transformer 的奖励模型（Cai et al., 2025）。另有一些近期工作把变分推断用于偏好学习，以捕捉用户专属的奖励差异，但其目标不同于”从多类型反馈学习共享奖励函数”（Poddar et al., 2024）。我们直接在 AVRIL 框架之上构建：用一组反馈专属似然模型替换其单一的示范似然，同时保持对奖励函数单一的共享变分后验。这使得我们可以从多种反馈类型进行联合摊销推断，而无需把它们折叠进某个公共替代目标。
-多类型反馈（Multi-Type Feedback）。 与单类型奖励学习相比，从多种类型的人类反馈学习的工作相对较少。大多数已有工作聚焦于示范与偏好，并且主要把示范用作初始化步骤：先用示范初始化，再施加基于偏好的学习以进一步精修策略与奖励估计（Bıyık et al., 2022; Ibarz et al., 2018; Macuglia et al., 2025; Palan et al., 2019）。少数方法尝试在单一学习流程中纳入两种以上的反馈类型：Mehta &amp; Losey（2024）在机器人设定中，用”奖励理性选择”框架整合示范、纠正与偏好，但最终还是通过加性损失项来组合各模态，而各损失项的相对影响由设计选择（例如采样率）固定。近期的基准套件与评估平台强调了异质反馈的实践相关性（Metz et al., 2023; Yuan et al., 2024）；已有的大规模研究则用集成式方法评估反馈类型的组合（Metz et al., 2025）。然而，这些方法并不对单一奖励函数做联合推断，而是依赖启发式来调和不同反馈类型之间在奖励尺度与不确定性上的差异。
-与之相对，我们的方法通过把反馈专属似然整合进同一个变分目标，从多类型反馈中对共享奖励函数进行联合贝叶斯推断。
-
-3. 预备知识（Preliminaries）我们考虑马尔可夫决策过程（MDP） ，其中  为状态空间， 为动作空间， 为转移动力学，    为真实奖励函数，  为折扣因子。 与  既可以是离散的也可以是连续的，且我们不假设能够访问转移动力学。此外，奖励函数  被假定为不可观测的。
-智能体通过一个（可能是随机的）平稳策略  与 MDP 交互，该策略在 MDP 上诱导出轨迹   上的分布。用  表示所有平稳策略构成的空间， 表示所有轨迹构成的空间²。给定奖励函数 ，轨迹  的回报为  ，策略  的期望回报为  。对给定的奖励函数 ，记     为最优动作值函数。
-
-² 所有定义与结论都能直接推广到有限时域 MDP：只需把无穷折扣和替换为有限时域回报。这里采用无穷时域折扣表述仅为记号方便。
-
-从多类型反馈进行贝叶斯学习。 给定一组多类型人类反馈 ，我们的目标是学习奖励函数。具体地，我们考虑  ，其中  对应于类型  的反馈（例如偏好）。从贝叶斯视角出发，我们的目标是推断给定数据下奖励函数的后验分布。据此，我们把奖励函数  视为潜变量，考虑
-
-其中  是奖励函数上的先验， 是在  下观测到多类型反馈  的似然。关键在于，给定  时观测反馈的似然以一种有用的方式因子分解：由于观测在给定奖励函数后条件独立，联合似然可写为  。因此，多类型反馈后验满足   。
-摊销变分推断（Amortized Variational Inference）。 尽管优雅，方程 (1) 通常是双重不可解的（doubly intractable）：一方面似然中需要对反馈选择做积分，另一方面分母需要对所有奖励函数做积分。变分推断（VI）用更简单的变分分布   来逼近后验，其参数  通过最大化证据下界（ELBO）学习：
-
-第一项最大化期望数据似然，第二项把  向先验  做软性正则化。变分自编码器（VAE）框架（Kingma &amp; Welling, 2014）通过把变分分布  表示为将观测  映射到潜变量  的神经网络编码器，使变分推断得以广泛应用与扩展，从而把后验推断在数据点之间”摊销”。此外，VAE 联合学习似然模型 ——即解码器——它从潜表示  重建观测响应 ³。这依赖重参数化技巧：把采样表达为确定性变换  （  ），从而使梯度能够穿过编码器流动。
-
-³ 通常，在 VAE 中目标是通过重建任务（ ）学习有意义的潜表示 。
-
-
-4. 反馈专属似然模型（Feedback-Specific Likelihood Models）我们为每种反馈类型定义概率似然模型，它们共同构成贝叶斯奖励学习目标（式 1）中的联合数据似然 ，从而决定我们的算法所优化的变分目标。在本文中，我们聚焦于偏好（成对比较）、示范、评分与停止信号四类反馈；但所提出的框架与算法适用于任何能够指定概率似然的反馈类型。重要的是，我们的方法与具体似然模型的选择无关，不依赖共享的中间表示，也不需要跨反馈类型的手动损失平衡。
-偏好（Preferences，P）。 这里采用广泛使用的 Bradley–Terry 模型：在奖励函数  下，轨迹  优于轨迹 （记为  ）的概率为
-
-该形式可以自然地扩展到轨迹片段之间的比较，正如 Christiano et al.（2017）所做的那样。逆温度参数  控制偏好判断的随机性。
-示范（Demonstrations，D）。 专家示范是另一种常用的反馈形式。Ramachandran &amp; Amir（2007）及其后续工作（例如 Chan &amp; van der Schaar, 2021; Rothkopf &amp; Dimitrakakis, 2011）用 Boltzmann 理性策略   对专家示范建模。我们沿用该建模方式，于是在奖励函数  下，一条专家轨迹  的似然为
-
-其中逆温度   控制专家的最优程度。
-评分（Ratings，R）。 评分提供序数反馈：人类给一条轨迹赋予离散分数以反映其感知质量，类似于李克特量表（Likert scale）判断（Likert, 1932）。我们用标准的序数回归框架——有序 logit 模型（ordered logit model）——对这一反馈形式建模（McCullagh, 1980）。
-我们假设每条轨迹在奖励函数  下会诱导一个未观测的潜在效用（latent utility），用以反映其质量，并叠加随机的判断噪声。报告的评分   通过一组有序切点         对这个潜在效用离散化而得到：当轨迹  的潜在效用落在  与  之间时，它得到评分  。在该模型下，对轨迹  观测到评分   的似然为
-
-其中  表示 logistic 累积分布函数。重要的是，这一反馈模态不等价于对奖励值的直接回归：它只提供序数信息，而不提供绝对判断。切点  不必等距，这反映了人类在把感知质量映射到离散评分时通常不会采用均匀或线性的阈值。
-停止信号（Stops，S）。 停止信号刻画这样一种场景：一旦智能体的表现退化到可接受水平之下，人类监督者就介入并终止其行为。这类反馈在实践中很普遍——例如机器人领域的安全停止、人在环路（human-in-the-loop）控制——但作为奖励或策略学习信号，受到的关注却很少。我们的框架通过对终止时间上的显式似然建模，自然地容纳了停止反馈。
-设  为用户介入的（随机）时间步。我们用离散时间风险模型（hazard model）对  建模：在时间  的瞬时风险（hazard）依赖于截至该时刻轨迹的累积次优程度。具体地，在奖励  下，动作  在状态  的瞬时次优程度定义为
-
-并引入一个回溯折扣因子   来折扣较早的偏差。由此得到的风险函数为
-
-其中   越大表示专家越”不宽容”。观测到在时间  发生停止的似然即为如下几何分布：
-
-如果片段内没有发生停止，则观测被视为右删失（right-censored）。
-其他反馈类型（Additional Feedback Types）。 文献中研究的其他反馈类型还包括排序（rankings）（Brown et al., 2019; Myers et al., 2021）、纠正（corrections）（Losey et al., 2022），以及其他形式的人为干预（human intervention）（Jeon et al., 2020）。虽然本文没有显式建模它们，但反馈专属似然可以类似地推导出来。关键在于，任何这类似然都可以直接纳入我们的框架与算法，无需额外的结构性修改。关于反馈模拟的实现细节见附录 A.2。
-
-5. MAVRL：多反馈摊销变分奖励学习（MAVRL: Multi-Feedback Amortized Variational Reward Learning）下面介绍 MAVRL——一种从多类型反馈进行贝叶斯奖励推断的通用学习算法。该算法（算法 1）用摊销变分推断实例化第 3 节引入的贝叶斯目标，并直接利用第 4 节定义的反馈专属似然模型。
-[算法 1] 位置说明：原文第 5 页顶部，题为 “Algorithm 1 (MAVRL): Multi-Feedback Amortized Variational Reward Learning”。 算法内容以如下伪代码表达：
-
-输入：多类型反馈 ，超参数 、，学习率 
-重复直到收敛：
-
-为所有反馈类型采样小批量： 
-编码所有转移： 
-重参数化奖励：    
-计算 Q 值： 
-计算各反馈专属负对数似然：  
- ，其中先验  
- 
-聚合损失：   
-更新参数：   
-
-返回：奖励编码器 、动作值模型 
-
-
-5.1 目标函数（Objective）我们的目标是联合学习一个概率奖励模型与一个辅助的动作值函数，后者用于支持那些基于状态–动作值来定义的反馈类型。具体来说，我们参数化一个条件奖励分布
-
-其中  与  都是神经网络，把状态–动作对  映射到局部奖励值上的一个分布。从这个编码器采样会在轨迹回报上诱导出一个分布，用来评估各类反馈的似然。
-此外，我们还学习一个辅助的动作值函数 ，它是依赖价值估计的反馈类型所必需的；当适用时，还会学习与反馈专属似然模型相关的参数 ，例如评分模型的切点。关键在于，奖励编码器本身与反馈的类型和结构无关；所有反馈专属的语义完全由相应的似然函数承载。
-学习过程直接来自贝叶斯奖励学习问题的证据下界（ELBO）。给定反馈数据集 （其中每个  包含类型  的反馈观测），MAVRL 所要最大化的统一目标为
-
-这里  表示一个通用的反馈观测，其结构取决于反馈类型——可以是轨迹、比较、标量评分或终止时间。每种反馈类型都为目标贡献一项似然，无需手动加权或分阶段优化。
-最后一项  强制推断得到的奖励分布与辅助动作值函数保持一致。借鉴 Chan &amp; van der Schaar（2021），我们加入一个时序差分（TD）正则化项，它鼓励编码器预测的奖励与  所蕴含的单步 Bellman 差分相一致。
-为定义这一项，我们利用与观测反馈相关联的轨迹。每条反馈观测  都植根于一条或多条轨迹，我们从中提取状态–动作转移。设   表示这样的转移元组，其中  是在状态  中采取的动作。相应的 TD 目标定义为
-
-我们通过最大化 TD 目标在编码器分布下的对数似然，来惩罚该 TD 目标与编码器预测奖励之间的偏差：
-
-其中  表示从观测反馈所依据的轨迹中提取出的转移集合。
-[图 1] 位置说明：原文第 6 页中部，标题为 “Figure 1. Visualizations of inferred reward functions from 2 demonstrations, 256 pairwise comparisons, or 128 ratings on a 10×10 grid_trap environment.”内容说明（中文）：该图在   的 grid_trap 网格环境中，可视化了分别由 2 条示范、256 对成对比较、128 条评分 推断得到的奖励函数。每一行对应一种单一反馈模态的推断结果；最后一列展示的是组合全部反馈模态后的结果。图中同时呈现学习到的奖励均值估计及其由方差量化的不确定性（原文采用均值与方差的双重视觉编码）。
-5.2 MAVRL 的性质（Properties of MAVRL）可扩展性（Extensibility）。 MAVRL 的一个核心性质是：它能使用任何只要可以指定似然的人类反馈形式。每种反馈类型都仅通过其似然项   对目标做出贡献。因此，加入一种新的反馈模态只需要定义它的似然，而无需改动奖励编码器、辅助价值函数或优化过程。
-无需跨模态损失平衡的统一目标（Unified Objective Without Cross-Modal Loss Balancing）。 MAVRL 不假设不同反馈模态除了奖励函数之外还共享某种公共中间表示或监督信号。反馈专属似然通过不同的统计关系把观测与奖励联系起来——例如动作概率、回报比较、序数阈值或累积遗憾（cumulative regret）。由于所有反馈都以对数似然项的形式出现在同一个变分目标中，每个模态的相对影响力由数据与反馈模型决定，而非由手工调节的跨模态权重决定。因此，MAVRL 完全消除了”每种反馈类型在奖励估计中该占多大比重”的选择难题：举例来说，当有   条示范和   个偏好、且噪声参数已知时，它们在一个组合损失或事后集成中的相对权重在一般 MDP 中是任意的。MAVRL 彻底避免了这一问题。
-剩余的参数有两类：
-
-似然专属的噪声参数（例如 Bradley–Terry 温度 、评分切点 、停止风险参数 ）刻画标注者的行为，它们植根于成熟的人类反馈模型；这些参数可以（可选地）被当作潜变量，在行为上合理的先验下被推断。
-正则化系数  与  控制后验正则化与”奖励–Q 值”一致性；我们通过标准模型选择调参，性能在很宽取值范围内都很稳定；其中基于 Q 值的反馈（示范与停止信号）需要非零的 。
-
-顺序无关与异步训练（Order-Invariant and Asynchronous Training）。 训练目标与反馈模态的顺序、频率和交错方式无关。来自各个类型反馈数据集的 mini-batch 被独立采样，并且可以在优化过程中任意组合。
-
-6. 实验（Experiments）我们在多种环境与反馈配置下评估 MAVRL，回答三个问题：
-
-学习奖励函数时，不同反馈类型如何在性质上互补（第 6.1 节）；
-这种互补性如何转化为下游策略性能与奖励保真度（第 6.2 节）；
-从多类型反馈推断出的奖励，是否会在环境扰动或奖励错误设定下带来更鲁棒的行为（第 6.3 节）。
-
-我们的实验横跨表格型网格世界域与连续控制基准，并把示范、成对比较、评分和停止反馈在单独使用与组合使用两种情形下都纳入考察。
-除特别说明外，所有方法都在每个环境固定的反馈预算下训练，且每种模态被分配相同数量的反馈样本，以保证公平比较。记 、、、 分别为偏好、示范、评分与停止信号的样本数。在网格世界环境中，我们设置   、 、 ；在 Acrobot-v1 与 CartPole-v1 中，  、 、 ；在 LunarLander-v3 中，   、 。
-6.1 反馈类型互补（Feedback Types Complement One Another）在 [图 1]（原文第 6 页，图题见上文）中，我们可视化 MAVRL 基于不同单一反馈类型及其组合在网格世界环境中学习到的奖励估计。我们同时报告学习到的奖励均值估计及相应的、以方差量化的不确定性。更多示例见附录 F。
-我们发现每种反馈类型都会在推断出的奖励与不确定性估计上引起一种特征性的模式：
-
-示范在专家轨迹沿线给出低不确定性的奖励估计，但会留下大片状态空间区域”欠确定”（underdetermined）；
-成对偏好提供更广的覆盖，但可能把较高的奖励赋给那些被频繁访问、却并非全局最优的中间状态；
-评分能可靠地识别出目标状态，但对其周围奖励地形的信息有限；
-停止信号强烈约束不安全或低奖励区域，但在”避开之外什么行为是值得要的”这一点上提供相对较少的指引。
-
-这些局限恰好说明了不同反馈类型的互补本质——当它们被组合时，上述局限得以缓解。我们基于组合反馈训练的奖励模型能够以很高的保真度重建原始的真实奖励函数，并可靠地同时识别高奖励与低奖励状态。
-6.2 组合反馈提升策略性能与奖励识别（Combining Feedback Improves Policy Performance and Reward Identification）我们在 [表 1]（原文第 8 页，跨栏表格）中评估不同反馈组合在一系列网格世界与连续控制环境中的下游策略性能。对每种组合，我们都针对学习到的奖励估计优化一个策略，并报告该策略关于真实奖励函数的总回报。
-所有结果在 10 次运行上取平均；回报按环境线性缩放，使得 100 对应于用真实奖励训练出的近似最优策略的性能，0 对应于均匀随机策略的回报。因此，超过 100 的数值表示学习策略优于用真实奖励训练的策略。虽然这些归一化指标刻画了下游策略性能，但它们并不整体反映奖励恢复的质量。为此，我们还报告 EPIC 距离（Gleave et al., 2021）：对仅在基于势的塑形（potential-based shaping）、正缩放与常数平移意义下等价的奖励函数，EPIC 距离为 0。我们只在可精确比较奖励的表格型环境中报告 EPIC 距离。
-[表 1] 说明：主表分为上下两部分——上部分为”归一化平均回报（越高越好）”，下部分为”平均 EPIC 距离（越低越好）”，环境行依次为 grid_cliff、grid_sparse、grid_trap、Acrobot-v1、CartPole-v1、LunarLander-v3；列对应各种单模态与多模态反馈组合（深灰底为最优，浅灰底为次优）。原文表格位于第 8 页，请对照原 PDF 查看逐列数值。
-组合全部反馈类型获得最强的整体性能。 总体上，PDR（偏好＋示范＋评分等组合）在各环境中表现强劲，在 6 个环境中的 4 个取得最好或接近最好的性能，例外是 Acrobot-v1 与 LunarLander-v3。这支持我们的核心假设：MAVRL 能够利用不同反馈类型中包含的互补信息。
-没有任何单一类型基线在所有环境中占优。 或许并不令人意外：示范（D）在稀疏奖励设置中表现出色——例如 grid_sparse（95.0）与 LunarLander-v3（115.7）；评分（R）在 CartPole-v1 的单一反馈方法中表现最好（100）。偏好（P）作为独立模态表现相对温和，但在与其他模态组合时贡献显著——这与以往”成对比较需要大量样本才能达到有竞争力的性能”的发现一致（Christiano et al., 2017）。
-停止反馈与其他反馈互补。 在若干环境中，包含停止反馈的组合通常优于不含停止反馈的对应组合。例如在 grid_sparse 中，加入停止反馈的组合（100.0）优于仅用示范 D（95.0）；含停止反馈的偏好组合（70.6）也优于仅偏好（58.8）。这说明停止信号提供了关于轨迹次优性的宝贵信息，而这种信息很难从其他反馈中获取。
-EPIC 距离揭示策略性能之外的奖励恢复质量。 在计算 EPIC 的三个表格型环境中，PDR 取得最低（grid_cliff：0.481；grid_trap：0.520）或次低（grid_sparse：0.383）的 EPIC 距离。EPIC 与性能的偏差只出现在 grid_sparse 上：某一组合达到最低 EPIC（0.380）却只有中等的策略性能（82.3），这表明”忠实的奖励恢复”与”较高的下游性能”虽不完全等价，但通过组合所有反馈模态可以同时实现。
-相对非变分基线，MAVRL 既有效又高效。 [表 2]（原文第 8 页底部）把 MAVRL 与两种自然的替代方法对比：
-
-MCMC：一种非摊销的贝叶斯奖励学习方法，代表后验推断的”金标准”；
-事后奖励平均（Post-Hoc Reward Averaging）：一种非变分启发式，通过集成平均组合多个独立训练的奖励估计（参见 Metz et al., 2025）。
-
-[表 2] 说明：表列依次为 Post-Hoc Avg 与 MCMC 与 MAVRL 的性能（归一化回报，n=10，越高越好）与每轮奖励模型训练的墙钟时间；环境行 grid_sparse / grid_cliff / grid_trap / LunarLander-v3。原文数值请对照原 PDF。
-与 MCMC 相比，MAVRL 在网格环境中以约 30 倍更低的计算量取得相当或更优的性能；并且与 MCMC 不同，它不需要内循环 MDP 求解，因此在 MCMC 不可行的连续控制设定下依然可解。与事后平均相比，MAVRL 在所有环境上都大幅优于朴素集成——这表明独立训练的奖励模型会把尺度与塑形各异的信号混在一起，错失了联合推断才能捕捉到的跨模态互补性。
-在匹配的反馈预算下增益仍然成立。 为检验组合反馈带来的改进反映的是”真正的互补性”而非”更大的总监督量”，我们做了等预算消融：用贝叶斯优化把固定总样本量分配到各模态之间（附录 C，表 4）。在连续控制基准上，组合方式一致地达到或超过最强的单一模态，PDR 位列顶尖。在表格型网格上，单一信息模态在满预算下往往胜过被切碎的多种模态分配；而像 D 或某些双模态组合则成为最强组合。总体而言，组合反馈带来真正的跨模态互补性——是否纳入某个模态，取决于它在目标环境中的信息量。
-6.3 从多类型反馈学习到的奖励更鲁棒（Rewards Learned from Multi-Type Feedback are More Robust）我们沿两条互补的轴评估用 MAVRL 推断的奖励函数的鲁棒性：(i) 部署时环境动力学发生偏移的鲁棒性；(ii) 训练时所用反馈含噪声或被错误设定的鲁棒性。在两种设定下，奖励模型都在名义配置下只训练一次，之后保持固定；策略则在不做任何进一步奖励适配的情况下重训——从而把奖励质量的影响与策略优化的影响分离开。我们比较单一反馈模态、其组合（PDR）以及行为克隆（BC）基线。完整实验细节与所有反馈组合的结果见附录 E。
-在动力学扰动下，多类型反馈衰减得更平缓。 我们在奖励学习完成后扰动每个环境的转移动力学：在 grid_cliff 与 grid_trap 中增加动作随机性，在 Acrobot-v1 中改变系统动力学的结构性参数，在 LunarLander-v3 中改变重力与风。[图 2]（原文第 9 页）展示了这些扰动下的性能。
-[图 2] 内容说明（中文）：该图是三组子图的组合，纵轴均为”归一化回报”（n=10，误差棒为标准误），横轴为扰动强度。
-
-左：grid_cliff 与 grid_trap 的”环境随机性”从 0 增大到 0.8 时，各方法的归一化回报曲线；
-中：Acrobot-v1 中摆杆两段长度之比（link length asymmetry，约 1.0→2.0）增大时的表现；
-右：LunarLander-v3 中重力（g 从 −10 到 −12）与风（wind 0→25）增强时的表现（横轴同时示意了仅重力变化与固定 g=−12 时变化风两段）。
-
-图中奖励模型与基线都在未扰动设定下训练并在整个变化过程中保持固定。可以观察到：在网格环境中，由多类型反馈推断的奖励训练出的策略在扰动下比由单一反馈模态或仅靠模仿训练的策略衰减得更平缓。虽然组合反馈的下游性能仍比模仿基线衰减得更平缓，但某些单模态（例如 R）的性能反而超过它——这与未扰动设定下的情况一致。在网格世界中，动作随机性增大导致模仿与单反馈奖励模型（例如 R、P、D）快速恶化，而从组合反馈学到的奖励能保持更高的平均回报。Acrobot-v1 中也有类似模式：系统动力学的结构性变化对模仿策略与单反馈奖励模型的冲击不成比例地大，而组合反馈在各级扰动下给出持续更稳定的性能。在 LunarLander-v3 中，重力与风扰动严重削弱了 BC 的性能；相比之下，MAVRL——尤其是用多类型反馈（PDR）和示范反馈（D）训练时——在越来越有挑战性的动力学下依然显著更鲁棒。
-多类型反馈能补偿大多数被错误设定的模态。 接下来我们检验多类型优势能否延伸到”反馈信号本身被污染”的情形——采用与第 6.2 节相同的固定分配反馈预算。我们施加四种错误设定（分别或联合）：低估偏好（）与示范（）的标注者理性程度、在评分效用上加性高斯噪声、以及停止倾向被误校准。grid_cliff 与 grid_sparse 的结果见 [表 3]（原文第 9 页；grid_trap 上的同样结论见表 5）。
-[表 3] 说明：上半部分为单模态模型，下半部分为使用完整反馈集合的 MAVRL；每一行把指定通道的数据侧参数破坏掉，而模型仍假设其取值完好（被破坏的模态在原表中以模糊/灰色标出，例如 PDRS 表示偏好被错误设定）。列含义：Base＝完好设定的归一化回报；Misspec.＝均值±标准误；Rat.＝Misspec./Base。原文数值请对照原 PDF。
-两点观察很突出。第一，在四种污染中的三种（偏好、评分与停止）下，PDR 保留了其完好设定性能的 ≥90%，而相应的单模态基线则崩塌到低至 0.10 的比例。这表明存在很强的补偿效应：在多个反馈类型上的联合推断吸收来自单一来源的污染，而不是把它传播开。第二，例外是示范：污染示范把 PDR 打到 0.38–0.50 的比例；同时污染全部四个通道也大致达到同一水平（0.43–0.50）。因此 PDR 的最坏情况退化受限于示范通道，而不是在各通道之间叠加恶化。总体而言，多类型优势可延伸到四个反馈通道中三个的上游污染场景，而示范仍是结构性的薄弱点。
-
-7. 结论（Conclusion）本文将”从多类型反馈学习奖励”表述为对共享潜在奖励函数的贝叶斯推断：每种反馈模态都通过显式似然作出贡献。我们提出了 MAVRL——一种可扩展的摊销变分推断算法，它优化单一统一目标。经验上我们发现：不同反馈类型会诱导出不同的奖励与不确定性结构，而从多个模态联合推断奖励能够利用它们的互补优势，从而提升奖励恢复、下游策略性能与鲁棒性。
-局限性（Limitations）。 我们的评估局限于仿真环境——虽然这允许对不同类型的反馈做受控分析，但并未捕捉真实世界任务的完整复杂性。此外，我们依赖合成生成的反馈；把 MAVRL 应用到可能表现出系统性偏差、不一致或依赖上下文的判断的真实人类反馈，仍是未来工作的重要方向。最后，尽管我们的框架能推断奖励不确定性，我们尚未利用这种不确定性来引导反馈采集，因此把异质反馈的主动学习（active learning）留作一个有前景的未来方向。
-
-致谢（Acknowledgments）本研究主要由 ETH AI Center 资助：其中 Raphaël Baur 获得 ETH AI Center 博士奖学金，Thomas Kleine Buening 获得 ETH AI Center 博士后奖学金。
-影响声明（Impact Statement）本文工作旨在推动机器学习领域的发展。我们的工作可能存在许多潜在的社会影响，但我们认为其中没有哪一项需要在此特别强调。
-
-参考文献（References）
-以下按惯例保留英文原文（按原 PDF 整理，作者与年份信息供检索）。
-
-
-Abbeel, P. and Ng, A. Y. Apprenticeship learning via inverse reinforcement learning. ICML, 2004.
-
-Abouelazm, A., Michel, J., and Zöllner, J. M. A review of reward functions for reinforcement learning in the context of autonomous driving. IEEE IV, 2024.
-
-Akiba, T., Sano, S., Yanase, T., Ohta, T., and Koyama, M. Optuna: A next-generation hyperparameter optimization framework. ACM SIGKDD, 2019.
-
-Amodei, D., Olah, C., Steinhardt, J., Christiano, P., Schulman, J., and Mané, D. Concrete problems in AI safety. arXiv:1606.06565, 2016.
-
-Bajcsy, A., Losey, D. P., O’Malley, M. K., and Dragan, A. D. Learning robot objectives from physical human interaction. CoRL, PMLR 78, pp. 217–226, 2017.
-
-Brown, D., Goo, W., Nagarajan, P., and Niekum, S. Extrapolating beyond suboptimal demonstrations via inverse reinforcement learning from observations. ICML, PMLR 97, pp. 783–792, 2019.
-
-Brown, D. S., Coleman, R., Srinivasan, R., and Niekum, S. Safe imitation learning via fast Bayesian reward inference from preferences. ICML, 2020.
-
-Bıyık, E., Losey, D. P., Palan, M., Landolfi, N. C., Shevchuk, G., and Sadigh, D. Learning reward functions from diverse sources of human feedback: Optimally integrating demonstrations and preferences. IJRR, 41(1):45–67, 2022.
-
-Cai, Y., Yuan, Y., Shi, J., and Lin, Q. Approximated variational Bayesian inverse reinforcement learning for large language model alignment. AAAI, vol. 39, pp. 23505–23513, 2025.
-
-Chan, A. J. and van der Schaar, M. Scalable Bayesian inverse reinforcement learning. ICLR, 2021.
-
-Christiano, P. F., Leike, J., Brown, T. B., Martic, M., Legg, S., and Amodei, D. Deep reinforcement learning from human preferences. NIPS, pp. 4302–4310, 2017.
-
-Gershman, S. J. and Niv, Y. Novelty and inductive generalization in human reinforcement learning. Topics in Cognitive Science, 7(3):391–415, 2015.
-
-Ghosal, G. R., Zurek, M., Brown, D. S., and Dragan, A. D. The effect of modeling human rationality level on learning rewards from multiple feedback types. AAAI, 2023.
-
-Gleave, A., Dennis, M. D., Legg, S., Russell, S., and Leike, J. Quantifying differences in reward functions. ICLR, 2021.
-
-Hadfield-Menell, D., Dragan, A., Abbeel, P., and Russell, S. The off-switch game. IJCAI, pp. 220–227, 2017.
-
-Hendrycks, D., Carlini, N., Schulman, J., and Steinhardt, J. Unsolved problems in ML safety. arXiv:2109.13916, 2021.
-
-Ibarz, B., Leike, J., Pohlen, T., Irving, G., Legg, S., and Amodei, D. Reward learning from human preferences and demonstrations in Atari. NeurIPS, 31, 2018.
-
-Jeon, H. J., Milli, S., and Dragan, A. D. Reward-rational (implicit) choice: A unifying formalism for reward learning. arXiv:2002.04833, 2020.
-
-Kingma, D. P. and Welling, M. Auto-Encoding Variational Bayes. ICLR, 2014.
-
-Knox, W. B. and Stone, P. Interactively shaping agents via human reinforcement: The TAMER framework. K-CAP ‘09, pp. 9–16, 2009.
-
-Knox, W. B., Allievi, A., Banzhaf, H., Schmitt, F., and Stone, P. Reward (mis)design for autonomous driving. Artificial Intelligence, 316:103829, 2023.
-
-Likert, R. A technique for the measurement of attitudes. Archives of Psychology, 140:1–55, 1932.
-
-Losey, D. P., Bajcsy, A., O’Malley, M. K., and Dragan, A. D. Physical interaction as communication: Learning robot objectives online from human corrections. IJRR, 41(1):20–44, 2022.
-
-Loshchilov, I. and Hutter, F. Decoupled weight decay regularization. arXiv:1711.05101, 2019.
-
-Macuglia, M., Friedrich, P., and Ramponi, G. Fine-tuning behavioral cloning policies with preference-based reinforcement learning. arXiv:2509.26605, 2025.
-
-McCullagh, P. Regression models for ordinal data. JRSS-B, 42(2):109–127, 1980.
-
-Mehta, S. A. and Losey, D. P. Unified learning from demonstrations, corrections, and preferences during physical human–robot interaction. J. Hum.-Robot Interact., 13(3), 2024.
-
-Metz, Y., Lindner, D., Baur, R., Keim, D. A., and El-Assady, M. RLHF-Blender: A configurable interactive interface for learning from diverse human feedback. Interactive Learning with Implicit Human Feedback Workshop at ICML, 2023.
-
-Metz, Y., Geiszl, A., Baur, R., and El-Assady, M. Reward learning from multiple feedback types. ICLR, 2025.
-
-Myers, V., Bıyık, E., Anari, N., and Sadigh, D. Learning multimodal rewards from rankings. CoRL, 2021.
-
-Ng, A. Y., Harada, D., and Russell, S. J. Policy invariance under reward transformations: Theory and application to reward shaping. ICML, 1999.
-
-Ng, A. Y., Russell, S., et al. Algorithms for inverse reinforcement learning. ICML, vol. 1, 2000.
-
-Ouyang, L., Wu, J., Jiang, X., et al. Training language models to follow instructions with human feedback. arXiv:2203.02155, 2022.
-
-Palan, M., Landolfi, N. C., Shevchuk, G., and Sadigh, D. Learning reward functions by integrating human demonstrations and preferences. RSS, 2019.
-
-Paszke, A., Gross, S., Massa, F., et al. PyTorch: An imperative style, high-performance deep learning library. NeurIPS, 2019.
-
-Poddar, S., Wan, Y., Ivison, H., Gupta, A., and Jaques, N. Personalizing reinforcement learning from human feedback with variational preference learning. NeurIPS (NIPS ‘24), 2024.
-
-Raffin, A., Hill, A., Gleave, A., Kanervisto, A., Ernestus, M., and Dormann, N. Stable-Baselines3: Reliable reinforcement learning implementations. JMLR, 22(268):1–8, 2021.
-
-Ramachandran, D. and Amir, E. Bayesian inverse reinforcement learning. IJCAI’07, pp. 2586–2591, 2007.
-
-Rothkopf, C. A. and Dimitrakakis, C. Preference elicitation and inverse reinforcement learning. ECML/PKDD, pp. 34–48, Springer, 2011.
-
-Wirth, C., Fürnkranz, J., and Neumann, G. Model-free preference-based reinforcement learning. AAAI’16, pp. 2222–2228, 2016.
-
-Yuan, Y., Hao, J., Ma, Y., Dong, Z., Liang, H., Liu, J., Feng, Z., Zhao, K., and Zheng, Y. Uni-RLHF: Universal platform and benchmark suite for reinforcement learning with diverse human feedback. ICLR, 2024.
-
-
-
-附录（Appendix）附录 A 实现细节（Implementation Details）A.1 模型结构（Model Architecture）奖励编码器  与 Q 值估计器  都实现为两层 MLP，激活函数为 Leaky ReLU。对于网格环境，使用学习率  、批大小 32，奖励只依赖状态：。对于控制任务（CartPole-v1、Acrobot-v1、LunarLander-v3），使用学习率 、批大小 128，奖励依赖状态–动作对：。所有模型都用带梯度裁剪（最大范数 1.0）的 AdamW 训练（Loshchilov &amp; Hutter, 2019）。奖励编码器参数化一个以标准正态分布为先验的高斯后验，并用重参数化技巧训练。专家参考策略用 Stable-Baselines3 的 DQN（LunarLander-v3 以外）与 PPO（LunarLander-v3）训练（Raffin et al., 2021）。
-超参数优化。 对每个环境与反馈组合，用 Optuna 的多元 TPE 采样器（constant_liar=True，20 个启动试验）调优超参数（Akiba et al., 2019）。每个试验在采样配置下、跨多个随机种子训练模型，并按所选验证指标打分。联合搜索空间包括：
-
-损失权重  与 ，在  上对数均匀采样；
-奖励编码器宽度：网格为每层 16 / 32 / 64 个隐单元，控制任务为 64 / 128 / 256；
-奖励模型优化器：学习率（对数均匀 ）、批大小（网格为 16 / 32 / 64 / 128，控制任务为 32 / 64 / 128 / 256）；
-对 LunarLander-v3，还包括 PPO 重训的超参数（学习率、裁剪范围、熵/价值系数、GAE-、梯度范数上界等）。
-
-调优在两种”反馈分配模式”下进行：
-
-等预算（Dirichlet）模式：把固定的总反馈预算通过平坦-Dirichlet 分配（由 Optuna 建议）切分到各个激活模态。每种模态设置上限（例如网格/控制任务分别 ≤16/≤32 条示范，因为示范似然会很快饱和），通过裁剪 Dirichlet 比例并重新分配超出的部分来实施。
-固定分配模式：每个模态被分配规定的样本数（FIXED_SAMPLE_COUNTS），只搜索上述优化超参数。该模式用于在”有用且可比”的预算下刻画每个模态的贡献，而不与分配选择相混淆。
-
-对同一环境内的所有方法统一施加相同的调优协议（采样器、搜索空间、每试验种子数、验证指标），从而保证所报数字反映的是匹配计算量下的最佳搜索性能。模型与训练代码基于 PyTorch 实现（Paszke et al., 2019）。
-A.2 反馈模拟（Feedback Simulation）我们用温度参数为  的 Boltzmann 理性策略 rollout 收集轨迹，并从中模拟人类反馈。下面给出各类反馈的生成过程。
-偏好（Preferences）。 从收集到的轨迹中随机提取固定长度  的片段。对每对片段 ，计算其归一化回报  ，并按 Bradley–Terry 模型生成一个偏好：
-
-其中  表示 logistic sigmoid， 控制偏好理性程度。观测偏好按该概率作为 Bernoulli 随机变量采样。取值： ；片段长度  （网格）或  （其余环境）；轨迹理性  （网格，均匀策略）或 （其余环境）。
-示范（Demonstrations）。 专家示范通过 rollout Boltzmann 理性策略    生成，其中  为最优 Q 函数。示范理性  控制专家最优程度。取值： （网格）， （其余所有环境）。
-评分（Ratings）。 从轨迹中提取随机片段并计算其归一化回报。切点  放在逐步片段回报的   百分位处。随后在累积 logit 模型下随机采样评分：
-
-该式产生近似均衡的类别。典型参数：  个类别，片段长度  （网格；其余环境），轨迹理性    （分别对应网格、Acrobot-v1 与 CartPole-v1、LunarLander-v3）。
-停止信号（Stops）。 用基于累积遗憾的离散时间风险模型模拟停止反馈。对一条轨迹片段，在每个时间步计算瞬时遗憾   ，并维护一个折扣累积遗憾：
-
-其中   是遗憾折扣因子，控制过去次优性被”遗忘”的速度。风险率（给定此前未停止时在时刻  停止的概率）为
-
-灵敏度参数  从数据校准为  ，其中  是缩放常数， 是参考遗憾水平（通常取所有片段最大累积遗憾的第 50 百分位）。 越大，停止行为越激进。停止时间顺序采样：在每个时间步  以概率  采样一个停止事件；若片段内没有停止发生，则观测右删失。参数： ，遗憾折扣  ，参考百分位 50%，片段长度  （网格；其余环境），轨迹理性  。
-附录 B 硬件与计算资源（Hardware and Computational Resources）由于第 6 节要评估大量配置，单个奖励模型的训练与评估运行被分发到由 SLURM 管理的机构集群上，每个 worker 分配 4 个 CPU 核与 8 GB 内存。由于奖励编码器与 Q 值估计器网络很小，无需 GPU 加速。最终实验总计算量约为   CPU·小时。
-需要说明的是，在单机上，单次奖励模型训练大约耗时：网格环境 2 分钟，其余环境约 15 分钟；其中大部分计算时间花在”用推断出的奖励函数重训策略以进行评估”上。
-附录 C 等预算结果（Equal Budget Results）对每个环境，我们固定一个总反馈预算 ，由等预算表中的全部 11 个模态子集共享：四种反馈各自单独使用（P、D、R、S）、全部六种两两组合，以及四者的完整组合（PDRS）。预算为：三个表格型网格（grid_cliff、grid_sparse、grid_trap）、Acrobot-v1 与 CartPole-v1 取   个样本；LunarLander-v3 取   个样本。
-对每一对（环境，模态子集），我们运行一次独立的 TPE（Tree-structured Parzen Estimator）搜索，联合调节 (i)  分配给每个激活反馈类型的比例，以及 (ii) 奖励模型的训练超参数（编码器大小、学习率、批大小、重要性加权开关、KL 权重、TD 权重）；对非表格环境，搜索还额外调节下游 PPO 重训超参数。每个试验在表格环境下用 20 个随机种子、非表格环境下用 10 个随机种子训练奖励模型，并按”逐种子归一化折扣回报均值”（表格）或”平均回合回报”（非表格）打分；每个研究运行 125–200 个试验。最佳试验的奖励模型 checkpoint 就是本文所有下游迁移与误设实验所使用的那一批。
-[表 4] 位置与内容说明：原文第 15 页。该表给出等预算设定下、跨环境的各反馈组合的归一化平均回报与平均 EPIC 距离（ ）。表结构同表 1（上半部分为回报、下半部分为 EPIC，越低越好）。回报按环境归一化，100 对应真实奖励训练出的近似最优策略、0 对应均匀随机策略；深灰底为该环境最优（回报在 1% 以内），浅灰底为该区间外次优。具体数值请对照原 PDF。
-附录 D 完整误设结果（Full Misspecification Results）我们考虑四种误设变体，可单独或联合施加：
-
-偏好：低估标注者噪声——  而模型假设  ；
-示范：同样低估标注者噪声——  而模型假设  ；
-
-（上述两者都表示：数据在高度含噪标注下生成，而模型假设标注者近乎理性。）
-
-评分：在评分分配之前给片段效用叠加高斯噪声  ，而模型假设效用无噪声；
-停止倾向：误校准——  而模型假设  。
-
-在所有情况下，奖励模型都用与主表相同的、良好设定的参数训练，因此未扰动基线不变。
-[表 5] 位置与内容说明：原文第 15 页（表 3 的补全版，包含 grid_trap 一列）。表结构同表 3：上为单模态模型，下为完整反馈集合的 MAVRL；每行破坏指定通道的数据侧参数，被破坏的模态在原表中以模糊方式标出（例如 PDRS 表示偏好被误设）。列：Base（完好设定归一化回报）、Misspec.（均值±标准误）、Rat.（=Misspec./Base）。正文第 6.3 节所述规律在 grid_trap 上同样成立，具体数值请对照原 PDF。
-附录 E 额外迁移结果与扰动详细描述（Additional Transfer Results and Detailed Perturbation Description）所有反馈组合的迁移性能结果见 [图 3]（原文第 17 页）。
-[图 3] 内容说明（中文）：该图展示三种动力学扰动场景下、由各方法推断的奖励训练出的策略的归一化平均回报（ ）。奖励模型与基线在未扰动设定下训练、并在整个变化过程中保持固定。图 (a)(b) 分别对应 grid_cliff 与 grid_trap 中”环境随机性”（0→0.8）的逐步增强；(c) 为 Acrobot-v1 摆杆两段长度之比的增大（约 1.0→2.0）；(d) 为 LunarLander-v3 重力与风力的增强。回报按”未扰动设定下用真实奖励训练出的近似最优策略＝100.0、均匀随机策略＝0.0”归一化，误差棒为标准误。各曲线对应本文全部单模态与多模态组合以及行为克隆基线，请对照原 PDF 查看逐条曲线。
-下面总结用于评估”系统动力学系统性变化下下游策略性能鲁棒性”的环境扰动。
-网格世界环境（grid_cliff、grid_sparse、grid_trap）。 通过在智能体的动作执行中引入随机性来扰动转移动力学：具体地，提高执行随机动作的概率  ，其中   对应确定性动力学。这些环境具有稀疏奖励以及悬崖或陷阱等惩罚区域，因此对动作噪声的鲁棒性尤为重要。
-在网格实验中，所有方法在   时收敛到相同性能。这一行为直接源于随机动作的定义方式。设  是确定性策略  选中的动作，即  。在动作噪声下（概率 ），实际执行的策略变为
-
-在   的网格环境中，令   会对所有动作  给出  ——等价于均匀随机策略。由于回报按”均匀策略取得 0.0”归一化，所有方法在   处都收敛到这个值。对于更大的 ，非意图动作获得比原始意图动作更高的概率质量，使确定性动作选择变得次优，因此我们把分析限制在  。
-LunarLander-v3。 我们通过联合增大重力大小与风的强度来扰动动力学。具体地，重力参数在     中变化（默认 ），风力在  中变化（默认 0.0）。这些扰动产生越来越有挑战性的动力学：智能体既要缓解更强重力导致的快速下落，又要补偿风引起的横向漂移。
-Acrobot-v1。 我们通过改变双摆两段连杆长度的比例来扰动系统。连杆间不对称性增大改变了系统的惯量与耦合，从而相对未扰动设定产生逐步不同且更具挑战性的动力学。
-附录 F 额外定性结果（Additional Qualitative Results）本节给出所有网格环境的额外定性结果。[图 4]（grid_sparse，原文第 18 页）、[图 5]（grid_cliff，原文第 19 页）、[图 6]（grid_trap，原文第 20 页） 每幅都展示了同一推断奖励模型的两种可视化：
-
-(a) 均值与方差的联合视觉编码（与图 1 一致）；
-(b) 对同一数据，均值与方差的分离视觉编码。
-
-每幅图都由   网格上、来自 2 条示范、256 对成对比较、128 条评分 的推断结果组成；最右列展示组合全部反馈模态后的结果（各子图上方或图内标注了对应反馈模态与数据量，请对照原 PDF）。
-
-需要说明的是，原文按反馈类型对推断出的奖励值做了线性归一化（这不会影响策略性能，因为最优策略诱导的行为对奖励函数的正缩放与常数平移不变，见 Ng et al., 1999）。
-
-
-译后小结（供学习参考）
-一句话概括：MAVRL 把”从人类反馈学奖励”统一成一个贝叶斯问题——共享一个潜在奖励函数 ，每种反馈（示范 D、偏好 P、评分 R、停止 S）都用自己的概率似然说话，全部放进一个 ELBO 里端到端训练，不再需要手工配损失权重。
-方法骨架：奖励编码器   ＋ 辅助 Q 函数 （支持示范/停止这类需要价值估计的反馈）＋ 各类反馈的似然解码器  ＋ TD 正则把奖励与 Bellman 差分对齐。
-四个似然：偏好＝Bradley–Terry；示范＝Boltzmann 理性策略；评分＝有序 logit（切点不等距）；停止＝关于终止时间的风险模型（几何分布，右删失）。
-核心结论：(1) 组合反馈优于任何单模态；(2) 示范在稀疏奖励环境最强，评分在 CartPole 最好，偏好单用平庸但组合时贡献大，停止信号补充”次优性”信息；(3) 多类型联合推断对动力学扰动和大部分反馈误设（偏好/评分/停止）都很鲁棒，唯独示范通道被污染时仍是结构性短板；(4) 相对 MCMC 快约 30 倍、且能做连续控制，相对事后平均大幅更优。
-阅读时建议对照原图：图 1 / 图 4–6 的”热力图”直观展示各类反馈留下的”不确定性模式”；图 2 / 图 3 的”鲁棒性曲线”直观展示组合反馈衰减更平缓。
-
-
-本翻译由学习者整理发布，仅供学习交流；原文版权归作者所有。若用于正式引用，请引用原论文。
-]]></content>
-      <categories>
-        <category>论文学习</category>
-      </categories>
-      <tags>
-        <tag>论文</tag>
+        <tag>笔记，大模型</tag>
       </tags>
   </entry>
   <entry>
@@ -1908,61 +2778,17 @@ OK，把贝叶斯公式带入这个例子
 先验（prior）：在还没看反馈之前，我们对奖励本身的分布预设。先验 = 拿到观测（反馈）之前，对的先在信念。
 用贝叶斯解释这个模型就是：我们认为奖励模型开始（先验）是标准正态分布，根据反馈看他的似然（就是损失函数中第一项），然后更新他的后验（就是我们希望奖励模型最终输出的）
 于是我们就很好理解损失函数中第二项为什么要把编码器的输出分布跟标准正太分布做正则了
-
-]]></content>
+Mitigating Reward Hacking in RLHF via Bayesian Non-negative Reward Modeling原文：BNRM论文中文版：BNRM论文全文中文翻译前置知识：Transformer基础架构和原版奖励模型
+先看看这个模型长啥样编码器由 LLM 和 MLP 构成
+LLM 的输入就是提示词和 AI 的回答，输出是一个维度很高的向量 z，这个 z 向量表示 LLM 对这个回答的整体印象
+然后 z 进入 MLP 网络，输出一些分布，每个分布由   构成，然后这些分布按概率取一个值，所有值构成一个向量。这一步跟 MAVRL 很像，其实就是不直接输出奖励，而是弄一个分布，让这个分布输出。这个向量  维度较低
+然后有一个全局字典 ，这个也是要学的，   得出分数，然后就是正常的算损失，反向传播
+# 1. 主干把 (x,y) 压成一个向量 zz = backbone(x, y)              # 形状 [d_model]# 2. 小 MLP 头把 z 变成两个数：k（形状）和 λ（尺度）k, lam = head(z)                # 各 [K]，都用 softplus 保证 &gt; 0# 3. 从 Weibull(k, λ) 采样出一个 θ（非负、稀疏的 K 维向量）theta = weibull_sample(k, lam)# 4. 拿 θ 点乘全局字典 Φ，得到标量奖励（非负）r = (theta * Phi).sum()         # r = θᵀΦr1 = reward(x, y1)              # 回答1的奖励r2 = reward(x, y2)              # 回答2的奖励p_prefer_1 = sigmoid(r1 - r2)   # "人更偏好回答1"的概率# 损失 = 偏好似然 + KL 正则loss = -log p_prefer_1 \     + eta * KL(q(theta) || Gamma先验) \     + eta * KL(q(Phi)   || Gamma先验)loss.backward()                 # 梯度流回 backbone、head、Phi]]></content>
       <categories>
         <category>论文学习</category>
       </categories>
       <tags>
         <tag>论文</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>大模型</title>
-    <url>/2026/09/08/%E5%A4%A7%E6%A8%A1%E5%9E%8B/</url>
-    <content><![CDATA[Transformer基本架构词嵌入与位置编码模型首先将输入文本拆分为一个个 Token，再通过词嵌入矩阵将每个 Token 映射为高维词向量。所谓词嵌入矩阵其实就是Token list，只不过矩阵的参数会不断更新，查表的时候直接 one-hot向量x词嵌入矩阵。词嵌入矩阵可以从零开始训练，也可以直接加载预训练好的权重，通过查表快速完成 Token 到向量的转换词向量能够编码词汇的语义特征，且在向量空间中体现语义关联，比如说希特勒和墨索里尼的差值会跟德国和意大利相似，语义相近的词在空间中距离更近。模型没有办法读懂文字，但他可以通过这些向量展现文字的内容。词向量的维度往往很高，比如GPT-3有12288维。词嵌入本身不包含位置信息，Transformer 会额外引入位置编码，将位置信息与词向量逐元素相加，让模型感知词汇的顺序关系
-自注意力机制词嵌入能提取单个Token的特征，但无法结合上文提取更加符合语境的特征，自注意力的作用是让每个 Token 融合所有相关 Token 的信息，输出符合上下文的向量
-单头自注意力对于每个 Token，用三个独立的投影矩阵，将词向量分别映射为三类向量
-
-查询向量 Q (Query)：代表 “我要检索什么信息”
-键向量 K (Key)：代表 “我包含什么可匹配的特征”
-值向量 V (Value)：代表 “我携带的实际语义内容”
-
-通俗来说，每个Token会向所有Token发问（Query），我们有关系吗，即每一个Token的词嵌入向量乘以矩阵  得到查询向量 。每个词向量乘以键矩阵  得到 K 向量，与 维度相同。如果两个向量相似，就说明两个Token关系匪浅，我们用QK的点积乘来表示相关程度。得到所有Token的QK点积，即我们对Token两两之间的相关程度打了分,将得分除以 （  为键向量维度）做缩放，保证数值稳定性。然后用softmax把得分变成0~1的概率分布，作为两两之间的相关性权重。我们取值矩阵  乘以前面的词向量，得到这个Token携带的实际语义，并用相关性权重对所有Token的V向量加权求和，得到当前 Token 的注意力输出。这一步可以形象的理解成我们将当前Token的词向量移动到了更适合当前语境的地方
-
-同一层自注意力中，所有 Token 共享同一组    投影矩阵，他们并不是能有效预测下一个值，他们只是把某个词向量分别投影成“我想找什么”，“我是什么”，“我携带的信息是什么”。需要注意的是，以上是双向自注意力，可访问所有位置的Token。在现在的主流大模型，如GPT中，模型不能读取未来信息，因此加入因果掩码：将当前Token之后所有位置的QK得分设为 ，softmax后对应权重变为0，实现仅关注历史与当前Token。不过在推理过程中，我们不用先算出所有Token之间的QK值，只用算出当前Token和之前的，就不需要掩码了
-多头注意力多头注意力把原向量拆成很多分，每分独立计算注意力，最后将所有头的输出在维度上拼接，但直接拼接的向量头和头之间没有交流，所以我们再通过输出矩阵  线性投影一次，这样就可以把不同头之间信息共享。这样可以从不同角度提取注意力，得到词语间更多的信息和特征
-MLP经过多头注意力后，每个 Token 得到融合上下文的向量，我们把这个向量做一个简单的激活具体实现为：首先通过一个线性层将向量升维（通常为原维度的 4 倍）并加偏置，经过激活函数引入非线性，再通过第二个线性层将向量降维回原始维度并加偏置
-Transformer 层的完整结构Transformer的每一层，核心是注意力 + MLP，还搭配残差连接与层归一化，这俩是深度网络稳定训练的关键，残差连接可以将模块输入与输出直接相加，缓解梯度消失，层归一化对向量做特征归一化，加速训练收敛当前主流的一层：输入 → LayerNorm → 多头自注意力 → 残差连接 → LayerNorm → MLP → 残差连接 → 输出
-输出与损失函数经过多层Transformer解码器后，每个位置的向量都会先通过LM Head（线性投影层）映射到整个词表的维度，再经过softmax归一化，得到该位置下一个Token的概率分布其中LM Head主要干的事情就是把输入向量的维度变成词表的维度，这样softmax输出之后每个位置上的概率就能直接对应这个词的预测概率在训练阶段，所有位置同时输出概率分布，并行计算损失，推理生成阶段，仅取最后一个位置的概率分布，通过贪心、采样或束搜索等策略选出下一个输出 Token
-损失函数：
-
-: 整条文本一共多少个 Token（词片段）: 当前位置: 前面所有已经读过的 token: 真实的下一个 token : 模型看完上文之后，预测“下一个词刚好等于标准答案”的概率
-这种损失的本质就是标准的多分类交叉熵损失：每个位置都是一个分类任务，真实Token是标签，模型输出词表上的概率分布，计算两者的交叉熵
-RNN 的隐藏状态存在严格的时序依赖，t 时刻的计算必须等待 t-1 时刻完成，因此整条序列只能串行逐步前向传播，损失也只能分步计算。Transformer 的自注意力机制天然支持并行计算，所有位置的 QKV 投影、注意力计算可通过矩阵运算一次性完成
-具体实现需要注意的是，上述基本架构只是思路，实际实现远比这复杂，具体细节写在代码注释中
-以nanoGPT为例：
-1.prepare文件，获取文本，将文本转换为bin文件，其中train.bin为训练数据集，val.bin为测试数据集，meta.pkl记载元信息注意，nanoGPT每一个Token不是单词或者部分单词，而是一个个字母
-import os# 提供操作系统底层接口，让python代码可以跨平台操作文件import pickle# 进行序列化，反序列化# 序列化：把内存的python对象转成二进制存入磁盘# 反序列化：读取磁盘二进制，还原成python对象    import requests# 实现网页请求import numpy as np# 这一块是负责提取文本，将文本写入 input.txtinput_file_path = os.path.join(os.path.dirname(__file__), 'input.txt')# __file__：提供当前文件的路径# os.path.dirname：把文件名取掉，只保留路径# os.path.join：把路径和文件名字拼接到一起# 这行代码的意思就是，找当前文件同一文件夹下有没有input.txt这个文件，如果有就返回路径if not os.path.exists(input_file_path):    # os.path.exists(路径)：判断文件存不存在    data_url = 'https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt'    # 如果不存在，就从data_url这个网址上下载，这个链接指向的是nanoGPT 作者仓库里的原始文本文件，内容是莎士比亚的剧本合集，纯文本格式    with open(input_file_path, 'w') as f:        # with..f：操作系统有个文件钥匙，with表示拿钥匙，起名叫f，打开文件，代码离开with时自动归还钥匙关上文件        # open(input_file_path, 'w')：打开一个本地文件（注意这不是文件名，而是路径），准备写入，如果文件不存在，就新建一个；如果已经存在，就覆盖它        f.write(requests.get(data_url).text)        # 向网址发送一个请求，并提取文本内容# 这一块会把提取出的文本存入 data 变量并输出文本长度with open(input_file_path, 'r') as f:    # 打开文件 "r"表示只读    data = f.read()    # f.read()：一次性读取文件中的所有内容，返回超大字符串。这一步会把硬盘中的文件全部加载进内存print(f"length of dataset in characters: {len(data):,}")# 这一块会统计有多少不同的字符，来制作词表大小chars = sorted(list(set(data)))# set负责去重，转换成list格式再排序vocab_size = len(chars)# 统计词表长度print("all the unique characters:", ''.join(chars))# ''.join 把list拼成字符串输出print(f"vocab size: {vocab_size:,}")# 创建字符与整数的对照表stoi = { ch:i for i,ch in enumerate(chars) }# enumerate，遍历列表同时拿到内容与索引；stoi：string to integer，最终是字母到数字的字典itos = { i:ch for i,ch in enumerate(chars) }def encode(s):    return [stoi[c] for c in s] # encoder: take a string, output a list of integersdef decode(l):    return ''.join([itos[i] for i in l]) # decoder: take a list of integers, output a string# 分别为编码和解码函数，encode会把输入的文本变成整数数组，decode会把整数数组变成文本# 划分训练集和测试集n = len(data)train_data = data[:int(n*0.9)]# 90% 当训练集val_data = data[int(n*0.9):]# 10% 当训练集# 将文本转换为整数listtrain_ids = encode(train_data)val_ids = encode(val_data)print(f"train has {len(train_ids):,} tokens")# :,是python数字格式化语法，给大数添加千位分隔符print(f"val has {len(val_ids):,} tokens")# 导出二进制bin文件train_ids = np.array(train_ids, dtype=np.uint16)# 转换为无符号16位整数的numpy数组val_ids = np.array(val_ids, dtype=np.uint16)train_ids.tofile(os.path.join(os.path.dirname(__file__), 'train.bin'))# tofile：numpy 数组的写法，直接把数组原始二进制数据写入文件，不附带元信息（不保存 shape、dtype）val_ids.tofile(os.path.join(os.path.dirname(__file__), 'val.bin'))# 机器读取bin文件速度极快，并且bin文件体积小，所以把txt转换成bin# bin文件只有纯数字Token，这一步保存信息meta = {    'vocab_size': vocab_size,    'itos': itos,    'stoi': stoi,}with open(os.path.join(os.path.dirname(__file__), 'meta.pkl'), 'wb') as f:    # wb:w=write 写入,b=binary 二进制模式,pickle 必须用二进制模式读写    pickle.dump(meta, f)    # 把python对象直接打包存入文件
-
-输出：
-length of dataset in characters: 1,115,394all the unique characters:  !$&amp;',-.3:;?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzvocab size: 65train has 1,003,854 tokensval has 111,540 tokens
-
-2.model.py，里面是模型本身
-import mathimport inspect# 自省库，可以查看函数的源码，实现灵活传参，版本兼容from dataclasses import dataclass# @dataclass是数据类装饰器，省去手写__init__，__repr__import torchimport torch.nn as nnfrom torch.nn import functional as F# 直接导入nn下面的函数式，F.xx是纯函数，直接计算class LayerNorm(nn.Module):# 在层归一化中，有weight和bias两个参数，但bias参数在Transformer中价值很小，所以我们直接关掉bias# 但nanoGPT写的时候的torch还不支持只关bias不关weight，所以我们自己写    def __init__(self, ndim, bias):    # ndim：输入向量维数，bias：要不要带偏置        super().__init__()        self.weight = nn.Parameter(torch.ones(ndim))        # torch.ones(ndim)：创造一个全部为1，大小为ndim的张量        # nn.Parameter：把这个张量标记为可训练参数，训练时反向传播会自动更新它        self.bias = nn.Parameter(torch.zeros(ndim)) if bias else None    def forward(self, input):    # input：输入张量，一般为（B,T,C），B：批次，T：序列长度，有多少Token，C：维度，每个Token多长        return F.layer_norm(input, self.weight.shape, self.weight, self.bias, 1e-5)        # F.layer_norm(input, normalized_shape, weight=None, bias=None, eps=1e-5)        # normalized_shape：最后哪几个维度需要归一化，需要归一化的维度写上他的大小        # nn.LayerNorm不能单独关闭bias，但是F.layer_norm可以        class CausalSelfAttention(nn.Module):# 自注意力模块    def __init__(self, config):        # config：存放模型所有超参数的配置对象        # config.n_embd：向量维度数        # config.n_head：头数        # config.bias：线性层要不要偏置        # config.dropout：随机失活概率        # config.block_size：模型的最大上下文长度，即单个样本最多能读多少个token        super().__init__()        assert config.n_embd % config.n_head == 0        # 看看维度数能不能整除头数，如果不能直接终止程序        self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=config.bias)        # 一次性算出QKV三个矩阵        self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=config.bias)        # 把所有头的结果拼接后，用投影矩阵映射一遍        self.attn_dropout = nn.Dropout(config.dropout)        self.resid_dropout = nn.Dropout(config.dropout)        # 通过随机失活正则化        self.n_head = config.n_head        self.n_embd = config.n_embd        self.dropout = config.dropout        # config只是__init__传进来的参数，前向传播无法直接使用，所以我们把有用的值保留        self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')        # hasattr(对象, "属性名字符串")：判断这个对象有没有叫这个名字的成员        # 这句话检测当前环境torch版本，看有没有自带的 Flash Attention，如果没有就要自己写        # Flash Attention：原始的注意力机制会直接算出所有Token之间的QK值，但是句子一长就很慢（显存读写慢）        # 于是我们就分块做，每次拿一些Token算出局部QK分数，累加这块对最终输出的贡献，然后直接丢掉这块 QK 结果        # 我们不会单独对这块做softmax，全部块处理完，最后再做全局softmax归一化        # 虽然这样反向传播的时候需要重新计算QK矩阵，但相对于显存读取数据的时间这会快很多        # 至于softmax在没有完整的数据的情况下为什么可以求，豆包给了完整的数学证明，总之是可以求的        if not self.flash:        # 如果没有Flash，就老老实实用慢速版的原始注意力机制            print("WARNING: using slow attention. Flash Attention requires PyTorch &gt;= 2.0")            # 发现版本老旧，提醒用户该升级了            self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size))                                        .view(1, 1, config.block_size, config.block_size))            # torch.ones：生成全1矩阵，torch.tril：取下三角，.view：reshape 维度变成 [1,1,T,T]，适配多头注意力            # self.register_buffer("bias", tensor)：把这个下三角 mask 矩阵，挂靠到模型里面，变成模型自带的一块固定数据            # 他给这个mask起名叫bias，但他并不是偏置，有点挂羊头卖狗肉的感觉    def forward(self, x):    # 输入的x就是一组Token        B, T, C = x.size()         # B：batch size，一批有多少条样本，T：每条样本有多少Token，C：向量维度        q, k, v  = self.c_attn(x).split(self.n_embd, dim=2)        # nn.Linear只作用在最后一维，所以这一行会把x的最后一位拿出来算QKV，并切成三份        k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)         v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)         # .view在不改变张量数据的前提下改变维度，.transpose(1,2)：交换第1维和第2维        if self.flash:            y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=True)            # attn_mask：自定义的掩码矩阵，is_causal：自动生成上三角负无穷掩码，注意，is_causal为True，attn_mask必须是None            # dropout_p：训练时随机失活，推理时关闭                    else:            # 没有就要手写自注意力            att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))            # QK相乘再除以维度的根号            att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))            # 掩码            att = F.softmax(att, dim=-1)            # 做softmax            att = self.attn_dropout(att)            # 随机失活            y = att @ v             # 相关度乘以向量，得到最终的结果        y = y.transpose(1, 2).contiguous().view(B, T, C)         # transpose(1, 2)只是改变元信息，并非改变张量本身，而.view需要张量也连续，所以需要contiguous        y = self.resid_dropout(self.c_proj(y))        # c_proj：输出层，resid_dropout神经网络随机失活        return yclass MLP(nn.Module):    def __init__(self, config):        super().__init__()        self.c_fc    = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)        self.gelu    = nn.GELU()        self.c_proj  = nn.Linear(4 * config.n_embd, config.n_embd, bias=config.bias)        self.dropout = nn.Dropout(config.dropout)    def forward(self, x):        x = self.c_fc(x)        x = self.gelu(x)        x = self.c_proj(x)        x = self.dropout(x)        return xclass Block(nn.Module):# 一层Transformer    def __init__(self, config):        super().__init__()        self.ln_1 = LayerNorm(config.n_embd, bias=config.bias)        self.attn = CausalSelfAttention(config)        self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)        self.mlp = MLP(config)    def forward(self, x):        x = x + self.attn(self.ln_1(x))        x = x + self.mlp(self.ln_2(x))        # 两次残差连接        return x@dataclassclass GPTConfig:# 一次性配置所有参数，之前用的config就是他的实例    block_size: int = 1024    vocab_size: int = 50304     # 词表大小    n_layer: int = 12    # Transformer Block的层数    n_head: int = 12    n_embd: int = 768    dropout: float = 0.0    # 小模型不容易过拟合    bias: bool = True     # 不带偏置class GPT(nn.Module):    def __init__(self, config):        super().__init__()        assert config.vocab_size is not None        assert config.block_size is not None        # 如果这两个位置是空的，说明肯定有问题，直接终止程序        self.config = config        self.transformer = nn.ModuleDict(dict(        # nn.ModuleDict：PyTorch 专用的字典，专门用来存放神经网络层        # 普通字典Pytorch看不见，但这个Pytorch能识别参数            wte = nn.Embedding(config.vocab_size, config.n_embd),            # WTE：Word Token Embedding 词嵌入            # nn.Embedding本质就是一个查表，其中的参数也是反向传播学习                          wpe = nn.Embedding(config.block_size, config.n_embd),            # WPE：Word Position Embedding 位置嵌入            drop = nn.Dropout(config.dropout),            h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),            # 储存12层Block            ln_f = LayerNorm(config.n_embd, bias=config.bias),        ))        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)        # 语言模型输出头，输出对下一个词概率的打分        self.transformer.wte.weight = self.lm_head.weight        # 二者一个是词映射成向量，一个是向量映射回词的打分，内涵一样，所以共享权重        self.apply(self._init_weights)        # .apply：遍历所有层，每个层传给_init_weights函数执行一遍        for pn, p in self.named_parameters():        # 遍历具体的参数，给某些特定参数单独初始化        # named_parameters()：遍历模型里每一个可训练参数，pn参数的名字，p张量            if pn.endswith('c_proj.weight'):            # 只要参数名字是以c_proj.weight结尾                torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config.n_layer))                # normal_：直接修改张量值，把p变成均值为mean，方差为std的正态分布        print("number of parameters: %.2fM" % (self.get_num_params()/1e6,))        # get_num_params：自己写的函数，统计模型全部可训练参数总个数并打印    def get_num_params(self, non_embedding=True):        # non_embedding：是否减去WPE的参数量        n_params = sum(p.numel() for p in self.parameters())        # p.numel()：number of elements，统计张量里面全部元素个数        if non_embedding:            n_params -= self.transformer.wpe.weight.numel()        return n_params    def _init_weights(self, module):    # 对某个module初始化        if isinstance(module, nn.Linear):        # 判断这个module是不是全连接层            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)            if module.bias is not None:                torch.nn.init.zeros_(module.bias)        elif isinstance(module, nn.Embedding):            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)    def forward(self, idx, targets=None):    # idx：torch.Tensor类的实例对象，储存数据，形状（size），数据所存（device），数据类型（dtype），是否计算梯度（requires_grad）还有步长等等    # targets：训练的时候计算loss，推理时不计算loss        device = idx.device        b, t = idx.size()        # idxshape=[b, t]，批次大小（每批多少样本）x每个样本多少Token，每个位置是Token的编号            assert t &lt;= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"        # 输入文本不能超过block_size        pos = torch.arange(0, t, dtype=torch.long, device=device)         # 生成位置数组          tok_emb = self.transformer.wte(idx)         # 输入Token编号，得到词向量，tok_emb：三维张量[b, t, n_embd]        pos_emb = self.transformer.wpe(pos)         # 输入Token位置，得到位置向量，pos_emb：二维张量[t, n_embd]        x = self.transformer.drop(tok_emb + pos_emb)        # PyTorch有自动广播机制，二维加三维会给二维最前面加个虚拟维度        # x的shape是[b, t, n_embd]，并会随机失活一部分        for block in self.transformer.h:            x = block(x)        # 做完所有层        x = self.transformer.ln_f(x)        # 再次层归一化        if targets is not None:            logits = self.lm_head(x)            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)            # F.cross_entropy：logits（N,C），N：需要预测的Token数量，C：每个Token的预测结果            # target：标准答案，注意这里只有一维，是真实的下一个Token的编号        else:            logits = self.lm_head(x[:, [-1], :])             # 输出[b,1,vocab_size]            loss = None        return logits, loss    def crop_block_size(self, block_size):    # 这个函数能支持把block_size改短        assert block_size &lt;= self.config.block_size        self.config.block_size = block_size        self.transformer.wpe.weight = nn.Parameter(self.transformer.wpe.weight[:block_size])        for block in self.transformer.h:            if hasattr(block.attn, 'bias'):                block.attn.bias = block.attn.bias[:,:,:block_size,:block_size]    @classmethod    def from_pretrained(cls, model_type, override_args=None):    # 把HuggingFace已经训练好的权重数字复制粘贴到nanoGPT模型里面，不用从零训练。        assert model_type in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}        override_args = override_args or {}         assert all(k == 'dropout' for k in override_args)        from transformers import GPT2LMHeadModel        print("loading weights from pretrained gpt: %s" % model_type)        config_args = {            'gpt2':         dict(n_layer=12, n_head=12, n_embd=768),              'gpt2-medium':  dict(n_layer=24, n_head=16, n_embd=1024),             'gpt2-large':   dict(n_layer=36, n_head=20, n_embd=1280),             'gpt2-xl':      dict(n_layer=48, n_head=25, n_embd=1600),         }[model_type]        print("forcing vocab_size=50257, block_size=1024, bias=True")        config_args['vocab_size'] = 50257         config_args['block_size'] = 1024         config_args['bias'] = True         if 'dropout' in override_args:            print(f"overriding dropout rate to {override_args['dropout']}")            config_args['dropout'] = override_args['dropout']        config = GPTConfig(**config_args)        model = GPT(config)        sd = model.state_dict()        sd_keys = sd.keys()        sd_keys = [k for k in sd_keys if not k.endswith('.attn.bias')]                 model_hf = GPT2LMHeadModel.from_pretrained(model_type)        sd_hf = model_hf.state_dict()        sd_keys_hf = sd_hf.keys()        sd_keys_hf = [k for k in sd_keys_hf if not k.endswith('.attn.masked_bias')]         sd_keys_hf = [k for k in sd_keys_hf if not k.endswith('.attn.bias')]         transposed = ['attn.c_attn.weight', 'attn.c_proj.weight', 'mlp.c_fc.weight', 'mlp.c_proj.weight']        assert len(sd_keys_hf) == len(sd_keys), f"mismatched keys: {len(sd_keys_hf)} != {len(sd_keys)}"        for k in sd_keys_hf:            if any(k.endswith(w) for w in transposed):                assert sd_hf[k].shape[::-1] == sd[k].shape                with torch.no_grad():                    sd[k].copy_(sd_hf[k].t())            else:                assert sd_hf[k].shape == sd[k].shape                with torch.no_grad():                    sd[k].copy_(sd_hf[k])        return model    def configure_optimizers(self, weight_decay, learning_rate, betas, device_type):    # 得出优化器    # weight_decay：权重衰减系数 learning_rate：学习率 betas：动量梯度下降 device_type：设备类型        param_dict = {pn: p for pn, p in self.named_parameters()}        param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}        # 只保留需要更新的参数        decay_params = [p for n, p in param_dict.items() if p.dim() &gt;= 2]        nodecay_params = [p for n, p in param_dict.items() if p.dim() &lt; 2]        # 将权重分组，权重矩阵做群众衰减，bias、LayerNorm参数不做权重衰减        optim_groups = [            {'params': decay_params, 'weight_decay': weight_decay},            {'params': nodecay_params, 'weight_decay': 0.0}        ]        # 构建优化器        num_decay_params = sum(p.numel() for p in decay_params)        num_nodecay_params = sum(p.numel() for p in nodecay_params)        # p.numel()：统计张量里面一共有多少个数字（参数总量）        print(f"num decayed parameter tensors: {len(decay_params)}, with {num_decay_params:,} parameters")        print(f"num non-decayed parameter tensors: {len(nodecay_params)}, with {num_nodecay_params:,} parameters")        # 打印日志，看一下两类参数各有多少张量、多少参数，方便调试。        fused_available = 'fused' in inspect.signature(torch.optim.AdamW).parameters        # 判断Pytorch支不支持fused AdamW        use_fused = fused_available and device_type == 'cuda'        # 只有Pytorch支持fused并且模型在GPU才行        extra_args = dict(fused=True) if use_fused else dict()        optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)        print(f"using fused AdamW: {use_fused}")        return optimizer    def estimate_mfu(self, fwdbwd_per_iter, dt):    # 估算算力利用率 MFU=实际算力/GPU最大算力        N = self.get_num_params()        cfg = self.config        L, H, Q, T = cfg.n_layer, cfg.n_head, cfg.n_embd//cfg.n_head, cfg.block_size        flops_per_token = 6*N + 12*L*H*Q*T        flops_per_fwdbwd = flops_per_token * T        flops_per_iter = flops_per_fwdbwd * fwdbwd_per_iter        flops_achieved = flops_per_iter * (1.0/dt)         flops_promised = 312e12        mfu = flops_achieved / flops_promised        return mfu    @torch.no_grad()    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):    # 推理阶段：进行续写，以idx为开头，续写max_new_tokens个Token    # temperature：控制随机性，越大更容易跳出高概率词，更有创造力    # top_k：只在概率最高的k个Token里面选，屏蔽掉冷门离谱候选        for _ in range(max_new_tokens):            idx_cond = idx if idx.size(1) &lt;= self.config.block_size else idx[:, -self.config.block_size:]            # 只看最后block_size个Token            logits, _ = self(idx_cond)            logits = logits[:, -1, :] / temperature            # 取出最后一个位置的预测            if top_k is not None:                v, _ = torch.topk(logits, min(top_k, logits.size(-1)))                logits[logits &lt; v[:, [-1]]] = -float('Inf')            # 拿到分数最高的k个，其他设置为fuwuqiong            probs = F.softmax(logits, dim=-1)            idx_next = torch.multinomial(probs, num_samples=1)            # 挑一个，并不一定是挑概率最大的，而是概率大的抽到的可能大            idx = torch.cat((idx, idx_next), dim=1)            # 把刚生成的拼到末尾                    return idx
-
-微调大模型LLM 大体分为三个步骤：一：预训练，用Transformer架构训练海量文本，训练结束后他可以根据前面的词预测文本。二：SFT，预训练的大模型可以补全文本，但没办法听懂指令，即没办法进行问答，SFT教他听懂人类的指令三：RLHF，SFT训练后模型能回答，但是不一定答的对。所以要RLHF微调
-SFT的架构和预训练的 Transformer 一模一样，只是把输入变成了 prompt + 回答，进行微调
-SFT训练完了以后（就叫A模型）暂且封存，把整个模型的参数复制一遍，得到一个新的Transformer网络，暂且叫B，把B的 LM head 和之后的 softmax 那些全部删掉，改成 RM head，这个 RM head 就是一个单层神经网络 nn.Linear(n_embd, 1)，那到最后一个 Token 的向量作为输入，输出一个分数，就是对本次输入的打分。
-原版的损失函数是这样的：给定同一个 Prompt，让 SFT 输出两个解，人类比较这两个解谁好，注意，人类不打分，只是给出好坏关系，令人类更喜欢的是 ，不喜欢的是 。然后把这两条输入到刚刚得出来的 RM 模型，分别打分为  ，。损失函数为
-
-其中  为 sigmoid 函数， 
-]]></content>
-      <categories>
-        <category>学习笔记</category>
-      </categories>
-      <tags>
-        <tag>笔记，大模型</tag>
       </tags>
   </entry>
   <entry>
@@ -2515,6 +3341,33 @@ output layer经过很多层的Transformer block，我们会把最终输出的最
       <tags>
         <tag>笔记</tag>
         <tag>深度学习</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>电子系统与技术</title>
+    <url>/2026/10/06/%E7%94%B5%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%8E%E6%8A%80%E6%9C%AF/</url>
+    <content><![CDATA[模拟电路半导体顾名思义，半导体就是有时候导电，有时候不导电。比如有的高温导电，低温不导电
+本征半导体：高度提纯、结构完整的半导体单晶体。用人话来讲，就是不认为人为掺杂别的原子，纯靠热激发载流子（自由电子，空穴）
+N型半导体：给本征半导体中掺杂5价原子，于是就有自由电子。所以说N型半导体中多数载流子是自由电子P型半导体跟N型正好相反
+掺杂之后不管N还是P都是电中性
+如果把N型P型放一块，N中的电子会往P跑，这叫扩散运动，这样N就会有带正电的离子，P中有带负电的离子，N-&gt;P会有电场，也就有电压，叫做势垒电压，这个电压会压力电子回到N，这叫漂移运动
+总结：P型半导体和N型半导体的交界面通过扩散运动和漂移运动形成PN结，PN结施加正向电压（从P型到N型）时，耗尽层变薄；施加反向电压（从N型到P型）时，耗尽层变厚
+二极管&amp;晶体管二极管具有单向导电性，硅二极管的正向导通电压约为0.7V
+正向导通时，我们认为硅二极管有恒定压降0.7V
+反向没导通我们认为是断路，稳压二极管工作在反向击穿区域，配合合适的限流电阻可输出稳定的电压
+双极型晶体管：BJT
+BJT晶体管具有3个端口：基极(Base), 集电极(Collector), 发射极(Emitter)；有2个相互影响的PN结：发射结和集电结。
+
+BJT晶体管的发射结正偏、集电结反偏，使晶体管工作于放大区
+BJT晶体管的输出特性曲线分为：饱和区，放大区，截止区
+放大电路的参数重点关注：电压放大倍数 、输入电阻 、输出电阻 
+晶体管放大电路采用静态、动态分离的方法进行分析。首先，分析晶体管的静态工作点，判断晶体管是否工作于放大区；其次，采用图表法定性分析或微变等效电路定量分析电路对交流信号的放大参数
+]]></content>
+      <categories>
+        <category>专业课笔记</category>
+      </categories>
+      <tags>
+        <tag>专业课学习</tag>
       </tags>
   </entry>
 </search>

@@ -103,3 +103,36 @@ mjx-assistive-mml {
 #article-container .timeline-item-content .gallery-group img {
   max-width: 100%;
 }
+
+/* ============================================================
+   文章置顶徽标（一级 / 二级）
+   ------------------------------------------------------------
+   首页卡片标题前的小标签；配合文章 front-matter：
+     sticky: 2   → 一级置顶（最靠前）
+     sticky: 1   → 二级置顶（次靠前）
+   不写 sticky 或 sticky: 0 → 普通文章
+   排序由 hexo-generator-index 原生完成（无需改代码），这里只管样式。
+   徽标 HTML 在 themes/butterfly/layout/includes/mixins/indexPostUI.pug
+   ============================================================ */
+#recent-posts .recent-post-item > .recent-post-info > .article-title .sticky-badge {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 0.72em;
+  font-weight: 600;
+  line-height: 1.7;
+  vertical-align: 0.14em;
+  color: #fff;
+  white-space: nowrap;
+}
+
+/* 一级置顶（sticky >= 2）：主题橙色，最醒目 */
+#recent-posts .recent-post-item > .recent-post-info > .article-title .sticky-first {
+  background: #ff7242;
+}
+
+/* 二级置顶（sticky == 1）：主题蓝 */
+#recent-posts .recent-post-item > .recent-post-info > .article-title .sticky-second {
+  background: #49b1f5;
+}
