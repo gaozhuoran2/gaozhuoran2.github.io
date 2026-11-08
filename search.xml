@@ -1,6 +1,568 @@
 <?xml version="1.0" encoding="utf-8"?>
 <search>
   <entry>
+    <title>DPO基线复现报告：任务解读、运行步骤与结果分析</title>
+    <url>/2026/11/07/DPO%E5%9F%BA%E7%BA%BF%E5%A4%8D%E7%8E%B0%E6%8A%A5%E5%91%8A%EF%BC%9A%E4%BB%BB%E5%8A%A1%E8%A7%A3%E8%AF%BB%E3%80%81%E8%BF%90%E8%A1%8C%E6%AD%A5%E9%AA%A4%E4%B8%8E%E7%BB%93%E6%9E%9C%E5%88%86%E6%9E%90/</url>
+    <content><![CDATA[
+任务来源：老师发来一个文件 + 一段和 GPT 的聊天记录，让在老师给的服务器上跑一下、整理结果。
+文件：C:\Users\Lenovo\Desktop\论文学习\2305.18290v3 (1).pdf，即 DPO 原论文《Direct Preference Optimization: Your Language Model is Secretly a Reward Model》（Rafailov et al., 2023，arXiv 2305.18290v3，27 页）。
+配套阅读：本站《reward_model原文》讲 BNRM 论文、《BNRM的研究思路》讲老师提出的 MF-BNRM 方向、《DPO复现：老师新任务解读与服务器操作全流程》讲服务器操作与排坑细节。本文是任务解读 + 运行步骤 + 实测结果分析三位一体的复现报告。
+
+
+一、老师让我干什么（任务解读）1.1 老师发来的两样东西
+
+
+材料
+内容
+作用
+
+
+
+2305.18290v3 (1).pdf
+DPO 原论文
+要复现的目标方法
+
+
+和 GPT 的聊天记录
+代码库选型 + 两阶段研究计划
+操作路线图
+
+
+1.2 这条任务在研究脉络里的位置沿着之前的笔记走，链条是这样接上的：
+BNRM（贝叶斯非负奖励模型，治 reward hacking）   ↓MF-BNRM（老师的方向：多类型反馈 + 共享稀疏贝叶斯隐变量）   ↓DPO（奖励模型可以"折叠"进语言模型本身：r̂ = β·log(πθ/πref)）   ↓Bayesian DPO（把 BNRM 那套"奖励不确定性"搬到 DPO 的偏好 margin 上）
+
+所以 DPO 基线不是另起炉灶：它是老师后续改贝叶斯 Loss 时要对比的”对照组”。对照组必须先跑通、指标必须记全，后面换损失函数时才有可比的东西。
+1.3 GPT 聊天记录的核心结论
+复现首选 Hugging Face TRL（DPOTrainer 现成可用、改 Loss 容易，代码量最少）；原作者代码（eric-mitchell/direct-preference-optimization）作为公式实现参考；dpo-scratch 用于理解数学；Alignment Handbook 留给后期规模化实验；
+最小可跑实验：TRL + Qwen3-0.6B + UltraFeedback 偏好数据，全参训练（显存不够再上 LoRA）；
+两阶段计划：
+第一阶段（我的活）：跑通标准 DPO，固定模型和数据，记录 loss、reward margin、chosen/rejected log-probability、accuracy 等指标；
+第二阶段（老师的活）：在 TRL 里自定义 Loss，做 IPO、Conservative DPO、Bayesian DPO / Bayesian Reweighted DPO / Pessimistic Bayesian DPO 等变体。
+
+
+
+1.4 一句话总结任务
+在老师给的服务器上，用 TRL + Qwen3-0.6B + UltraFeedback 跑通标准 DPO（第一阶段），把训练指标整理成表、如实判断”结果怎么样”，汇报给老师。贝叶斯 Loss 老师自己改。
+我的产出 = 一套能在服务器上跑通的脚本 + 一份训练指标整理报告。
+
+
+二、具体跑什么（实验设计）全部按聊天记录里 GPT 的方案执行，小规模、验证流程优先：
+
+
+
+项目
+选择
+说明
+
+
+
+框架
+Hugging Face TRL（DPOTrainer + DPOConfig）
+代码量最少、改 Loss 最方便
+
+
+模型
+Qwen/Qwen3-0.6B
+0.6B 小模型，单卡即可全参微调
+
+
+数据
+trl-lib/ultrafeedback_binarized，取 train[:1000]，再 8:2 切成 800 训练 / 200 验证
+UltraFeedback 二值化偏好数据，字段 prompt/chosen/rejected
+
+
+关键超参
+beta=0.1，lr=1e-6，batch=1，grad_accum=8，max_length=512，1 epoch，bf16，gradient checkpointing
+有效 batch=8，1000 条 ≈ 94 个更新步，几分钟跑完
+
+
+要记录的指标
+loss / rewards（chosen、rejected、margins、accuracies）/ logps（chosen、rejected）/ entropy / grad_norm
+TRL 每 logging_steps 步自动打印
+
+
+
+跑通 1000 条之后，如果要更可信的基线，把 train[:1000] 改成 train[:10000] 或全量重跑一次即可，脚本其余不动。
+
+
+三、服务器上一步一步怎么跑
+与上次 BNRM 复现不同：上次是本地 Windows + RTX 4060（8GB，必须 LoRA），这次是老师给的远程服务器（向日葵远程桌面）。
+
+第 0 步：服务器信息（已实测 ✅）
+
+
+项目
+实测值
+结论
+
+
+
+GPU
+NVIDIA RTX A6000 ×3，单卡 48GB
+0.6B 模型全参微调毫无压力；启动必须加 --num_processes=1 只用一张卡
+
+
+架构/精度
+Ampere 专业卡
+支持 bf16
+
+
+系统
+Ubuntu（Linux）
+后台跑用 nohup/tmux
+
+
+conda
+25.11.1（/home/ubuntu/anaconda3）
+直接用
+
+
+系统 Python
+3.13.9
+不要用它，自建 3.10 环境（TRL 生态最稳）
+
+
+老师的指示：”建一个你自己名字的文件夹，环境什么的都新装一下，别把之前的覆盖了。” → 落实为 ~/gaozhuoran + 环境 dpo_gaozhuoran。
+第 1 步：向日葵连上服务器（✅）
+本机打开向日葵 → 输入设备识别码 + 验证码 → 进入服务器桌面；
+断开向日葵 ≠ 中断训练（不注销、不关机就没事）；千万别注销用户/关机/重启；
+关掉服务器自动睡眠（设置 → 电源管理），否则机器睡了训练就停。
+
+第 2 步：检查环境（✅）nvidia-smi                # 看 GPU 型号和剩余显存python --version          # 有的服务器是 python3which conda &amp;&amp; conda --version
+
+实测：A6000 / 48GB → 走全参微调，不需要 LoRA。
+第 3 步：建自己的文件夹 + 全新环境（✅）mkdir -p ~/gaozhuorancd ~/gaozhuoranconda create -n dpo_gaozhuoran python=3.10 -yconda activate dpo_gaozhuoran
+
+
+脚本、日志、checkpoint 全部放 ~/gaozhuoran/，和服务器上其他人的东西完全隔离；
+用 python 3.10：TRL / transformers / torch 这套生态在 3.10/3.11 上最稳。
+
+第 4 步：装依赖并验证 CUDA（✅）pip install -U torch transformers datasets accelerate trlpython -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+
+必须打印 True。若 False 说明装了 CPU 版 torch（上次本地踩过的坑）。
+第 5 步：写训练脚本 train_dpo.py（✅）# train_dpo.py —— DPO 基线（第一阶段），在老师服务器上运行from datasets import load_datasetfrom trl import DPOTrainer, DPOConfig# 1) 数据：先取 1000 条跑通流程；跑通后可改成 train[:10000] 或去掉切片dataset = load_dataset("trl-lib/ultrafeedback_binarized", split="train[:1000]")split = dataset.train_test_split(test_size=0.2, seed=42)   # 800 训练 / 200 验证# 2) 训练配置config = DPOConfig(    output_dir="./dpo_output",           # checkpoint 输出目录    beta=0.1,                            # DPO 的 beta（KL 正则强度）    learning_rate=1e-6,    per_device_train_batch_size=1,    gradient_accumulation_steps=8,       # 有效 batch = 8    max_length=512,                      # 总长度上限（新版 TRL 没有 max_prompt_length 了）    num_train_epochs=1,    logging_steps=5,                     # 每 5 步打印一次指标（重点！）    save_strategy="steps",    save_steps=50,    eval_strategy="steps",    eval_steps=50,    bf16=True,                           # 半精度省显存；老卡(V100)改成 fp16=True    gradient_checkpointing=True,         # 省显存    remove_unused_columns=False,    report_to="none",                    # 不连 wandb，指标全部走日志)# 3) 训练（tokenizer 不用传，DPOTrainer 从模型仓库自动加载）trainer = DPOTrainer(    model="Qwen/Qwen3-0.6B",    args=config,    train_dataset=split["train"],    eval_dataset=split["test"],)trainer.train()trainer.save_model("./dpo_output/final")
+
+
+版本坑（实测命中 ✅）：最新版 TRL 删掉了 max_prompt_length 参数（会报 TypeError: unexpected keyword argument 'max_prompt_length'），也不建议再传 tokenizer=。上面这版已兼容新版 TRL。
+
+第 6 步：5 步冒烟测试（✅）正式跑之前先把脚本临时改成 split="train[:20]"、DPOConfig 里加 max_steps=5，前台跑：
+accelerate launch --num_processes=1 --mixed_precision=bf16 train_dpo.py
+
+
+--num_processes=1 必须加：服务器有 3 张卡，accelerate 默认开多卡并行会卡在初始化不动（实测命中）；小实验 1 张卡完全够；
+看到 loss 正常打印、没有 CUDA OOM → 链路通了，再把 20 条和 max_steps 改回来。
+
+
+✅ 实测通过：5 步训练（12.76s）：loss 0.6931 → 0.601、rewards/margins 0 → 0.2051、rewards/accuracies 0 → 0.875，走向与预测完全一致（loss 从 log 2 基线往下、margin 转正、accuracy 过 50%）。
+
+第 7 步：后台正式训练（✅）nohup accelerate launch --num_processes=1 --mixed_precision=bf16 train_dpo.py &gt; train.log 2&gt;&amp;1 &amp;tail -f train.log        # 实时看指标；Ctrl+C 只退出查看，不中断训练
+
+
+nohup ... &amp;：终端关掉、向日葵断开都不影响训练；更高级用 tmux new -s dpo；
+1000 条 / 有效 batch 8 = 94 步，单卡几分钟跑完（实测 238 秒）。
+
+第 8 步：两个坑（提前准备）
+
+
+坑
+表现
+解决
+
+
+
+把 Python 代码直接敲进终端
+bash: 未预期的记号 "(" 附近有语法错误
+终端是 bash，Python 代码写进 train_dpo.py 再运行
+
+
+accelerate 检测到多卡，训练卡住
+More than one GPU was found... num_processes=3 后无输出
+Ctrl+C 停掉，加 --num_processes=1 只用一张卡重跑
+
+
+
+四、结果怎么样：真实训练日志整理4.1 训练概况（2026-11-07 实测）
+数据：UltraFeedback 1000 条 → 800 训练 / 200 验证；1 epoch；94 步；238 秒跑完；
+硬件：RTX A6000（48GB）单卡，bf16；训练吞吐 3.15 samples/s；
+产物：./dpo_output/final（最终模型）+ 完整 train.log。
+
+4.2 三组指标（从 train.log 里抄的实测值）
+
+
+阶段
+loss
+rewards/chosen
+rewards/rejected
+rewards/margins
+rewards/accuracies
+logps/chosen
+logps/rejected
+grad_norm
+
+
+
+起始（step 1）
+0.6886
+0.0039
+−0.0070
+0.0109
+0.400
+−391.4
+−342.6
+229.4
+
+
+中间（step 50，eval）
+0.6568
+0.1341
+0.0390
+0.0951
+0.620
+−369.9
+−343.7
+—
+
+
+最终（step 94，eval）
+0.6479
+0.1721
+0.0458
+0.1263
+0.652
+−369.5
+−343.7
+—
+
+
+全程
+train_loss 0.672
+—
+—
+震荡上行
+—
+—
+—
+140~230
+
+
+4.3 每个指标怎么读
+
+
+指标
+含义
+健康走向
+
+
+
+loss
+DPO 损失
+起点 ≈ 0.69（= ln 2 的”随机猜”基线；BNRM 训练时 0.7 左右的起点就是它），应持续下降到 0.5 以下（理想 0.4 上下）
+
+
+rewards/margins
+β·log 比值差的 chosen − rejected
+从 ≈0 变为正且稳定增大（论文最核心的指标）
+
+
+rewards/accuracies
+模型判 chosen &gt; rejected 的比例
+起点 50%，应明显上升（目标 70% 以上）
+
+
+logps/chosen logps/rejected
+模型给两个回答的对数似然
+绝对值不能直接比（长度不同），看归一化后的 rewards/*
+
+
+grad_norm
+梯度范数（裁剪前）
+正常应是个位数到几十，140~230 异常偏高
+
+
+entropy
+生成分布的熵
+稳定在 1 左右说明模型没崩（实测 0.85→0.97 微升）
+
+
+4.4 结论：链路跑通 ✅，偏好信号偏弱 ⚠️好的方面（流程验证成功）：
+
+数据下载 → 分词 → 训练 → eval → 保存模型，全链路无报错，模型已存 ./dpo_output/final；
+rewards/margins 从 0.011 一路爬到 0.126，方向完全正确（chosen 越来越压过 rejected）；
+rewards/accuracies 从 40% 爬到 65.2%，超过了 50% 的随机线；
+模型没被打坏：mean_token_accuracy 稳定在 0.64、entropy 稳定在 1 左右。
+
+不足的方面（要如实汇报）：
+
+loss 只从 0.689 降到 0.648，离 ln 2 = 0.693 的”没学”基线只低了 0.04，远没到 0.4 上下；
+accuracy 65.2% 只比抛硬币高 15 个百分点，还谈不上稳定分辨好坏；
+grad_norm 全程 140~230，远高于健康水平，说明梯度一直在被 max_grad_norm 暴力裁剪。
+
+三个现象最可能的三个原因（按嫌疑排序）：
+
+数据量太小：800 条训练数据对 DPO 来说太少（通常需要几千到几万条），且只训了 1 个 epoch；
+学习率偏低：1e-6 且一路衰减到 5e-8，学习力度不够；
+grad_norm 异常：需在扩容重跑时重点观察——若仍 150+，优先排查数据格式（prompt/chosen/rejected 三字段）和 reference model 与 policy 的一致性（同一 SFT checkpoint、同为 bf16）。
+
+4.5 汇报给老师的清单
+上面的三组指标表 + 4.4 的”链路 ✅ / 信号 ⚠️”判断；
+完整 train.log 原件；
+训练总时长（238s）、GPU 型号（A6000 48GB）、最终 checkpoint 路径（./dpo_output/final）；
+建议的重跑配置：数据 train[:1000] → train[:10000] 或全量、lr 5e-6、2~3 个 epoch，其余不变，然后对比 grad_norm 是否回落、accuracy 是否过 70%。
+
+
+这是”验证训练流程”的小规模实验，不是论文级完整复现（聊天记录里 GPT 也强调了）。它的价值在于：老师后续换贝叶斯 Loss 时，模型、数据、配置、指标全部复用今天这套，新 Loss 的曲线直接和上面的基线表对比。
+
+
+五、下一步：老师会改什么代码按聊天记录的两阶段计划，老师会在同一个脚本里只换损失函数：
+
+Baseline 2 IPO、Baseline 3 Conservative DPO：TRL 已内置（改 loss_type 即可）；
+Ours：Bayesian DPO：把 margin 上的确定性项换成随机变量，目标变为
+
+
+其中  是标准 DPO 的 log-ratio margin，   是偏好不确定性的随机注入。研究点：偏好不确定性建模、错误偏好鲁棒性、贝叶斯样本重加权、风险敏感（悲观）DPO。
+
+这部分数学零件全都在我学过的范围内：  的采样就是 MAVRL 里”编码器输出 μ、logσ，  ”的重参数化思路（只是采样量作用在偏好 margin 上）； 就是 BNRM 损失里  先验 的对应物。
+
+
+六、一句话回顾
+向日葵连上老师给的服务器 → 建 ~/gaozhuoran + dpo_gaozhuoran 环境 → 装 TRL → 写 train_dpo.py（TRL + Qwen3-0.6B + UltraFeedback 1000 条）→ 冒烟测试 → nohup 后台跑 → 从 train.log 把 loss / reward margin / logps / accuracy 整理成表 → 如实汇报”链路跑通、偏好信号偏弱 + 三个改进建议” → 贝叶斯 Loss 老师自己改。
+
+]]></content>
+      <categories>
+        <category>论文学习</category>
+      </categories>
+      <tags>
+        <tag>论文</tag>
+        <tag>服务器</tag>
+        <tag>DPO</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>BNRM论文复现全过程与原理详解</title>
+    <url>/2026/10/20/BNRM%E8%AE%BA%E6%96%87%E5%A4%8D%E7%8E%B0%E5%85%A8%E8%BF%87%E7%A8%8B/</url>
+    <content><![CDATA[
+本文目的：把复现《Mitigating Reward Hacking in RLHF via Bayesian Non-negative Reward Modeling》(BNRM) 论文的全过程 + 每一步背后的原理讲清楚。昨天是”机械跟着步骤跑”，今天这篇文章让你彻底弄懂每一步为什么这么做。
+配套阅读：本站《reward_model原文》《reward_model中文翻译》《agent对reward_model的理解》三篇，讲论文本身；本文讲复现。
+
+
+一、这篇论文在干什么（30 秒回顾）
+目标：训练一个”奖励模型”（给大模型回答打分），但要防”奖励黑客”——即模型钻空子靠”回答长度”这种虚假信号刷高分。
+核心办法：把奖励表示成”稀疏非负因子的内积“  ，让”长度”这种虚假因子没有容身之处，再从根上抑制它。
+实现：LLM 主干（gemma-2b）→ 一个 MLP 头输出 Weibull 分布参数 → 采样出稀疏非负因子  → 乘全局字典  得到奖励 r → 用 Bradley-Terry 偏好损失 + KL 项训练。
+
+（细节看《agent对reward_model的理解》，这里不再展开。）
+二、复现的整体流程（一张图）① 检查 GPU      → 确认 8GB 能跑② 建 conda 环境  → 隔离依赖③ 装 CUDA 版 torch → 用显卡④ 装依赖        → transformers/peft 等⑤ 下代码/模型/数据 → 三件套（代码=GitHub，模型=翻墙官方站，数据=镜像）⑥ 改代码适配    → Windows 上的几个 bug⑦ 训练          → accelerate + LoRA⑧ 评估          → RewardBench / RM-Bench
+
+下面按顺序，把每一步的”做了什么 + 为什么“讲透。
+
+三、每一步的原理1. 为什么先检查 GPU，为什么 8GB 能跑训练大模型必须用 GPU（显卡）。你的是 RTX 4060 Laptop，8GB 显存。
+为什么 8GB 能跑 2B 模型？关键在 LoRA/QLoRA：
+
+
+
+微调方式
+原理
+显存
+
+
+
+全参微调
+更新全部 25 亿参数
+20GB+，8GB 跑不了
+
+
+LoRA
+冻结原模型，只训练额外的小”适配矩阵”
+权重 4GB 仍要完整放显存，~6GB，勉强
+
+
+QLoRA
+LoRA + 4bit 量化，权重压到 1/4
+~2GB，舒服
+
+
+LoRA 原理一句话：大模型每个线性层有个大矩阵 W（如 4096×4096），LoRA 不动 W，只加两个瘦矩阵 A、B，前向变成 W·x + (B·A)·x，只训练 A、B。所以”可训练参数”从 25 亿降到 1367 万（你训练日志里 trainable params: 13672450 就是这个）。
+2. 为什么建 conda 环境（隔离）每个项目要装特定版本的库，全塞一起会冲突。conda create -n bnrm = 开一个独立工具箱，BNRM 要的库装在里面，不碰你 MAVRL 的环境。
+3. 为什么必须 CUDA 版 torch
+CPU 版 torch：只能用 CPU 算，显卡闲着，训练极慢甚至跑不动。
+CUDA 版 torch（版本号带 +cu121）：能调用显卡加速。
+你中途装错过一次（CPU 版），报 Torch not compiled with CUDA enabled，就是因为装了 CPU 版。
+
+4. 为什么”代码、数据、模型”是三件套
+代码：GitHub 仓库（训练程序，几 MB）。
+模型：gemma-2b-it 权重（~5GB）。
+数据：Unified-Feedback 偏好数据集（几个 GB）。
+
+后两者太大，GitHub 放不下，所以代码放 GitHub，模型/数据放 HuggingFace/魔搭，需要时再下载。
+5. 为什么 gemma 要翻墙下官方站、数据集用 hf 镜像国内网络访问国外服务器慢/被墙，具体：
+
+HuggingFace 官方站：国内经常超时（ConnectTimeout），但翻墙后能下。
+hf-mirror.com 镜像：国内能直连，但 gemma 是”受限模型”（gated），镜像访问它报 403；而 Unified-Feedback 数据集不受限，镜像能下。
+魔搭（ModelScope）：阿里的国内平台，上面也有 gemma 镜像（AI-ModelScope/gemma-2b-it），本可以不用翻墙。但当时魔搭的 CLI 命令没在你终端里配好（命令回显没执行），所以最终 gemma 改走”翻墙 + 官方站”这条路。
+
+所以实际做法：gemma 用 HF 官方站 + 翻墙下（受限模型镜像 403），数据集用 hf 镜像下（不受限，不用翻墙）。
+6. 训练命令每个参数的含义accelerate launch --num_processes 1 --mixed_precision bf16 BTBNRM_train.py \  --base_model D:\Model\gemma-2b-it \      # 底座模型（本地路径）  --dataset llm-blender/Unified-Feedback \  # 数据集  --dataset_mode 40k \                      # 只用 4 万样本  --num_train_epochs 2 \                    # 训 2 轮  --max_length 512 \                        # 序列最长 512  --use_lora True \                         # 用 LoRA  --lora_r 32 --lora_alpha 64 \             # LoRA 的秩和缩放系数  --per_device_train_batch_size 1 \         # 每卡 batch=1（8GB 显存限制）  --gradient_accumulation_steps 8 \         # 累积 8 步再更新（模拟 batch=8）  --learning_rate 1e-4 \                    # 学习率  --loss_type bt \                          # Bradley-Terry 偏好损失  --KL_ratio 1e-5 \                         # 论文里的 η，KL 正则的强度  --attn_implementation eager \             # 不用 flash_attention（难装）  --report_to none                          # 不接 wandb
+
+下面把容易含糊的参数展开讲透：
+（1）”只用 4 万样本”——1 个样本是啥，总共有多少
+1 个样本 = 一条”人类偏好数据”：同一个问题（prompt），回答 A（chosen，被选中）和回答 B（rejected，被拒绝），人标注”A 比 B 好”。
+Unified-Feedback 的 all 子集原始约 88 万条（日志里 “Filter: 884515”）。
+--dataset_mode 40k = 只取其中约 4 万条训练（论文对比 40K / 400K 两种”数据量”设置）。
+实际训练集是 42429 条（日志 “Training dataset size: 42429”，过滤掉”两个回答评分一样”的无效数据后）。
+
+（2）”训 2 轮”是什么意思
+1 轮（epoch）= 把全部训练数据完整过一遍；2 轮 = 过两遍。过一遍可能没学透，多过几遍更充分（过多会过拟合）。
+
+（3）LoRA 的”秩 r=32”和”缩放系数 alpha=64”
+秩 r：LoRA 加的 A、B 两个瘦矩阵的”中间宽度”。A 是 (d×r)、B 是 (r×d)。r 越大，LoRA 能表达的更新越丰富（参数越多）；r 越小越省。r=32 就是中间维度取 32。
+缩放系数 alpha：LoRA 更新项会乘 alpha/r 控制强度。alpha=64、r=32 → 系数 64/32 = 2（更新放大 2 倍）。
+一句话：r 决定”适配器多大”，alpha 决定”影响多强”。
+
+（4）”batch”是啥，为什么每卡 batch=1
+batch = 一批。训练不是一条条喂，而是一次喂一批。batch=1 = 每次 1 条。
+大 batch 梯度噪声小、训练稳，但显存占用大；8GB 卡只能 batch=1。所以 batch=1 是”显存所迫”，靠梯度累积补救。
+
+（5）”累积 8 步再更新”（gradient_accumulation_steps=8）
+正常：每喂一个 batch 就更新一次权重。
+梯度累积：喂好几个 batch 把梯度攒着不更新，攒够 8 个才更新一次。
+效果：等效 batch=8，但显存只占 batch=1。本质是”用时间换等效大批量”。
+验证：42429 ÷ 8 ≈ 5303 步/轮 × 2 轮 ≈ 10606 步（正好是日志总步数）。
+
+（6）flash_attention 和 wandb 是什么
+flash_attention：加速注意力计算的优化技术，更快更省显存，但要装 flash-attn 库（Windows 极难装）。改 eager = PyTorch 标准实现，慢一点但不用装额外库。
+wandb（Weights &amp; Biases）：在线训练日志可视化平台（画 loss 曲线、记超参）。--report_to none = 不接它，日志只打到终端。不接不影响训练。
+
+其余参数一句话
+max_length 512：每条样本截断到最长 512 个 token（超长截断，省显存）。
+learning_rate 1e-4：学习率，每次更新权重时”迈多大步”。太大震荡、太小学得慢。
+loss_type bt：用 Bradley-Terry 偏好损失（论文式 7）。
+KL_ratio 1e-5：论文里的 η，KL 正则项的强度（很小，因为 KL 只是”轻微正则”）。
+mixed_precision bf16：半精度浮点，省一半显存、加速，40 系卡支持。
+
+四、踩过的 8 个坑（每个：现象 → 原理 → 解决）这是这次复现最有价值的部分。每个坑都是真实踩过的，弄懂它们，你就理解了”Windows + 国内网络”下复现 LLM 论文的常见雷区。
+坑 1：pip 装包超时 / 清华源挂 / DNS 失败现象：
+
+Read timed out（连 pypi.org 超时）；
+getaddrinfo failed（连清华源域名解析失败）；
+WinError 10061 目标计算机积极拒绝（清华源直接拒绝连接）。
+
+原理：pip 默认从国外 pypi.org 下载，国内慢/超时；换成清华源后，清华源本身又”时好时坏”（DNS 解析失败、连接被拒）。
+解决：把 pip 源换成阿里云：
+pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/pip config set global.trusted-host mirrors.aliyun.com
+
+教训：国内装任何 Python 包，都要用国内镜像源；一个源不行就换另一个。
+坑 2：HuggingFace 超时 / 镜像 403（gated 模型）现象：
+
+下数据集报 ConnectionError: Couldn't reach 'llm-blender/Unified-Feedback' (ConnectTimeout)；
+下 gemma 报 403 Forbidden: Please enable access to public gated repositories。
+
+原理：
+
+HF 官方站在国内超时；
+gemma 是 Google 的”受限模型”，要登录 + 同意协议才能下；
+hf-mirror 镜像不认受限模型的认证，所以 gemma 走镜像报 403；但数据集不受限，镜像能下。
+
+解决：
+
+gemma → 翻墙用 HF 官方站（受限模型镜像 403，只能官方站）；
+数据集 → 用 hf-mirror 镜像（不受限）。
+
+坑 3：torch 装成了 CPU 版现象：AssertionError: Torch not compiled with CUDA enabled。
+原理：从普通 pip 源装的 torch 是 CPU 版（不带显卡支持）。CUDA 版必须从 pytorch 专用源下载。
+解决：卸载 CPU 版，从专用源装 CUDA 版：
+pip uninstall torch -ypip install torch --index-url https://download.pytorch.org/whl/cu121
+
+验证：python -c "import torch; print(torch.cuda.is_available())" 必须输出 True。
+教训：装 torch 一定要看版本号有没有 +cu121 这种后缀——有就是 CUDA 版，没有就是 CPU 版。
+坑 4：数据集有”子集”和”分片”两个隐藏维度现象：
+
+Config name is missing. Please pick one among ['Nectar', 'UltraFeedback', 'all', ...]；
+split='validation' 找不到（实际叫 val）。
+
+原理：
+
+llm-blender/Unified-Feedback 数据集下面有多个子集（config），论文用的是 all 这个子集；
+子集 all 的分片叫 train 和 val（不是 validation）。
+
+解决：改两处代码：
+
+load_dataset(data_path, split=...) → load_dataset(data_path, 'all', split=...)（指定子集）；
+split='validation' → split='val'（修正分片名）。
+
+坑 5：Windows 多进程递归崩溃（num_proc）现象：疯狂刷 RuntimeError: An attempt has been made to start a new process before the current process has finished its bootstrapping phase，无限递归。
+原理：数据集的 filter/map 用了 num_proc=30（开 30 个进程并行处理）。Windows 的多进程用 “spawn” 方式，会重新导入主脚本 BTBNRM_train.py，而它没有 if __name__ == '__main__': 保护，于是每个子进程又触发一次数据加载、又开 30 个进程……无限递归。
+解决：把 load_datasets.py 里所有 num_proc=N 改成 num_proc=1（单进程处理，慢一点但稳定）。
+教训：Windows 上跑 HuggingFace 数据集，num_proc 设为 1 最安全（除非脚本有 if __name__ == '__main__' 保护）。
+坑 6：Windows 路径反斜杠 bug（output_dir 盘符）现象：OSError: [WinError 123] ... '../save_BNRM/D:'。
+原理：代码里 base_model.split("/") 是按正斜杠切分，但你传的 --base_model D:\Model\gemma-2b-it 是 Windows 反斜杠路径，切分失败，导致整个 D:\Model\gemma-2b-it（含盘符 D:）被拼进输出目录名，而 Windows 不允许目录名里有 D: 这种盘符。
+解决：改成 os.path.basename()（正反斜杠都兼容）：
+model_name_split = os.path.basename(script_args.base_model)
+
+教训：复现别人的代码时，作者在 Linux 上写的”路径处理”往往在 Windows 上会翻车，反斜杠/盘符是常见雷。
+坑 7：断点续训缺 _keys_to_ignore_on_save现象：AttributeError: 'AutoModelForCausalLMWithBNValueHead' object has no attribute '_keys_to_ignore_on_save'。
+原理：用 trainer.train(resume_from_checkpoint=True) 续训时，HF Trainer 会检查模型的 _keys_to_ignore_on_save 属性。但作者自定义的模型类（AutoModelForCausalLMWithBNValueHead）没定义这个属性，标准 HF 模型都有。
+解决：在模型类的 __init__ 里补一句：
+self._keys_to_ignore_on_save = None
+
+坑 8：断点续训”续上了进度条，没续上权重”（随机模型）现象：续训后 loss 从 0.3~0.5 又变回 0.69（随机基线），但 epoch 显示 1.89（快训完）。
+原理：断点续训要恢复两样东西——① 模型权重（”模型学会了什么”）② 优化器/调度器状态（”训练到第几步了”）。这次续训，优化器状态加载成功了（所以 epoch=1.89），但模型权重加载失败了（键名对不上）：
+
+保存时用的是”短前缀”键名（作者自定义 save_model 存的是 model.base_model.model 的 state dict）：model.layers.0...lora_A.default.weight；
+加载时 HF 官方续训用”长前缀”键名（模型外面被 PeftModel 包了一层）：base_model.model.pretrained_model.model.layers.0...lora_A.default.weight。
+
+两边对不上 → 输出 “missing keys”（模型要的键，checkpoint 没有）+ “unexpected keys”（checkpoint 有的键，模型不认）→ 权重静默地没加载。
+结果：模型保持”刚初始化的随机权重”，但训练循环以为自己在 epoch 1.89——等于”用一个随机模型从第 1.89 轮继续跑”。
+证据：loss ≈ 0.69 = log 2 = BT 损失的”随机猜”基线（训练好的模型应是 0.3~0.5）。
+解决：放弃续训。用第一次训练的 checkpoint-7000（71.9% 准确率）直接做评估；或从头重跑（加 --save_steps 100）。
+
+五、结果解读训练日志里几个关键数字怎么看：
+
+
+
+指标
+你的值
+含义
+
+
+
+trainable params: 13672450
+1367 万
+LoRA 只训练 1367 万参数（模型总共 25 亿）
+
+
+loss: 0.71 → 0.3~0.5
+下降
+偏好损失在降，模型在学
+
+
+eval_BNBT_accuracy: 0.719
+71.9%
+验证集准确率（论文 gemma-2b + 40k 目标是 ~74.2%）
+
+
+grad_norm
+波动
+梯度范数，没爆（没 NaN）就正常
+
+
+
+loss ≈ 0.69 是”随机猜”的基线（log 2），低于它就说明模型学到了偏好；
+你训练到 75%（epoch 1.5）时准确率 71.9%，已经接近论文水平，继续训完剩余 epoch 会更高。
+
+
+六、一句话总结整个复现
+复现 BNRM = 检查 GPU（8GB 用 LoRA）→ 建隔离环境 → 装 CUDA 版 torch → 用国内镜像装依赖 → 翻墙下模型、镜像下数据 → 改掉 Windows 上的几个路径/多进程 bug → accelerate launch BTBNRM_train.py 训练 → 看 loss 下降、准确率上升。
+
+踩的 8 个坑，本质上就三类：① 国内网络（坑 1、2）② torch/环境（坑 3）③ Windows 兼容性（坑 4~8）。这三类懂了，以后复现任何 LLM 论文都会顺利很多。
+]]></content>
+      <categories>
+        <category>论文学习</category>
+      </categories>
+      <tags>
+        <tag>论文</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>BNRM的研究思路</title>
     <url>/2026/10/16/BNRM%E7%9A%84%E7%A0%94%E7%A9%B6%E6%80%9D%E8%B7%AF/</url>
     <content><![CDATA[
@@ -294,6 +856,459 @@ Complementary Bayesian Evidence：从 Fisher 信息和后验收缩角度，刻�
       </categories>
       <tags>
         <tag>论文</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>DPO复现：老师新任务解读与服务器操作全流程</title>
+    <url>/2026/11/07/DPO%E5%A4%8D%E7%8E%B0%E4%B8%8E%E6%9C%8D%E5%8A%A1%E5%99%A8%E6%93%8D%E4%BD%9C%E5%85%A8%E6%B5%81%E7%A8%8B/</url>
+    <content><![CDATA[
+任务来源：老师发来了一个文件 + 一段和 GPT 的聊天记录，让在老师给的服务器上跑一下、整理结果，后面老师自己来改代码。
+文件：C:\Users\Lenovo\Desktop\论文学习\2305.18290v3 (1).pdf，即 DPO 原论文《Direct Preference Optimization: Your Language Model is Secretly a Reward Model》（Rafailov et al., 2023）。
+配套阅读：本站《reward_model原文》讲 BNRM 论文、《BNRM的研究思路》讲老师提出的 MF-BNRM 方向、《BNRM论文复现全过程与原理详解》讲上一次本地复现经验。本文讲这次的新任务：在远程服务器上复现 DPO 基线。
+
+
+零、先把 DPO 翻译成你已经会的东西你在《论文学习》（MAVRL + BNRM）和《MF-BNRM》两篇笔记里，已经吃透了”奖励模型 + 变分推断”这一套。好消息是：DPO 这篇论文里的大多数概念你其实已经会了，只是换了名字。先看这张对照表：
+
+
+
+你已经会的（MAVRL / BNRM）
+DPO 里对应的东西
+一句话联系
+
+
+
+奖励  （隐变量点乘全局字典）
+隐式奖励  
+都是”把奖励写成参数化的函数”；DPO 的”奖励头”就是语言模型本身
+
+
+偏好概率    （你网格世界笔记里的公式）
+DPO 损失  比值差
+同一个 Bradley–Terry 公式，只是把   换成 log 比值差
+
+
+：”判断有多果断”（你笔记原话）
+：KL 约束强度 + 隐式奖励的缩放
+还是那个 β
+
+
+BNRM 损失里的  先验
+DPO 对参考模型的 KL 约束（由 β 隐式控制）
+都是”别离参考太远”的约束
+
+
+MAVRL 编码器：输出 μ、logσ，   重参数化采样
+贝叶斯 DPO 里的    采样进 margin
+同一个套路：从变分分布采样一个随机量注入模型、再配 KL 正则——这正是老师第二阶段要改的点
+
+
+你 BNRM 训练日志：loss 0.7 左右 → 0.4 左右
+DPO 训练：loss 从 ≈0.69（log 2）往下降
+起点 0.7 不是巧合：那是 BT 损失的”随机猜”基线 log 2，两边同一个
+
+
+eval_BNBT_accuracy 71.96%（好回答得分更高的比例）
+rewards/accuracies
+完全同一个指标，只是叫法不同
+
+
+冻结底座 + LoRA、bf16、batch=1、8 步累积
+全参或 LoRA、bf16、batch=1、grad_accum=8
+训练技巧全部复用你上次的复现经验
+
+
+唯一需要做的认知切换：你之前两次（MAVRL、BNRM）都是在”训练一个奖励模型”——奖励模型是额外的一个网络（LLM 主干 + MLP 头），输出分数。DPO 不训奖励模型，它直接微调语言模型本身，让”语言模型自己变成一个奖励模型”：
+
+意思是：模型给回答  的概率，相比一个冻结的参考模型涨了多少，这个”涨多少”就是奖励。直觉很自然——一个模型越”认可”某个回答，就越愿意给它高概率，概率之比天然是一把尺子。
+
+验证一下你确实会了：把你在 BNRM 笔记里写的 loss = -log sigmoid(r1 - r2) 里的  换成上式，展开就是 DPO 损失。其余（sigmoid、BT、KL 正则）全都没变。
+
+
+一、老师让我干什么（任务解读）1.1 老师发来的两样东西
+
+
+材料
+内容
+作用
+
+
+
+2305.18290v3 (1).pdf
+DPO 原论文
+要复现的目标方法
+
+
+和 GPT 的聊天记录
+怎么复现 DPO：代码库选型 + 两阶段研究计划
+操作路线图
+
+
+聊天记录里 GPT 的核心结论：
+
+复现 DPO 首选 Hugging Face TRL（DPOTrainer 现成可用，改 Loss 容易），原作者代码（eric-mitchell/direct-preference-optimization）作为公式参考；
+最小可跑实验：TRL + Qwen3-0.6B + UltraFeedback 数据集，全参训练（显存不够就 LoRA）；
+两阶段计划：
+第一阶段（你现在要做的）：跑通标准 DPO，固定模型和数据，保存 loss、reward margin、chosen/rejected log-probability 等指标；
+第二阶段（老师后面要做的）：在 TRL 里自定义 Loss，做 Bayesian DPO / Bayesian Reweighted DPO / Pessimistic Bayesian DPO 等变体。
+
+
+
+1.2 为什么是 DPO：它和 BNRM / MF-BNRM 的关系DPO 的关键发现是 “语言模型自己就是一个隐式奖励模型”：
+
+不需要单独训奖励模型、不需要 RL（PPO），直接用下面这个”分类损失”对齐偏好：
+
+而老师的研究方向（MF-BNRM）是把确定性的奖励换成贝叶斯概率奖励。聊天记录里 GPT 给出的”贝叶斯 DPO”扩展，正是把 DPO 里的确定性偏好 margin 换成随机变量：
+
+所以在动手改贝叶斯 Loss 之前，必须先有一个跑通了的、指标齐全的 DPO 基线——这正是这次任务的意义：把”地基”打好，老师后面改损失函数时，只需换 Loss 那一块，其余链路不动，直接和基线对比。
+1.3 一句话总结任务
+在老师给的服务器上，用 TRL + Qwen3-0.6B + UltraFeedback 跑通标准 DPO 训练（第一阶段），把 loss、reward margin、chosen/rejected logps、accuracy 等指标整理出来汇报给老师。贝叶斯 Loss 的修改由老师自己做。
+
+注意：你这次不用改损失函数，跑的是标准 DPO。你的产出 = 一套能在服务器上跑通的脚本 + 一份训练指标整理。
+
+二、具体跑什么（实验设计）全部按聊天记录中 GPT 的方案执行，小规模、验证流程优先：
+
+
+
+项目
+选择
+说明
+
+
+
+框架
+Hugging Face TRL（DPOTrainer + DPOConfig）
+代码量最少、改 Loss 最方便
+
+
+模型
+Qwen/Qwen3-0.6B
+0.6B 小模型，单卡即可全参微调
+
+
+数据
+trl-lib/ultrafeedback_binarized，先取 train[:1000]
+UltraFeedback 二值化偏好数据，字段 prompt/chosen/rejected
+
+
+关键超参
+beta=0.1, lr=1e-6, batch=1, grad_accum=8, max_length=512, 1 epoch
+有效 batch=8，1000 条 ≈ 125 个更新步，很快跑完
+
+
+要记录的指标
+loss / rewards(chosen, rejected, margins, accuracies) / logps(chosen, rejected) / kl
+TRL 每 logging_steps 步自动打印
+
+
+
+跑通 1000 条之后，如果老师要更可信的基线，把 train[:1000] 改成 train[:10000] 或全量重跑一次即可，脚本其余不动。
+
+
+三、服务器上一步一步怎么跑
+与上次 BNRM 复现不同：上次是本地 Windows + RTX 4060（8GB，必须 LoRA），这次是老师给的远程服务器。服务器通常没有 Windows 那些坑（路径、多进程），但多了”远程连接、断线保护、显存未知”这几件事。
+
+第 0 步：服务器信息（已实测确认 ✅）已通过向日葵连上服务器，实测环境如下：
+
+
+
+项目
+实测值
+结论
+
+
+
+GPU
+NVIDIA RTX A6000，48GB 显存（服务器有多张卡，实测 3 张）
+0.6B 模型全参微调毫无压力；但启动训练必须加 --num_processes=1 只用一张卡（见第 6 步）
+
+
+架构/精度
+Ampere（专业卡）
+支持 bf16，脚本里 bf16=True 直接用
+
+
+驱动 / CUDA
+590.48.01 / 最高 CUDA 13.1
+pip 装的 torch 自带 CUDA 运行时，不用额外管
+
+
+系统
+Ubuntu（Linux）
+按 Linux 分支操作，后台跑用 nohup/tmux
+
+
+conda
+25.11.1（/home/ubuntu/anaconda3）
+直接用
+
+
+系统 Python
+3.13.9
+不要用它，我们自建 3.10 环境（TRL 生态最稳）
+
+
+老师的指示：”你建一个你自己名字的文件夹，环境什么的都新装一下，别把之前的覆盖了就行。” → 落实在第 3 步：个人文件夹 + 独一无二的新环境名。
+
+向日葵连接信息（识别码/验证码）从老师那里要；验证码是临时的，连不上让老师重发，或请老师设固定访问密码。
+
+第 1 步：用向日葵连上服务器
+本机打开向日葵客户端 → 输入设备识别码 + 验证码 → 进入服务器桌面；
+进去后先确认系统是 Windows 还是 Linux（看桌面/任务栏就知道）；
+打开对应终端：
+Windows：开始菜单 → PowerShell（或 Anaconda Prompt，装了 conda 的话）；
+Linux：桌面右键 → 打开终端（Terminal）；
+
+
+之后第 2~8 步的命令在终端里照敲（Linux 完全一样；Windows 只有”后台运行 / 看日志”两条命令写法不同，见第 7 步）。
+
+
+备选：如果老师给了 SSH，也可以用 Xshell 或 ssh 用户名@IP -p 端口 连，效果一样。向日葵的好处是能看到图形桌面、装软件方便；两者不冲突。
+
+第 1.5 步：远程桌面（向日葵）下的三个注意事项
+断开向日葵 ≠ 中断训练：只要你不注销/关机，断开远程桌面后程序继续跑（这点比 SSH 还省心）；
+千万别在服务器上”注销用户 / 关机 / 重启”：注销会杀掉你终端里正在跑的训练进程；
+关掉服务器的自动睡眠：Windows 在”设置 → 电源”里设为”从不睡眠”；Linux 在”设置 → 电源管理”里关闭挂起。否则机器睡了，训练就停了。
+
+第 2 步：检查服务器环境（✅ 已做，结果见第 0 步）nvidia-smi                # 看 GPU 型号和剩余显存python --version          # 有的服务器是 python3which conda &amp;&amp; conda --version
+
+
+你已跑过这三条：A6000 / 48GB → 走全参微调，不需要 LoRA（备选方案留在下面，仅当以后换小显存机器时用）。
+
+第 3 步：建自己的文件夹 + 全新环境（按老师指示，别动别人的）mkdir -p ~/你的名字拼音            # 老师要求：以自己名字命名的文件夹（换成你的名字拼音）cd ~/你的名字拼音conda create -n dpo_你的名字 python=3.10 -y   # 环境名也带上自己的名字，保证不覆盖任何已有环境conda activate dpo_你的名字
+
+
+之后的脚本、日志、checkpoint 全部放在 ~/你的名字拼音/ 里，和服务器上其他人的东西完全隔离；
+建新环境不会碰任何已有环境，放心执行；
+为什么用 python 3.10 而不是系统自带的 3.13.9：TRL / transformers / torch 这套生态在 3.10/3.11 上最稳，别给自己找兼容性麻烦。
+
+第 4 步：装依赖并验证 CUDApip install -U torch transformers datasets accelerate trlpython -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+
+
+必须打印 True。若是 False，说明装了 CPU 版 torch 或驱动有问题（上次本地踩过的坑：CPU 版报 Torch not compiled with CUDA enabled）。服务器一般没问题，但这一步是零成本检查，必须做。
+
+第 4.5 步：在服务器上装好 VS Code（tar.gz 便携版）cd ~/Downloads                  # 如果系统是中文，下载文件夹叫 ~/下载tar -xzf code-*.tar.gz          # 解压（文件名前缀是 code-，* 匹配后面一串）mv VSCode-linux-x64 ~/vscode    # 把解压出来的文件夹移到固定位置mkdir -p ~/.local/binln -s ~/vscode/code ~/.local/bin/code   # 建个快捷方式，让终端里能直接敲 codecode --version                  # 能打印版本号就成了
+
+
+这是便携版：解压即用，不写系统目录、不用 sudo，完全符合老师”别动之前的”的要求；
+如果 code 命令提示找不到：关掉终端重开一次（PATH 刷新）；还不行就用完整路径 ~/vscode/code 启动；
+以后想打开你的工作文件夹：cd ~/你的名字拼音 &amp;&amp; code .（. 表示当前文件夹）。
+
+第 4.6 步：配置 HuggingFace 镜像（实测必须 ⚠️）实测：服务器访问 huggingface.co 会超时（'timed out' thrown while requesting HEAD https://huggingface.co/...），数据集和模型都下不动。解决办法是走国内镜像 hf-mirror.com：
+export HF_ENDPOINT=https://hf-mirror.com              # 只对当前终端有效echo 'export HF_ENDPOINT=https://hf-mirror.com' &gt;&gt; ~/.bashrc   # 写入你自己的 .bashrc，永久生效source ~/.bashrc
+
+
+这改的是你自己的 ~/.bashrc，不影响服务器上其他人；
+镜像对公开数据集（ultrafeedback_binarized）和公开模型（Qwen3-0.6B）都有效，够我们这次用；
+做完后可以测一下：curl -sI https://hf-mirror.com | head -n 1 能返回 HTTP/... 200 就通了。
+
+第 5 步：写训练脚本 train_dpo.py三种方式任选：
+
+服务器上直接写（推荐）：向日葵桌面里打开 VS Code（安装方法见第 4.5 步），新建 train_dpo.py 粘贴脚本；
+向日葵传文件：本机先写好 train_dpo.py，用向日葵的”远程文件”功能拖到服务器（Windows 服务器还可以直接复制粘贴）；
+SSH 场景：VS Code Remote-SSH 或 vim。
+
+完整脚本：
+# train_dpo.py —— DPO 基线（第一阶段），在老师服务器上运行from datasets import load_datasetfrom trl import DPOTrainer, DPOConfig# 1) 数据：先取 1000 条跑通流程；跑通后可改成 train[:10000] 或去掉切片dataset = load_dataset("trl-lib/ultrafeedback_binarized", split="train[:1000]")split = dataset.train_test_split(test_size=0.2, seed=42)   # 800 训练 / 200 验证# 2) 训练配置config = DPOConfig(    output_dir="./dpo_output",           # checkpoint 输出目录    beta=0.1,                            # DPO 的 beta（KL 正则强度）    learning_rate=1e-6,    per_device_train_batch_size=1,    gradient_accumulation_steps=8,       # 有效 batch = 8    max_length=512,                      # 总长度上限（新版 TRL 没有 max_prompt_length 了）    num_train_epochs=1,    logging_steps=5,                     # 每 5 步打印一次指标（重点！）    save_strategy="steps",    save_steps=50,    eval_strategy="steps",    eval_steps=50,    bf16=True,                           # 半精度省显存；老卡(V100)改成 fp16=True    gradient_checkpointing=True,         # 省显存    remove_unused_columns=False,    report_to="none",                    # 不连 wandb，指标全部走日志)# 3) 训练（tokenizer 不用传，DPOTrainer 会从模型仓库自动加载）trainer = DPOTrainer(    model="Qwen/Qwen3-0.6B",    args=config,    train_dataset=split["train"],    eval_dataset=split["test"],)trainer.train()trainer.save_model("./dpo_output/final")
+
+
+版本注意：最新版 TRL 已删除 max_prompt_length 参数（报 TypeError: ... unexpected keyword argument 'max_prompt_length'），也不建议再传 tokenizer=（自动加载）。上面这版脚本兼容新版 TRL。
+
+第 6 步：先做 5 步冒烟测试（重要！）正式跑之前，先确认”数据能下、模型能下、显存够、loss 能打印”，把脚本临时改成：
+dataset = load_dataset("trl-lib/ultrafeedback_binarized", split="train[:20]")  # 只取 20 条
+
+并在 DPOConfig 里加一行 max_steps=5，然后前台直接跑：
+accelerate launch --num_processes=1 --mixed_precision=bf16 train_dpo.py
+
+
+--num_processes=1：必须加。服务器有 3 张卡，accelerate 默认会开多卡并行，没配好会卡在初始化不动；小实验 1 张卡完全够；
+--mixed_precision=bf16：和脚本里的 bf16=True 一致（A6000 支持）；
+如果想一劳永逸：跑一次 accelerate config，按提示选”本机 1 台、用 GPU 0 一张卡、bf16”，以后 accelerate launch 就不用带这些参数了。
+
+看到 loss 正常打印、没有 CUDA OOM，就说明链路通了。再把 20 条和 max_steps 改回来，进入正式训练。
+
+✅ 冒烟测试已通过（2026-11-07 实测）：模型 + 数据集经镜像下载成功；5 步训练（train_runtime 12.76s）：loss 0.6931 → 0.601、rewards/margins 0 → 0.2051、rewards/accuracies 0 → 0.875。走向与第 4.1 节的预测完全一致（loss 从 log 2 基线往下走、margin 转正、accuracy 超过 50%）。
+
+第 7 步：后台正式训练（防断连）Linux 服务器（终端里敲；本服务器是 Ubuntu，走这条）：
+nohup accelerate launch --num_processes=1 --mixed_precision=bf16 train_dpo.py &gt; train.log 2&gt;&amp;1 &amp;tail -f train.log        # 实时看指标；Ctrl+C 只退出查看，不中断训练
+
+
+nohup ... &amp;：终端关掉、向日葵断开都不影响训练；
+更高级：tmux new -s dpo 开会话跑，Ctrl+B d 脱离，之后 tmux attach -t dpo 回来。
+
+Windows 服务器（PowerShell 里）：
+python -m accelerate.commands.launch train_dpo.py *&gt; train.logGet-Content train.log -Wait   # 另开一个窗口实时看日志
+
+
+Windows 没有 nohup，最简单可靠的做法：开一个终端窗口跑训练，这个窗口一直别关。向日葵断开桌面不会杀进程，但你亲手关窗口会；
+只要遵守”不注销、不关机、关睡眠”，人离开一晚上也没事；
+1000 条 / 有效 batch 8 = 125 步，单卡几分钟到十几分钟就能跑完。
+
+第 8 步：可能的两个坑（提前准备）
+
+
+坑
+表现
+解决
+
+
+
+把 Python 代码直接敲进终端
+bash: 未预期的记号 "(" 附近有语法错误
+终端是 bash（只认 shell 命令，提示符 $）。Python 代码要写进 train_dpo.py 文件里再运行；想临时测一行，用 python -c "..."（引号：外层双、内层单）
+
+
+accelerate 检测到多张 GPU，训练卡住不动
+提示 More than one GPU was found... num_processes=3 后无输出
+服务器有 3 张卡，多卡并行没配置会卡在初始化。Ctrl+C 停掉，加 --num_processes=1 只用一张卡重跑
+
+
+DPOConfig 报不认识 max_prompt_length（实测命中 ✅）
+TypeError: DPOConfig.__init__() got an unexpected keyword argument 'max_prompt_length'
+新版 TRL 删了这个参数，从配置里删掉该行即可；tokenizer= 也不用传（自动加载）。用第 5 步的新版脚本
+
+
+HuggingFace 下载超时（实测命中 ⚠️）
+'timed out' thrown while requesting HEAD https://huggingface.co/... 反复重试
+服务器连不上 HF 官方站。按第 4.6 步设 export HF_ENDPOINT=https://hf-mirror.com 走国内镜像
+
+
+显存不够（OOM）
+报 CUDA out of memory
+用 LoRA：见下方”备选方案”，其余不动
+
+
+备选方案（LoRA，显存 &lt; 16GB 时用）：
+from peft import LoraConfigpeft_config = LoraConfig(    r=8, lora_alpha=16, lora_dropout=0.05,    target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],    task_type="CAUSAL_LM",)trainer = DPOTrainer(model="Qwen/Qwen3-0.6B", peft_config=peft_config, ...)
+
+
+四、结果怎么整理、怎么判断”结果怎么样”4.1 日志里每个指标的含义TRL 每 logging_steps 步会打印一组指标，你需要看懂它们：
+
+
+
+日志指标
+含义
+健康的走向
+
+
+
+loss
+DPO 损失
+起点 ≈ 0.69（= log 2 随机猜基线；你 BNRM 训练时 0.7 左右的起点就是它），应持续下降，目标 0.4 上下
+
+
+rewards/chosen
+ 对好回答
+从 ≈0 逐渐上升
+
+
+rewards/rejected
+同上，对差回答
+从 ≈0 逐渐下降
+
+
+rewards/margins
+chosen − rejected（reward margin，论文里最核心的指标）
+从 ≈0 变为正且增大
+
+
+rewards/accuracies
+模型判 chosen &gt; rejected 的比例（就是你上次记录的 eval_BNBT_accuracy 那个指标）
+起点 50%，应上升
+
+
+logps/chosen logps/rejected
+模型给两个回答的对数似然
+chosen 上升、rejected 下降
+
+
+kl
+与参考模型的 KL 散度
+随训练缓慢增大（正常，β=0.1 控制幅度）；新版 TRL 日志里可能没有这项，留空即可
+
+
+4.2 整理成一张表汇报给老师训练结束后，从 train.log 里挑 训练前几个 step、中间、最后 eval 三组数，抄进表格。
+
+✅ 2026-11-07 实测已填好（1000 条 / 1 epoch / 94 步 / 238 秒）：起始 loss 0.69（log 2 基线）→ 平均 0.672 → 最后 eval 0.6479；margin 0.016 → 0.1263；accuracy 62.5% → 65.2%。全部符合第 4.3 节”正常”标准。模型已存 ./dpo_output/final。
+
+
+
+
+步骤/阶段
+loss
+rewards/chosen
+rewards/rejected
+rewards/margins
+rewards/accuracies
+logps/chosen
+logps/rejected
+kl
+
+
+
+step 5（起始）
+0.6902
+0.0279
+0.0115
+0.0164
+0.625
+−326.3
+−296.1
+—
+
+
+step 60（中间）
+
+
+
+
+
+
+
+
+
+
+最后 eval（step 100/125）
+
+
+
+
+
+
+
+
+
+
+4.3 “结果怎么样”的判断标准参照物就是你上次 BNRM 复现：loss 0.7→0.4、eval_BNBT_accuracy 71.96% ≈ 论文水平。这次 DPO 基线同样看这两个数，外加一个 BNRM 里没单列的 margin：
+
+✅ 正常：loss 明显低于 0.69 且下降到 0.4 上下；margin 由 0 → 明显正值；accuracy 明显高于 50%。
+⚠️ 要报告给老师：loss 不降、margin 始终 ≈0、accuracy 停在 50% —— 说明没学到偏好，超参（lr、beta）或数据有问题。
+附上：训练总时长、GPU 型号、最终 checkpoint 路径（./dpo_output/final）、完整 train.log。
+
+
+这是”验证训练流程”的小规模实验，不是论文级完整复现（聊天记录里 GPT 也强调了）。它的作用就是给老师一个可对比的基线，所以指标记录完整、表格清楚比”数字好看”更重要。
+
+
+五、下一步：老师会改什么代码按聊天记录的两阶段计划，你跑完基线后，老师（或后续的你）会在同一个脚本里只换损失函数：
+
+Baseline 2 IPO、Baseline 3 Conservative DPO：TRL 已内置（改 loss_type）；
+Ours：Bayesian DPO：把 margin 上的确定性项换成随机变量   ，目标变为   ，研究偏好不确定性、错误偏好鲁棒性、贝叶斯重加权。
+
+
+你到时候看得懂这个改动：  的采样，就是你在 MAVRL 笔记里写过的”编码器输出 μ、logσ，  ”同一个重参数化思路，只是采样出来的随机量作用在偏好 margin上、而不是奖励上；  就是你 BNRM 损失里  先验 的对应物。数学零件全都在你学过的范围内。
+
+到那时：模型、数据、训练配置、日志指标全部复用今天这套，新 Loss 的训练曲线直接和今天的基线表格对比——这就是这次任务”跑基线、整理结果”的价值。
+
+六、一句话回顾
+向日葵连上老师给的服务器 → 打开终端 → 建环境 → 装 TRL → 写 train_dpo.py（TRL + Qwen3-0.6B + UltraFeedback 1000 条）→ 冒烟测试 → 后台跑（Linux 用 nohup / Windows 留着窗口别关）→ 把 loss / reward margin / logps / accuracy 三组数字整理成表 → 连同 train.log 一起发给老师。贝叶斯 Loss 老师自己改。
+
+]]></content>
+      <categories>
+        <category>论文学习</category>
+      </categories>
+      <tags>
+        <tag>论文</tag>
+        <tag>服务器</tag>
+        <tag>DPO</tag>
       </tags>
   </entry>
   <entry>
@@ -1231,6 +2246,346 @@ Note that we linearly normalize the inferred reward values per feedback type. Th
       </tags>
   </entry>
   <entry>
+    <title>MAVRL论文全文中文翻译 - 从多类型反馈学习奖励函数的摊销变分推断</title>
+    <url>/2026/09/05/MAVRL%E8%AE%BA%E6%96%87%E5%85%A8%E6%96%87%E4%B8%AD%E6%96%87%E7%BF%BB%E8%AF%91/</url>
+    <content><![CDATA[
+原文信息
+MAVRL: Learning Reward Functions from Multiple Feedback Types with Amortized Variational Inference（MAVRL：利用摊销变分推断从多类型反馈学习奖励函数）
+作者：Raphaël Baur、Yannick Metz、Maria Gkoulta、Mennatallah El-Assady、Giorgia Ramponi、Thomas Kleine Buening
+机构：¹ ETH AI Center, ETH Zurich；² ETH Zurich 计算机系；³ University of Zurich 信息学系
+会议：Proceedings of the 43rd International Conference on Machine Learning（ICML 2026），首尔，韩国。PMLR 306。
+代码与模型：https://github.com/rabaur/mavrl
+译者说明
+
+本页为论文正文与附录（A–F）的完整中文翻译；参考文献列表按惯例保留英文原文。
+为便于阅读，正文将原文中以数学花体排印的四种反馈类型统一记为：P＝偏好（成对比较）、D＝示范、R＝评分、S＝停止信号；组合记号（如 PDR、PDRS）一律照原文保留，其具体所指以原 PDF 中的图表为准。
+插图（图 1–6）与表格（表 1–5）在正文对应位置以 [图 X] / [表 X] 标注并给出中文图题、所在页码与内容说明，精确图形/数据请对照原 PDF。
+
+
+
+摘要（Abstract）奖励学习（reward learning）通常依赖单一类型的反馈，或者通过手动加权多个损失项来组合不同类型的反馈。目前，如何从异质反馈类型（例如示范、比较、评分与停止信号——它们提供性质上各不相同的信号）中联合学习奖励函数，仍然是一个悬而未决的问题。
+针对这一挑战，本文将”从多类型反馈学习奖励”形式化为对共享的潜在奖励函数进行贝叶斯推断：每种反馈类型都通过一个显式的似然函数（likelihood）贡献信息。我们提出了一种可扩展的摊销变分推断方法（amortized variational inference），它学习一个共享的奖励编码器（reward encoder）以及若干反馈专属的似然解码器（likelihood decoder），并通过优化**单一的证据下界（ELBO）**进行训练。我们的方法既不需要把不同反馈压缩到某种公共中间表示，也消除了手动平衡各项损失的需要。
+在离散（表格型）与连续控制基准上，我们证明：联合推断得到的奖励后验优于单一类型的基线，能够利用不同反馈类型之间的互补信息，并使最终策略对环境扰动更加鲁棒。此外，推断出的奖励不确定性还能提供可解释的信号，用于分析模型置信度以及不同反馈类型之间的一致性。
+
+1. 引言（Introduction）设计能够忠实刻画期望行为的奖励函数是出了名的困难。即使在定义良好的环境中，细微的偏好、安全性考量与各种权衡也很难通过手工编码实现；微小的错误设定就可能引发意料之外甚至不安全的行为（Abouelazm et al., 2024; Amodei et al., 2016; Gershman &amp; Niv, 2015; Hendrycks et al., 2021; Knox et al., 2023）。这一挑战催生了奖励学习这一广泛的研究方向：奖励函数不是被显式给定，而是从人类反馈中推断出来。这类方法之所以有吸引力，是因为它允许领域专家通过判断或干预来表达意图——这往往比给出完整的形式化规格更容易。
+然而，关于行为的人类反馈形式多种多样。以往工作研究了多种反馈形式下的学习，包括：示范学习（demonstrations）（Chan &amp; van der Schaar, 2021; Ng et al., 2000）、比较或偏好（comparisons/preferences）（Christiano et al., 2017; Wirth et al., 2016）、标量评分（scalar ratings）（Knox &amp; Stone, 2009）、排序（rankings）（Brown et al., 2019; Myers et al., 2021），以及纠正或紧急停止之类的干预（corrections / emergency stops）（Ghosal et al., 2023; Hadfield-Menell et al., 2017; Losey et al., 2022）等。每一种反馈类型都只提供了关于底层奖励函数的部分信息：示范对状态–动作空间的覆盖是稀疏的，且只沿着专家行为约束奖励；比较只提供关于回报的相对信息，无法完整刻画被比较备选方案之外的权衡；评分只给出序数信息（ordinal information），而不包含偏好的强度；停止信号通常只表明行为”不可接受”，却不说明此时怎样才算最优。因此，依赖任何单一反馈类型都可能使奖励的某些方面无法被确定。
+上述局限凸显了从多种反馈类型学习的必要性——不同模态能够提供互补信息，从而消解单一来源遗留下来的歧义。此外，不同反馈类型在可获得性、成本与信息量上各有差异，因而理解它们彼此之间的关系、各自携带多少信息、在何处重叠、在何时相互冲突，就显得十分重要。
+尽管潜力互补，从异质反馈类型中联合学习奖励函数仍然充满挑战。现有方法要么为每种反馈分别训练奖励模型、事后（post hoc）再加以组合（Ibarz et al., 2018; Macuglia et al., 2025; Metz et al., 2025），要么只关注一小部分模态（通常是示范与比较）（Bıyık et al., 2022）。这两种策略都会带来显著问题：事后聚合需要回答”如何调和不同反馈类型之间的奖励尺度与不确定性”；而把多样反馈折叠进单一中间表示（例如偏好）则可能抹掉模态专属信息，并且并不适用于所有反馈形式。因此，尽管各种反馈在潜力上互补，实践中要”联合地”从多种反馈学习奖励仍然困难。
+一个更有原则性的视角是：把每种反馈类型都看作对共享潜在奖励函数的一次概率观测。在这个框架下，从多类型反馈学习就自然地对应为贝叶斯推断：每种反馈模态通过其似然贡献信息。已有若干框架按此方式形式化人类反馈，例如把反馈建模为（可能是隐式的）选择集上的奖励理性选择（reward-rational choices）（Jeon et al., 2020）。这种基于似然的表述为异质反馈提供了概念上统一的处理方式，并清楚地揭示出不同反馈类型如何与同一个底层奖励相关联。然而，在此设定下进行精确贝叶斯推断通常不可行，因为需要对反馈实现与奖励函数两者同时做边缘化。
+为应对这些挑战，我们提出一种可扩展的摊销变分推断方法，用于从多类型反馈学习奖励函数。我们的方法建立在可扩展贝叶斯逆强化学习（Scalable Bayesian IRL）的既有工作之上（Chan &amp; van der Schaar, 2021），联合学习一个共享的变分奖励表示与若干反馈专属似然模型，并通过优化单一的证据下界完成训练。
+本文贡献具体如下：
+
+我们提出一个统一的贝叶斯形式化，用于从多类型反馈学习奖励函数：每种反馈模态通过显式似然贡献信息，且无需手动损失平衡（第 4 节）。
+我们提出一个可扩展的摊销变分推断算法，联合学习共享奖励表示与反馈专属似然模型（第 5 节）。
+我们通过实验证明：从多类型反馈联合学习能够利用互补信息、提升奖励恢复与策略鲁棒性，并在多个强化学习基准上产生可解释的奖励不确定性（第 6 节）¹。
+
+
+¹ 代码与训练好的模型见 https://github.com/rabaur/mavrl
+
+
+2. 相关工作（Related Work）奖励学习（Reward Learning）。 当显式指定奖励不切实际时，奖励学习旨在从人类反馈中推断奖励函数（Abbeel &amp; Ng, 2004; Christiano et al., 2017; Ng et al., 2000）。早期工作聚焦于从示范中做逆强化学习（inverse reinforcement learning, IRL），假设专家轨迹来自某个未知奖励下的（近似）最优行为（Abbeel &amp; Ng, 2004; Ng et al., 2000）。近年来，基于偏好的强化学习逐渐兴起，尤其是在语言建模中的应用：人类比较智能体产生的轨迹片段，奖励模型用 Bradley–Terry 模型或相关的概率选择形式化来训练（Christiano et al., 2017; Ouyang et al., 2022）。除示范与偏好之外，学界还探索了其他多种反馈类型，包括纠正（corrections）（Bajcsy et al., 2017; Losey et al., 2022）、排序（rankings）（Brown et al., 2020; Myers et al., 2021）和紧急停止（emergency stops）（Hadfield-Menell et al., 2017）。每种反馈范式都引入各自的建模假设与损失函数，并且通常被孤立地研究。Jeon et al.（2020）提出了一种统一视角，证明许多反馈类型都可以被解释为（可能是隐式的）选择集上的奖励理性选择。尽管这一框架给出了反馈的通用概率解释，但它本身并不产生一种能从异质反馈源联合学习的可扩展方法。
+贝叶斯 IRL 的近似推断（Approximate Inference for Bayesian IRL）。 与本文最密切相关的是可扩展贝叶斯 IRL 的相关文献。贝叶斯 IRL 把从示范学习奖励表述为后验推断，但早期方法依赖 MCMC 或其他基于采样的推断手段，限制了其只能应用于小规模任务（Ramachandran &amp; Amir, 2007; Rothkopf &amp; Dimitrakakis, 2011）。为解决这一问题，Chan &amp; van der Schaar（2021）提出 AVRIL，将摊销变分推断应用于贝叶斯 IRL：联合学习一个变分奖励编码器与一个示范似然解码器。该形式化无需在内循环中反复求解强化学习问题即可高效进行后验推断，并已被证明能扩展到高维控制任务，以及语言建模中基于 Transformer 的奖励模型（Cai et al., 2025）。另有一些近期工作把变分推断用于偏好学习，以捕捉用户专属的奖励差异，但其目标不同于”从多类型反馈学习共享奖励函数”（Poddar et al., 2024）。我们直接在 AVRIL 框架之上构建：用一组反馈专属似然模型替换其单一的示范似然，同时保持对奖励函数单一的共享变分后验。这使得我们可以从多种反馈类型进行联合摊销推断，而无需把它们折叠进某个公共替代目标。
+多类型反馈（Multi-Type Feedback）。 与单类型奖励学习相比，从多种类型的人类反馈学习的工作相对较少。大多数已有工作聚焦于示范与偏好，并且主要把示范用作初始化步骤：先用示范初始化，再施加基于偏好的学习以进一步精修策略与奖励估计（Bıyık et al., 2022; Ibarz et al., 2018; Macuglia et al., 2025; Palan et al., 2019）。少数方法尝试在单一学习流程中纳入两种以上的反馈类型：Mehta &amp; Losey（2024）在机器人设定中，用”奖励理性选择”框架整合示范、纠正与偏好，但最终还是通过加性损失项来组合各模态，而各损失项的相对影响由设计选择（例如采样率）固定。近期的基准套件与评估平台强调了异质反馈的实践相关性（Metz et al., 2023; Yuan et al., 2024）；已有的大规模研究则用集成式方法评估反馈类型的组合（Metz et al., 2025）。然而，这些方法并不对单一奖励函数做联合推断，而是依赖启发式来调和不同反馈类型之间在奖励尺度与不确定性上的差异。
+与之相对，我们的方法通过把反馈专属似然整合进同一个变分目标，从多类型反馈中对共享奖励函数进行联合贝叶斯推断。
+
+3. 预备知识（Preliminaries）我们考虑马尔可夫决策过程（MDP） ，其中  为状态空间， 为动作空间， 为转移动力学，    为真实奖励函数，  为折扣因子。 与  既可以是离散的也可以是连续的，且我们不假设能够访问转移动力学。此外，奖励函数  被假定为不可观测的。
+智能体通过一个（可能是随机的）平稳策略  与 MDP 交互，该策略在 MDP 上诱导出轨迹   上的分布。用  表示所有平稳策略构成的空间， 表示所有轨迹构成的空间²。给定奖励函数 ，轨迹  的回报为  ，策略  的期望回报为  。对给定的奖励函数 ，记     为最优动作值函数。
+
+² 所有定义与结论都能直接推广到有限时域 MDP：只需把无穷折扣和替换为有限时域回报。这里采用无穷时域折扣表述仅为记号方便。
+
+从多类型反馈进行贝叶斯学习。 给定一组多类型人类反馈 ，我们的目标是学习奖励函数。具体地，我们考虑  ，其中  对应于类型  的反馈（例如偏好）。从贝叶斯视角出发，我们的目标是推断给定数据下奖励函数的后验分布。据此，我们把奖励函数  视为潜变量，考虑
+
+其中  是奖励函数上的先验， 是在  下观测到多类型反馈  的似然。关键在于，给定  时观测反馈的似然以一种有用的方式因子分解：由于观测在给定奖励函数后条件独立，联合似然可写为  。因此，多类型反馈后验满足   。
+摊销变分推断（Amortized Variational Inference）。 尽管优雅，方程 (1) 通常是双重不可解的（doubly intractable）：一方面似然中需要对反馈选择做积分，另一方面分母需要对所有奖励函数做积分。变分推断（VI）用更简单的变分分布   来逼近后验，其参数  通过最大化证据下界（ELBO）学习：
+
+第一项最大化期望数据似然，第二项把  向先验  做软性正则化。变分自编码器（VAE）框架（Kingma &amp; Welling, 2014）通过把变分分布  表示为将观测  映射到潜变量  的神经网络编码器，使变分推断得以广泛应用与扩展，从而把后验推断在数据点之间”摊销”。此外，VAE 联合学习似然模型 ——即解码器——它从潜表示  重建观测响应 ³。这依赖重参数化技巧：把采样表达为确定性变换  （  ），从而使梯度能够穿过编码器流动。
+
+³ 通常，在 VAE 中目标是通过重建任务（ ）学习有意义的潜表示 。
+
+
+4. 反馈专属似然模型（Feedback-Specific Likelihood Models）我们为每种反馈类型定义概率似然模型，它们共同构成贝叶斯奖励学习目标（式 1）中的联合数据似然 ，从而决定我们的算法所优化的变分目标。在本文中，我们聚焦于偏好（成对比较）、示范、评分与停止信号四类反馈；但所提出的框架与算法适用于任何能够指定概率似然的反馈类型。重要的是，我们的方法与具体似然模型的选择无关，不依赖共享的中间表示，也不需要跨反馈类型的手动损失平衡。
+偏好（Preferences，P）。 这里采用广泛使用的 Bradley–Terry 模型：在奖励函数  下，轨迹  优于轨迹 （记为  ）的概率为
+
+该形式可以自然地扩展到轨迹片段之间的比较，正如 Christiano et al.（2017）所做的那样。逆温度参数  控制偏好判断的随机性。
+示范（Demonstrations，D）。 专家示范是另一种常用的反馈形式。Ramachandran &amp; Amir（2007）及其后续工作（例如 Chan &amp; van der Schaar, 2021; Rothkopf &amp; Dimitrakakis, 2011）用 Boltzmann 理性策略   对专家示范建模。我们沿用该建模方式，于是在奖励函数  下，一条专家轨迹  的似然为
+
+其中逆温度   控制专家的最优程度。
+评分（Ratings，R）。 评分提供序数反馈：人类给一条轨迹赋予离散分数以反映其感知质量，类似于李克特量表（Likert scale）判断（Likert, 1932）。我们用标准的序数回归框架——有序 logit 模型（ordered logit model）——对这一反馈形式建模（McCullagh, 1980）。
+我们假设每条轨迹在奖励函数  下会诱导一个未观测的潜在效用（latent utility），用以反映其质量，并叠加随机的判断噪声。报告的评分   通过一组有序切点         对这个潜在效用离散化而得到：当轨迹  的潜在效用落在  与  之间时，它得到评分  。在该模型下，对轨迹  观测到评分   的似然为
+
+其中  表示 logistic 累积分布函数。重要的是，这一反馈模态不等价于对奖励值的直接回归：它只提供序数信息，而不提供绝对判断。切点  不必等距，这反映了人类在把感知质量映射到离散评分时通常不会采用均匀或线性的阈值。
+停止信号（Stops，S）。 停止信号刻画这样一种场景：一旦智能体的表现退化到可接受水平之下，人类监督者就介入并终止其行为。这类反馈在实践中很普遍——例如机器人领域的安全停止、人在环路（human-in-the-loop）控制——但作为奖励或策略学习信号，受到的关注却很少。我们的框架通过对终止时间上的显式似然建模，自然地容纳了停止反馈。
+设  为用户介入的（随机）时间步。我们用离散时间风险模型（hazard model）对  建模：在时间  的瞬时风险（hazard）依赖于截至该时刻轨迹的累积次优程度。具体地，在奖励  下，动作  在状态  的瞬时次优程度定义为
+
+并引入一个回溯折扣因子   来折扣较早的偏差。由此得到的风险函数为
+
+其中   越大表示专家越”不宽容”。观测到在时间  发生停止的似然即为如下几何分布：
+
+如果片段内没有发生停止，则观测被视为右删失（right-censored）。
+其他反馈类型（Additional Feedback Types）。 文献中研究的其他反馈类型还包括排序（rankings）（Brown et al., 2019; Myers et al., 2021）、纠正（corrections）（Losey et al., 2022），以及其他形式的人为干预（human intervention）（Jeon et al., 2020）。虽然本文没有显式建模它们，但反馈专属似然可以类似地推导出来。关键在于，任何这类似然都可以直接纳入我们的框架与算法，无需额外的结构性修改。关于反馈模拟的实现细节见附录 A.2。
+
+5. MAVRL：多反馈摊销变分奖励学习（MAVRL: Multi-Feedback Amortized Variational Reward Learning）下面介绍 MAVRL——一种从多类型反馈进行贝叶斯奖励推断的通用学习算法。该算法（算法 1）用摊销变分推断实例化第 3 节引入的贝叶斯目标，并直接利用第 4 节定义的反馈专属似然模型。
+[算法 1] 位置说明：原文第 5 页顶部，题为 “Algorithm 1 (MAVRL): Multi-Feedback Amortized Variational Reward Learning”。 算法内容以如下伪代码表达：
+
+输入：多类型反馈 ，超参数 、，学习率 
+重复直到收敛：
+
+为所有反馈类型采样小批量： 
+编码所有转移： 
+重参数化奖励：    
+计算 Q 值： 
+计算各反馈专属负对数似然：  
+ ，其中先验  
+ 
+聚合损失：   
+更新参数：   
+
+返回：奖励编码器 、动作值模型 
+
+
+5.1 目标函数（Objective）我们的目标是联合学习一个概率奖励模型与一个辅助的动作值函数，后者用于支持那些基于状态–动作值来定义的反馈类型。具体来说，我们参数化一个条件奖励分布
+
+其中  与  都是神经网络，把状态–动作对  映射到局部奖励值上的一个分布。从这个编码器采样会在轨迹回报上诱导出一个分布，用来评估各类反馈的似然。
+此外，我们还学习一个辅助的动作值函数 ，它是依赖价值估计的反馈类型所必需的；当适用时，还会学习与反馈专属似然模型相关的参数 ，例如评分模型的切点。关键在于，奖励编码器本身与反馈的类型和结构无关；所有反馈专属的语义完全由相应的似然函数承载。
+学习过程直接来自贝叶斯奖励学习问题的证据下界（ELBO）。给定反馈数据集 （其中每个  包含类型  的反馈观测），MAVRL 所要最大化的统一目标为
+
+这里  表示一个通用的反馈观测，其结构取决于反馈类型——可以是轨迹、比较、标量评分或终止时间。每种反馈类型都为目标贡献一项似然，无需手动加权或分阶段优化。
+最后一项  强制推断得到的奖励分布与辅助动作值函数保持一致。借鉴 Chan &amp; van der Schaar（2021），我们加入一个时序差分（TD）正则化项，它鼓励编码器预测的奖励与  所蕴含的单步 Bellman 差分相一致。
+为定义这一项，我们利用与观测反馈相关联的轨迹。每条反馈观测  都植根于一条或多条轨迹，我们从中提取状态–动作转移。设   表示这样的转移元组，其中  是在状态  中采取的动作。相应的 TD 目标定义为
+
+我们通过最大化 TD 目标在编码器分布下的对数似然，来惩罚该 TD 目标与编码器预测奖励之间的偏差：
+
+其中  表示从观测反馈所依据的轨迹中提取出的转移集合。
+[图 1] 位置说明：原文第 6 页中部，标题为 “Figure 1. Visualizations of inferred reward functions from 2 demonstrations, 256 pairwise comparisons, or 128 ratings on a 10×10 grid_trap environment.”内容说明（中文）：该图在   的 grid_trap 网格环境中，可视化了分别由 2 条示范、256 对成对比较、128 条评分 推断得到的奖励函数。每一行对应一种单一反馈模态的推断结果；最后一列展示的是组合全部反馈模态后的结果。图中同时呈现学习到的奖励均值估计及其由方差量化的不确定性（原文采用均值与方差的双重视觉编码）。
+5.2 MAVRL 的性质（Properties of MAVRL）可扩展性（Extensibility）。 MAVRL 的一个核心性质是：它能使用任何只要可以指定似然的人类反馈形式。每种反馈类型都仅通过其似然项   对目标做出贡献。因此，加入一种新的反馈模态只需要定义它的似然，而无需改动奖励编码器、辅助价值函数或优化过程。
+无需跨模态损失平衡的统一目标（Unified Objective Without Cross-Modal Loss Balancing）。 MAVRL 不假设不同反馈模态除了奖励函数之外还共享某种公共中间表示或监督信号。反馈专属似然通过不同的统计关系把观测与奖励联系起来——例如动作概率、回报比较、序数阈值或累积遗憾（cumulative regret）。由于所有反馈都以对数似然项的形式出现在同一个变分目标中，每个模态的相对影响力由数据与反馈模型决定，而非由手工调节的跨模态权重决定。因此，MAVRL 完全消除了”每种反馈类型在奖励估计中该占多大比重”的选择难题：举例来说，当有   条示范和   个偏好、且噪声参数已知时，它们在一个组合损失或事后集成中的相对权重在一般 MDP 中是任意的。MAVRL 彻底避免了这一问题。
+剩余的参数有两类：
+
+似然专属的噪声参数（例如 Bradley–Terry 温度 、评分切点 、停止风险参数 ）刻画标注者的行为，它们植根于成熟的人类反馈模型；这些参数可以（可选地）被当作潜变量，在行为上合理的先验下被推断。
+正则化系数  与  控制后验正则化与”奖励–Q 值”一致性；我们通过标准模型选择调参，性能在很宽取值范围内都很稳定；其中基于 Q 值的反馈（示范与停止信号）需要非零的 。
+
+顺序无关与异步训练（Order-Invariant and Asynchronous Training）。 训练目标与反馈模态的顺序、频率和交错方式无关。来自各个类型反馈数据集的 mini-batch 被独立采样，并且可以在优化过程中任意组合。
+
+6. 实验（Experiments）我们在多种环境与反馈配置下评估 MAVRL，回答三个问题：
+
+学习奖励函数时，不同反馈类型如何在性质上互补（第 6.1 节）；
+这种互补性如何转化为下游策略性能与奖励保真度（第 6.2 节）；
+从多类型反馈推断出的奖励，是否会在环境扰动或奖励错误设定下带来更鲁棒的行为（第 6.3 节）。
+
+我们的实验横跨表格型网格世界域与连续控制基准，并把示范、成对比较、评分和停止反馈在单独使用与组合使用两种情形下都纳入考察。
+除特别说明外，所有方法都在每个环境固定的反馈预算下训练，且每种模态被分配相同数量的反馈样本，以保证公平比较。记 、、、 分别为偏好、示范、评分与停止信号的样本数。在网格世界环境中，我们设置   、 、 ；在 Acrobot-v1 与 CartPole-v1 中，  、 、 ；在 LunarLander-v3 中，   、 。
+6.1 反馈类型互补（Feedback Types Complement One Another）在 [图 1]（原文第 6 页，图题见上文）中，我们可视化 MAVRL 基于不同单一反馈类型及其组合在网格世界环境中学习到的奖励估计。我们同时报告学习到的奖励均值估计及相应的、以方差量化的不确定性。更多示例见附录 F。
+我们发现每种反馈类型都会在推断出的奖励与不确定性估计上引起一种特征性的模式：
+
+示范在专家轨迹沿线给出低不确定性的奖励估计，但会留下大片状态空间区域”欠确定”（underdetermined）；
+成对偏好提供更广的覆盖，但可能把较高的奖励赋给那些被频繁访问、却并非全局最优的中间状态；
+评分能可靠地识别出目标状态，但对其周围奖励地形的信息有限；
+停止信号强烈约束不安全或低奖励区域，但在”避开之外什么行为是值得要的”这一点上提供相对较少的指引。
+
+这些局限恰好说明了不同反馈类型的互补本质——当它们被组合时，上述局限得以缓解。我们基于组合反馈训练的奖励模型能够以很高的保真度重建原始的真实奖励函数，并可靠地同时识别高奖励与低奖励状态。
+6.2 组合反馈提升策略性能与奖励识别（Combining Feedback Improves Policy Performance and Reward Identification）我们在 [表 1]（原文第 8 页，跨栏表格）中评估不同反馈组合在一系列网格世界与连续控制环境中的下游策略性能。对每种组合，我们都针对学习到的奖励估计优化一个策略，并报告该策略关于真实奖励函数的总回报。
+所有结果在 10 次运行上取平均；回报按环境线性缩放，使得 100 对应于用真实奖励训练出的近似最优策略的性能，0 对应于均匀随机策略的回报。因此，超过 100 的数值表示学习策略优于用真实奖励训练的策略。虽然这些归一化指标刻画了下游策略性能，但它们并不整体反映奖励恢复的质量。为此，我们还报告 EPIC 距离（Gleave et al., 2021）：对仅在基于势的塑形（potential-based shaping）、正缩放与常数平移意义下等价的奖励函数，EPIC 距离为 0。我们只在可精确比较奖励的表格型环境中报告 EPIC 距离。
+[表 1] 说明：主表分为上下两部分——上部分为”归一化平均回报（越高越好）”，下部分为”平均 EPIC 距离（越低越好）”，环境行依次为 grid_cliff、grid_sparse、grid_trap、Acrobot-v1、CartPole-v1、LunarLander-v3；列对应各种单模态与多模态反馈组合（深灰底为最优，浅灰底为次优）。原文表格位于第 8 页，请对照原 PDF 查看逐列数值。
+组合全部反馈类型获得最强的整体性能。 总体上，PDR（偏好＋示范＋评分等组合）在各环境中表现强劲，在 6 个环境中的 4 个取得最好或接近最好的性能，例外是 Acrobot-v1 与 LunarLander-v3。这支持我们的核心假设：MAVRL 能够利用不同反馈类型中包含的互补信息。
+没有任何单一类型基线在所有环境中占优。 或许并不令人意外：示范（D）在稀疏奖励设置中表现出色——例如 grid_sparse（95.0）与 LunarLander-v3（115.7）；评分（R）在 CartPole-v1 的单一反馈方法中表现最好（100）。偏好（P）作为独立模态表现相对温和，但在与其他模态组合时贡献显著——这与以往”成对比较需要大量样本才能达到有竞争力的性能”的发现一致（Christiano et al., 2017）。
+停止反馈与其他反馈互补。 在若干环境中，包含停止反馈的组合通常优于不含停止反馈的对应组合。例如在 grid_sparse 中，加入停止反馈的组合（100.0）优于仅用示范 D（95.0）；含停止反馈的偏好组合（70.6）也优于仅偏好（58.8）。这说明停止信号提供了关于轨迹次优性的宝贵信息，而这种信息很难从其他反馈中获取。
+EPIC 距离揭示策略性能之外的奖励恢复质量。 在计算 EPIC 的三个表格型环境中，PDR 取得最低（grid_cliff：0.481；grid_trap：0.520）或次低（grid_sparse：0.383）的 EPIC 距离。EPIC 与性能的偏差只出现在 grid_sparse 上：某一组合达到最低 EPIC（0.380）却只有中等的策略性能（82.3），这表明”忠实的奖励恢复”与”较高的下游性能”虽不完全等价，但通过组合所有反馈模态可以同时实现。
+相对非变分基线，MAVRL 既有效又高效。 [表 2]（原文第 8 页底部）把 MAVRL 与两种自然的替代方法对比：
+
+MCMC：一种非摊销的贝叶斯奖励学习方法，代表后验推断的”金标准”；
+事后奖励平均（Post-Hoc Reward Averaging）：一种非变分启发式，通过集成平均组合多个独立训练的奖励估计（参见 Metz et al., 2025）。
+
+[表 2] 说明：表列依次为 Post-Hoc Avg 与 MCMC 与 MAVRL 的性能（归一化回报，n=10，越高越好）与每轮奖励模型训练的墙钟时间；环境行 grid_sparse / grid_cliff / grid_trap / LunarLander-v3。原文数值请对照原 PDF。
+与 MCMC 相比，MAVRL 在网格环境中以约 30 倍更低的计算量取得相当或更优的性能；并且与 MCMC 不同，它不需要内循环 MDP 求解，因此在 MCMC 不可行的连续控制设定下依然可解。与事后平均相比，MAVRL 在所有环境上都大幅优于朴素集成——这表明独立训练的奖励模型会把尺度与塑形各异的信号混在一起，错失了联合推断才能捕捉到的跨模态互补性。
+在匹配的反馈预算下增益仍然成立。 为检验组合反馈带来的改进反映的是”真正的互补性”而非”更大的总监督量”，我们做了等预算消融：用贝叶斯优化把固定总样本量分配到各模态之间（附录 C，表 4）。在连续控制基准上，组合方式一致地达到或超过最强的单一模态，PDR 位列顶尖。在表格型网格上，单一信息模态在满预算下往往胜过被切碎的多种模态分配；而像 D 或某些双模态组合则成为最强组合。总体而言，组合反馈带来真正的跨模态互补性——是否纳入某个模态，取决于它在目标环境中的信息量。
+6.3 从多类型反馈学习到的奖励更鲁棒（Rewards Learned from Multi-Type Feedback are More Robust）我们沿两条互补的轴评估用 MAVRL 推断的奖励函数的鲁棒性：(i) 部署时环境动力学发生偏移的鲁棒性；(ii) 训练时所用反馈含噪声或被错误设定的鲁棒性。在两种设定下，奖励模型都在名义配置下只训练一次，之后保持固定；策略则在不做任何进一步奖励适配的情况下重训——从而把奖励质量的影响与策略优化的影响分离开。我们比较单一反馈模态、其组合（PDR）以及行为克隆（BC）基线。完整实验细节与所有反馈组合的结果见附录 E。
+在动力学扰动下，多类型反馈衰减得更平缓。 我们在奖励学习完成后扰动每个环境的转移动力学：在 grid_cliff 与 grid_trap 中增加动作随机性，在 Acrobot-v1 中改变系统动力学的结构性参数，在 LunarLander-v3 中改变重力与风。[图 2]（原文第 9 页）展示了这些扰动下的性能。
+[图 2] 内容说明（中文）：该图是三组子图的组合，纵轴均为”归一化回报”（n=10，误差棒为标准误），横轴为扰动强度。
+
+左：grid_cliff 与 grid_trap 的”环境随机性”从 0 增大到 0.8 时，各方法的归一化回报曲线；
+中：Acrobot-v1 中摆杆两段长度之比（link length asymmetry，约 1.0→2.0）增大时的表现；
+右：LunarLander-v3 中重力（g 从 −10 到 −12）与风（wind 0→25）增强时的表现（横轴同时示意了仅重力变化与固定 g=−12 时变化风两段）。
+
+图中奖励模型与基线都在未扰动设定下训练并在整个变化过程中保持固定。可以观察到：在网格环境中，由多类型反馈推断的奖励训练出的策略在扰动下比由单一反馈模态或仅靠模仿训练的策略衰减得更平缓。虽然组合反馈的下游性能仍比模仿基线衰减得更平缓，但某些单模态（例如 R）的性能反而超过它——这与未扰动设定下的情况一致。在网格世界中，动作随机性增大导致模仿与单反馈奖励模型（例如 R、P、D）快速恶化，而从组合反馈学到的奖励能保持更高的平均回报。Acrobot-v1 中也有类似模式：系统动力学的结构性变化对模仿策略与单反馈奖励模型的冲击不成比例地大，而组合反馈在各级扰动下给出持续更稳定的性能。在 LunarLander-v3 中，重力与风扰动严重削弱了 BC 的性能；相比之下，MAVRL——尤其是用多类型反馈（PDR）和示范反馈（D）训练时——在越来越有挑战性的动力学下依然显著更鲁棒。
+多类型反馈能补偿大多数被错误设定的模态。 接下来我们检验多类型优势能否延伸到”反馈信号本身被污染”的情形——采用与第 6.2 节相同的固定分配反馈预算。我们施加四种错误设定（分别或联合）：低估偏好（）与示范（）的标注者理性程度、在评分效用上加性高斯噪声、以及停止倾向被误校准。grid_cliff 与 grid_sparse 的结果见 [表 3]（原文第 9 页；grid_trap 上的同样结论见表 5）。
+[表 3] 说明：上半部分为单模态模型，下半部分为使用完整反馈集合的 MAVRL；每一行把指定通道的数据侧参数破坏掉，而模型仍假设其取值完好（被破坏的模态在原表中以模糊/灰色标出，例如 PDRS 表示偏好被错误设定）。列含义：Base＝完好设定的归一化回报；Misspec.＝均值±标准误；Rat.＝Misspec./Base。原文数值请对照原 PDF。
+两点观察很突出。第一，在四种污染中的三种（偏好、评分与停止）下，PDR 保留了其完好设定性能的 ≥90%，而相应的单模态基线则崩塌到低至 0.10 的比例。这表明存在很强的补偿效应：在多个反馈类型上的联合推断吸收来自单一来源的污染，而不是把它传播开。第二，例外是示范：污染示范把 PDR 打到 0.38–0.50 的比例；同时污染全部四个通道也大致达到同一水平（0.43–0.50）。因此 PDR 的最坏情况退化受限于示范通道，而不是在各通道之间叠加恶化。总体而言，多类型优势可延伸到四个反馈通道中三个的上游污染场景，而示范仍是结构性的薄弱点。
+
+7. 结论（Conclusion）本文将”从多类型反馈学习奖励”表述为对共享潜在奖励函数的贝叶斯推断：每种反馈模态都通过显式似然作出贡献。我们提出了 MAVRL——一种可扩展的摊销变分推断算法，它优化单一统一目标。经验上我们发现：不同反馈类型会诱导出不同的奖励与不确定性结构，而从多个模态联合推断奖励能够利用它们的互补优势，从而提升奖励恢复、下游策略性能与鲁棒性。
+局限性（Limitations）。 我们的评估局限于仿真环境——虽然这允许对不同类型的反馈做受控分析，但并未捕捉真实世界任务的完整复杂性。此外，我们依赖合成生成的反馈；把 MAVRL 应用到可能表现出系统性偏差、不一致或依赖上下文的判断的真实人类反馈，仍是未来工作的重要方向。最后，尽管我们的框架能推断奖励不确定性，我们尚未利用这种不确定性来引导反馈采集，因此把异质反馈的主动学习（active learning）留作一个有前景的未来方向。
+
+致谢（Acknowledgments）本研究主要由 ETH AI Center 资助：其中 Raphaël Baur 获得 ETH AI Center 博士奖学金，Thomas Kleine Buening 获得 ETH AI Center 博士后奖学金。
+影响声明（Impact Statement）本文工作旨在推动机器学习领域的发展。我们的工作可能存在许多潜在的社会影响，但我们认为其中没有哪一项需要在此特别强调。
+
+参考文献（References）
+以下按惯例保留英文原文（按原 PDF 整理，作者与年份信息供检索）。
+
+
+Abbeel, P. and Ng, A. Y. Apprenticeship learning via inverse reinforcement learning. ICML, 2004.
+
+Abouelazm, A., Michel, J., and Zöllner, J. M. A review of reward functions for reinforcement learning in the context of autonomous driving. IEEE IV, 2024.
+
+Akiba, T., Sano, S., Yanase, T., Ohta, T., and Koyama, M. Optuna: A next-generation hyperparameter optimization framework. ACM SIGKDD, 2019.
+
+Amodei, D., Olah, C., Steinhardt, J., Christiano, P., Schulman, J., and Mané, D. Concrete problems in AI safety. arXiv:1606.06565, 2016.
+
+Bajcsy, A., Losey, D. P., O’Malley, M. K., and Dragan, A. D. Learning robot objectives from physical human interaction. CoRL, PMLR 78, pp. 217–226, 2017.
+
+Brown, D., Goo, W., Nagarajan, P., and Niekum, S. Extrapolating beyond suboptimal demonstrations via inverse reinforcement learning from observations. ICML, PMLR 97, pp. 783–792, 2019.
+
+Brown, D. S., Coleman, R., Srinivasan, R., and Niekum, S. Safe imitation learning via fast Bayesian reward inference from preferences. ICML, 2020.
+
+Bıyık, E., Losey, D. P., Palan, M., Landolfi, N. C., Shevchuk, G., and Sadigh, D. Learning reward functions from diverse sources of human feedback: Optimally integrating demonstrations and preferences. IJRR, 41(1):45–67, 2022.
+
+Cai, Y., Yuan, Y., Shi, J., and Lin, Q. Approximated variational Bayesian inverse reinforcement learning for large language model alignment. AAAI, vol. 39, pp. 23505–23513, 2025.
+
+Chan, A. J. and van der Schaar, M. Scalable Bayesian inverse reinforcement learning. ICLR, 2021.
+
+Christiano, P. F., Leike, J., Brown, T. B., Martic, M., Legg, S., and Amodei, D. Deep reinforcement learning from human preferences. NIPS, pp. 4302–4310, 2017.
+
+Gershman, S. J. and Niv, Y. Novelty and inductive generalization in human reinforcement learning. Topics in Cognitive Science, 7(3):391–415, 2015.
+
+Ghosal, G. R., Zurek, M., Brown, D. S., and Dragan, A. D. The effect of modeling human rationality level on learning rewards from multiple feedback types. AAAI, 2023.
+
+Gleave, A., Dennis, M. D., Legg, S., Russell, S., and Leike, J. Quantifying differences in reward functions. ICLR, 2021.
+
+Hadfield-Menell, D., Dragan, A., Abbeel, P., and Russell, S. The off-switch game. IJCAI, pp. 220–227, 2017.
+
+Hendrycks, D., Carlini, N., Schulman, J., and Steinhardt, J. Unsolved problems in ML safety. arXiv:2109.13916, 2021.
+
+Ibarz, B., Leike, J., Pohlen, T., Irving, G., Legg, S., and Amodei, D. Reward learning from human preferences and demonstrations in Atari. NeurIPS, 31, 2018.
+
+Jeon, H. J., Milli, S., and Dragan, A. D. Reward-rational (implicit) choice: A unifying formalism for reward learning. arXiv:2002.04833, 2020.
+
+Kingma, D. P. and Welling, M. Auto-Encoding Variational Bayes. ICLR, 2014.
+
+Knox, W. B. and Stone, P. Interactively shaping agents via human reinforcement: The TAMER framework. K-CAP ‘09, pp. 9–16, 2009.
+
+Knox, W. B., Allievi, A., Banzhaf, H., Schmitt, F., and Stone, P. Reward (mis)design for autonomous driving. Artificial Intelligence, 316:103829, 2023.
+
+Likert, R. A technique for the measurement of attitudes. Archives of Psychology, 140:1–55, 1932.
+
+Losey, D. P., Bajcsy, A., O’Malley, M. K., and Dragan, A. D. Physical interaction as communication: Learning robot objectives online from human corrections. IJRR, 41(1):20–44, 2022.
+
+Loshchilov, I. and Hutter, F. Decoupled weight decay regularization. arXiv:1711.05101, 2019.
+
+Macuglia, M., Friedrich, P., and Ramponi, G. Fine-tuning behavioral cloning policies with preference-based reinforcement learning. arXiv:2509.26605, 2025.
+
+McCullagh, P. Regression models for ordinal data. JRSS-B, 42(2):109–127, 1980.
+
+Mehta, S. A. and Losey, D. P. Unified learning from demonstrations, corrections, and preferences during physical human–robot interaction. J. Hum.-Robot Interact., 13(3), 2024.
+
+Metz, Y., Lindner, D., Baur, R., Keim, D. A., and El-Assady, M. RLHF-Blender: A configurable interactive interface for learning from diverse human feedback. Interactive Learning with Implicit Human Feedback Workshop at ICML, 2023.
+
+Metz, Y., Geiszl, A., Baur, R., and El-Assady, M. Reward learning from multiple feedback types. ICLR, 2025.
+
+Myers, V., Bıyık, E., Anari, N., and Sadigh, D. Learning multimodal rewards from rankings. CoRL, 2021.
+
+Ng, A. Y., Harada, D., and Russell, S. J. Policy invariance under reward transformations: Theory and application to reward shaping. ICML, 1999.
+
+Ng, A. Y., Russell, S., et al. Algorithms for inverse reinforcement learning. ICML, vol. 1, 2000.
+
+Ouyang, L., Wu, J., Jiang, X., et al. Training language models to follow instructions with human feedback. arXiv:2203.02155, 2022.
+
+Palan, M., Landolfi, N. C., Shevchuk, G., and Sadigh, D. Learning reward functions by integrating human demonstrations and preferences. RSS, 2019.
+
+Paszke, A., Gross, S., Massa, F., et al. PyTorch: An imperative style, high-performance deep learning library. NeurIPS, 2019.
+
+Poddar, S., Wan, Y., Ivison, H., Gupta, A., and Jaques, N. Personalizing reinforcement learning from human feedback with variational preference learning. NeurIPS (NIPS ‘24), 2024.
+
+Raffin, A., Hill, A., Gleave, A., Kanervisto, A., Ernestus, M., and Dormann, N. Stable-Baselines3: Reliable reinforcement learning implementations. JMLR, 22(268):1–8, 2021.
+
+Ramachandran, D. and Amir, E. Bayesian inverse reinforcement learning. IJCAI’07, pp. 2586–2591, 2007.
+
+Rothkopf, C. A. and Dimitrakakis, C. Preference elicitation and inverse reinforcement learning. ECML/PKDD, pp. 34–48, Springer, 2011.
+
+Wirth, C., Fürnkranz, J., and Neumann, G. Model-free preference-based reinforcement learning. AAAI’16, pp. 2222–2228, 2016.
+
+Yuan, Y., Hao, J., Ma, Y., Dong, Z., Liang, H., Liu, J., Feng, Z., Zhao, K., and Zheng, Y. Uni-RLHF: Universal platform and benchmark suite for reinforcement learning with diverse human feedback. ICLR, 2024.
+
+
+
+附录（Appendix）附录 A 实现细节（Implementation Details）A.1 模型结构（Model Architecture）奖励编码器  与 Q 值估计器  都实现为两层 MLP，激活函数为 Leaky ReLU。对于网格环境，使用学习率  、批大小 32，奖励只依赖状态：。对于控制任务（CartPole-v1、Acrobot-v1、LunarLander-v3），使用学习率 、批大小 128，奖励依赖状态–动作对：。所有模型都用带梯度裁剪（最大范数 1.0）的 AdamW 训练（Loshchilov &amp; Hutter, 2019）。奖励编码器参数化一个以标准正态分布为先验的高斯后验，并用重参数化技巧训练。专家参考策略用 Stable-Baselines3 的 DQN（LunarLander-v3 以外）与 PPO（LunarLander-v3）训练（Raffin et al., 2021）。
+超参数优化。 对每个环境与反馈组合，用 Optuna 的多元 TPE 采样器（constant_liar=True，20 个启动试验）调优超参数（Akiba et al., 2019）。每个试验在采样配置下、跨多个随机种子训练模型，并按所选验证指标打分。联合搜索空间包括：
+
+损失权重  与 ，在  上对数均匀采样；
+奖励编码器宽度：网格为每层 16 / 32 / 64 个隐单元，控制任务为 64 / 128 / 256；
+奖励模型优化器：学习率（对数均匀 ）、批大小（网格为 16 / 32 / 64 / 128，控制任务为 32 / 64 / 128 / 256）；
+对 LunarLander-v3，还包括 PPO 重训的超参数（学习率、裁剪范围、熵/价值系数、GAE-、梯度范数上界等）。
+
+调优在两种”反馈分配模式”下进行：
+
+等预算（Dirichlet）模式：把固定的总反馈预算通过平坦-Dirichlet 分配（由 Optuna 建议）切分到各个激活模态。每种模态设置上限（例如网格/控制任务分别 ≤16/≤32 条示范，因为示范似然会很快饱和），通过裁剪 Dirichlet 比例并重新分配超出的部分来实施。
+固定分配模式：每个模态被分配规定的样本数（FIXED_SAMPLE_COUNTS），只搜索上述优化超参数。该模式用于在”有用且可比”的预算下刻画每个模态的贡献，而不与分配选择相混淆。
+
+对同一环境内的所有方法统一施加相同的调优协议（采样器、搜索空间、每试验种子数、验证指标），从而保证所报数字反映的是匹配计算量下的最佳搜索性能。模型与训练代码基于 PyTorch 实现（Paszke et al., 2019）。
+A.2 反馈模拟（Feedback Simulation）我们用温度参数为  的 Boltzmann 理性策略 rollout 收集轨迹，并从中模拟人类反馈。下面给出各类反馈的生成过程。
+偏好（Preferences）。 从收集到的轨迹中随机提取固定长度  的片段。对每对片段 ，计算其归一化回报  ，并按 Bradley–Terry 模型生成一个偏好：
+
+其中  表示 logistic sigmoid， 控制偏好理性程度。观测偏好按该概率作为 Bernoulli 随机变量采样。取值： ；片段长度  （网格）或  （其余环境）；轨迹理性  （网格，均匀策略）或 （其余环境）。
+示范（Demonstrations）。 专家示范通过 rollout Boltzmann 理性策略    生成，其中  为最优 Q 函数。示范理性  控制专家最优程度。取值： （网格）， （其余所有环境）。
+评分（Ratings）。 从轨迹中提取随机片段并计算其归一化回报。切点  放在逐步片段回报的   百分位处。随后在累积 logit 模型下随机采样评分：
+
+该式产生近似均衡的类别。典型参数：  个类别，片段长度  （网格；其余环境），轨迹理性    （分别对应网格、Acrobot-v1 与 CartPole-v1、LunarLander-v3）。
+停止信号（Stops）。 用基于累积遗憾的离散时间风险模型模拟停止反馈。对一条轨迹片段，在每个时间步计算瞬时遗憾   ，并维护一个折扣累积遗憾：
+
+其中   是遗憾折扣因子，控制过去次优性被”遗忘”的速度。风险率（给定此前未停止时在时刻  停止的概率）为
+
+灵敏度参数  从数据校准为  ，其中  是缩放常数， 是参考遗憾水平（通常取所有片段最大累积遗憾的第 50 百分位）。 越大，停止行为越激进。停止时间顺序采样：在每个时间步  以概率  采样一个停止事件；若片段内没有停止发生，则观测右删失。参数： ，遗憾折扣  ，参考百分位 50%，片段长度  （网格；其余环境），轨迹理性  。
+附录 B 硬件与计算资源（Hardware and Computational Resources）由于第 6 节要评估大量配置，单个奖励模型的训练与评估运行被分发到由 SLURM 管理的机构集群上，每个 worker 分配 4 个 CPU 核与 8 GB 内存。由于奖励编码器与 Q 值估计器网络很小，无需 GPU 加速。最终实验总计算量约为   CPU·小时。
+需要说明的是，在单机上，单次奖励模型训练大约耗时：网格环境 2 分钟，其余环境约 15 分钟；其中大部分计算时间花在”用推断出的奖励函数重训策略以进行评估”上。
+附录 C 等预算结果（Equal Budget Results）对每个环境，我们固定一个总反馈预算 ，由等预算表中的全部 11 个模态子集共享：四种反馈各自单独使用（P、D、R、S）、全部六种两两组合，以及四者的完整组合（PDRS）。预算为：三个表格型网格（grid_cliff、grid_sparse、grid_trap）、Acrobot-v1 与 CartPole-v1 取   个样本；LunarLander-v3 取   个样本。
+对每一对（环境，模态子集），我们运行一次独立的 TPE（Tree-structured Parzen Estimator）搜索，联合调节 (i)  分配给每个激活反馈类型的比例，以及 (ii) 奖励模型的训练超参数（编码器大小、学习率、批大小、重要性加权开关、KL 权重、TD 权重）；对非表格环境，搜索还额外调节下游 PPO 重训超参数。每个试验在表格环境下用 20 个随机种子、非表格环境下用 10 个随机种子训练奖励模型，并按”逐种子归一化折扣回报均值”（表格）或”平均回合回报”（非表格）打分；每个研究运行 125–200 个试验。最佳试验的奖励模型 checkpoint 就是本文所有下游迁移与误设实验所使用的那一批。
+[表 4] 位置与内容说明：原文第 15 页。该表给出等预算设定下、跨环境的各反馈组合的归一化平均回报与平均 EPIC 距离（ ）。表结构同表 1（上半部分为回报、下半部分为 EPIC，越低越好）。回报按环境归一化，100 对应真实奖励训练出的近似最优策略、0 对应均匀随机策略；深灰底为该环境最优（回报在 1% 以内），浅灰底为该区间外次优。具体数值请对照原 PDF。
+附录 D 完整误设结果（Full Misspecification Results）我们考虑四种误设变体，可单独或联合施加：
+
+偏好：低估标注者噪声——  而模型假设  ；
+示范：同样低估标注者噪声——  而模型假设  ；
+
+（上述两者都表示：数据在高度含噪标注下生成，而模型假设标注者近乎理性。）
+
+评分：在评分分配之前给片段效用叠加高斯噪声  ，而模型假设效用无噪声；
+停止倾向：误校准——  而模型假设  。
+
+在所有情况下，奖励模型都用与主表相同的、良好设定的参数训练，因此未扰动基线不变。
+[表 5] 位置与内容说明：原文第 15 页（表 3 的补全版，包含 grid_trap 一列）。表结构同表 3：上为单模态模型，下为完整反馈集合的 MAVRL；每行破坏指定通道的数据侧参数，被破坏的模态在原表中以模糊方式标出（例如 PDRS 表示偏好被误设）。列：Base（完好设定归一化回报）、Misspec.（均值±标准误）、Rat.（=Misspec./Base）。正文第 6.3 节所述规律在 grid_trap 上同样成立，具体数值请对照原 PDF。
+附录 E 额外迁移结果与扰动详细描述（Additional Transfer Results and Detailed Perturbation Description）所有反馈组合的迁移性能结果见 [图 3]（原文第 17 页）。
+[图 3] 内容说明（中文）：该图展示三种动力学扰动场景下、由各方法推断的奖励训练出的策略的归一化平均回报（ ）。奖励模型与基线在未扰动设定下训练、并在整个变化过程中保持固定。图 (a)(b) 分别对应 grid_cliff 与 grid_trap 中”环境随机性”（0→0.8）的逐步增强；(c) 为 Acrobot-v1 摆杆两段长度之比的增大（约 1.0→2.0）；(d) 为 LunarLander-v3 重力与风力的增强。回报按”未扰动设定下用真实奖励训练出的近似最优策略＝100.0、均匀随机策略＝0.0”归一化，误差棒为标准误。各曲线对应本文全部单模态与多模态组合以及行为克隆基线，请对照原 PDF 查看逐条曲线。
+下面总结用于评估”系统动力学系统性变化下下游策略性能鲁棒性”的环境扰动。
+网格世界环境（grid_cliff、grid_sparse、grid_trap）。 通过在智能体的动作执行中引入随机性来扰动转移动力学：具体地，提高执行随机动作的概率  ，其中   对应确定性动力学。这些环境具有稀疏奖励以及悬崖或陷阱等惩罚区域，因此对动作噪声的鲁棒性尤为重要。
+在网格实验中，所有方法在   时收敛到相同性能。这一行为直接源于随机动作的定义方式。设  是确定性策略  选中的动作，即  。在动作噪声下（概率 ），实际执行的策略变为
+
+在   的网格环境中，令   会对所有动作  给出  ——等价于均匀随机策略。由于回报按”均匀策略取得 0.0”归一化，所有方法在   处都收敛到这个值。对于更大的 ，非意图动作获得比原始意图动作更高的概率质量，使确定性动作选择变得次优，因此我们把分析限制在  。
+LunarLander-v3。 我们通过联合增大重力大小与风的强度来扰动动力学。具体地，重力参数在     中变化（默认 ），风力在  中变化（默认 0.0）。这些扰动产生越来越有挑战性的动力学：智能体既要缓解更强重力导致的快速下落，又要补偿风引起的横向漂移。
+Acrobot-v1。 我们通过改变双摆两段连杆长度的比例来扰动系统。连杆间不对称性增大改变了系统的惯量与耦合，从而相对未扰动设定产生逐步不同且更具挑战性的动力学。
+附录 F 额外定性结果（Additional Qualitative Results）本节给出所有网格环境的额外定性结果。[图 4]（grid_sparse，原文第 18 页）、[图 5]（grid_cliff，原文第 19 页）、[图 6]（grid_trap，原文第 20 页） 每幅都展示了同一推断奖励模型的两种可视化：
+
+(a) 均值与方差的联合视觉编码（与图 1 一致）；
+(b) 对同一数据，均值与方差的分离视觉编码。
+
+每幅图都由   网格上、来自 2 条示范、256 对成对比较、128 条评分 的推断结果组成；最右列展示组合全部反馈模态后的结果（各子图上方或图内标注了对应反馈模态与数据量，请对照原 PDF）。
+
+需要说明的是，原文按反馈类型对推断出的奖励值做了线性归一化（这不会影响策略性能，因为最优策略诱导的行为对奖励函数的正缩放与常数平移不变，见 Ng et al., 1999）。
+
+
+译后小结（供学习参考）
+一句话概括：MAVRL 把”从人类反馈学奖励”统一成一个贝叶斯问题——共享一个潜在奖励函数 ，每种反馈（示范 D、偏好 P、评分 R、停止 S）都用自己的概率似然说话，全部放进一个 ELBO 里端到端训练，不再需要手工配损失权重。
+方法骨架：奖励编码器   ＋ 辅助 Q 函数 （支持示范/停止这类需要价值估计的反馈）＋ 各类反馈的似然解码器  ＋ TD 正则把奖励与 Bellman 差分对齐。
+四个似然：偏好＝Bradley–Terry；示范＝Boltzmann 理性策略；评分＝有序 logit（切点不等距）；停止＝关于终止时间的风险模型（几何分布，右删失）。
+核心结论：(1) 组合反馈优于任何单模态；(2) 示范在稀疏奖励环境最强，评分在 CartPole 最好，偏好单用平庸但组合时贡献大，停止信号补充”次优性”信息；(3) 多类型联合推断对动力学扰动和大部分反馈误设（偏好/评分/停止）都很鲁棒，唯独示范通道被污染时仍是结构性短板；(4) 相对 MCMC 快约 30 倍、且能做连续控制，相对事后平均大幅更优。
+阅读时建议对照原图：图 1 / 图 4–6 的”热力图”直观展示各类反馈留下的”不确定性模式”；图 2 / 图 3 的”鲁棒性曲线”直观展示组合反馈衰减更平缓。
+
+
+本翻译由学习者整理发布，仅供学习交流；原文版权归作者所有。若用于正式引用，请引用原论文。
+]]></content>
+      <categories>
+        <category>论文学习</category>
+      </categories>
+      <tags>
+        <tag>论文</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>MF-BNRM</title>
     <url>/2026/10/21/MF-BNRM/</url>
     <content><![CDATA[模型总览论文中的 MF-BNRM 架构（前向顺序）输入  ，其中  问题， 回答
@@ -1580,683 +2935,6 @@ KL 散度
       </categories>
       <tags>
         <tag>研究</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>agent对BNRM研究思路的整理</title>
-    <url>/2026/10/16/agent%E5%AF%B9BNRM%E7%A0%94%E7%A9%B6%E6%80%9D%E8%B7%AF%E7%9A%84%E6%95%B4%E7%90%86/</url>
-    <content><![CDATA[
-配套阅读：本文是对《BNRM的研究思路》的解读与整理，建议先读那篇原始方案，再回来看这篇”理解向”梳理。
-一句话背景：老师给的方向叫 MF-BNRM（Multi-Feedback Bayesian Non-negative Reward Modeling），目标是把 BNRM 的”稀疏非负贝叶斯表示”和 MAVRL 的”多反馈统一学习”结合起来，做出一个有理论贡献的 ICML 级工作。
-
-
-1. 这个研究思路到底想干什么1.1 用一句话说清核心创新先看老师方案里最关键的一句话：
-
-不同类型的人类反馈并非对应完全独立的奖励函数，而是对一组潜在奖励语义因子的不同观测。
-
-把它翻译成人话，同时结合你已经会的两篇论文：
-
-BNRM 教会我们：奖励可以表示成”稀疏非负语义因子”的内积  ，稀疏 + 非负让它可解释、抗虚假相关（治”奖励黑客”）。但它只处理”偏好”这一种反馈。
-MAVRL 教会我们：偏好、示范、评分、停止这四种反馈可以共享同一个奖励，各自用一个似然头去解释，统一进一个 ELBO。但它用的是稠密的高斯奖励，没有”稀疏非负因子”这种结构。
-
-MF-BNRM 的创新点：把这两件事合起来——让四种反馈共享同一套稀疏非负因子表示 θ，但每个反馈类型  拥有自己专属的稀疏贝叶斯解码器 。
-关键就这一句，其余都是围绕它展开的：
-
-“共享”负责共性（同一个语义因子空间），”专属”负责差异（不同反馈对因子的依赖强度不同）。
-
-1.2 为什么”光把 BNRM 接进 MAVRL 四个头”不够创新老师的方案里有一段非常清醒的自我定位（这恰恰是很多学生容易忽略的）：
-
-仅仅将 BNRM 的概率表示接入 MAVRL 的四个反馈头，不足以构成很强的 ICML 创新。
-
-因为那样做，BNRM 就只是变成了 MAVRL 的”偏好头”——是把两篇已有工作拼起来，没有新的理论增量。
-真正的增量在于从”隐式共享”升级到”显式的共享 + 任务专属支持集”：
-
-
-
-
-MAVRL
-MF-BNRM
-
-
-
-四类反馈怎么共享
-隐式共享同一个奖励编码器
-显式共享稀疏因子支持集，但允许任务专属支持集
-
-
-有没有理论
-主要是经验/形式化
-明确的多任务统计复杂度、Fisher 信息互补、后验收缩
-
-
-所以这个方向的”主战场”其实是理论，不是模型架构。这是理解整个方案的关键。
-
-2. 三个定理用大白话讲方案里最硬核的部分是三个定理。它们其实对应三个非常朴素的问题，我把每个定理”翻译”成一句话：
-定理一（共享稀疏支持集的多任务复杂度优势）→ “为什么要共享？”大白话：如果四个反馈任务用的大多是同一组少数几个语义因子（支持集重叠），那么”让它们共享这一个支持集、只做一次变量选择”比”每个任务各自做一次变量选择”统计上更省样本。
-
-独立学习：要做  次变量选择，复杂度带一个  的因子重复  次；
-共享学习：只做 1 次公共变量选择，同时估  个系数。
-
-例子：    时，理论复杂度主项从约 120.7 降到 62.2，减少约 44%。注意方案自己强调：这是”理论复杂度主项”，不是”实测误差一定降 44%”。
-定理二（异质反馈的信息互补与后验收缩）→ “为什么要多种反馈？”大白话：每种反馈能”照亮”奖励参数的某些方向，但看不清另一些方向（比如偏好反馈对”奖励整体平移”不敏感）。把多种反馈的 Fisher 信息加起来，能照亮更多方向，后验不确定性就收缩得更快。
-关键命题：多反馈的优势不只是”样本变多了”，更是”不同观测机制提供了互补的信息方向”。 这是最有 ICML 理论价值的一条，也是我最推荐优先攻的方向（方案自己也这么说）。
-定理三（共享与专属稀疏的误差分解）→ “什么时候该共享，什么时候该各自为政？”大白话：现实里四个任务的支持集不完全一样。把解码器写成”共享部分 + 专属部分”，误差就能拆成”表示误差 + 结构复杂度 + 变分误差”三项。这直接回答了一个实用问题：支持集重叠大 → 共享划算；重叠小 → 强行共享会负迁移。
-这三条合起来，就是方案第七节那个”统一结论”：
-
-多反馈统计误差 ≲ 共享支持复杂度 + 任务特有复杂度 + 变分近似误差 + 模型失配误差。
-
-
-3. PyTorch 原型代码在干什么（以及它缺什么）3.1 代码的本质：一个”能跑通”的最小验证我读了一遍 mbnrm_demo.py，它做的事很朴素：
-
-编码器（self.encoder）：一个两层 MLP，输入 （12 维合成特征），输出  个数，经 softplus 变成 Weibull 的形状  和尺度 ，再采样出共享隐变量 。
-四个任务专属字典（self.log_shape / self.log_scale，形状 (tasks=4, 2, k)）：每个任务有”正、负”两个非负分量，相减得到带符号的字典 。
-奖励 r = z · w[t]：共享隐变量  点乘第  个任务的字典。
-四种损失：
-偏好：binary_cross_entropy_with_logits(p1 - p2, label)（即 BT）；
-评分：Gaussian 负对数似然（0.5*((r-rating)/0.4)^2 + log(...)）；
-示范：cross_entropy（softmax 分类）；
-停止：binary_cross_entropy_with_logits(0.15 - s, stop)（一个简化的 Bernoulli 风险）。
-
-
-总损失 = 四项似然相加 + beta * KL（Weibull–Gamma 的 KL 散度），然后 Adam 反向传播。
-
-一句话：这就是 MAVRL 那套”共享编码器 + 多个似然头 + ELBO”的骨架，只是把编码器换成了 Weibull、把奖励表示换成了非负因子、把”奖励头”换成了”稀疏非负字典”。
-3.2 代码缺什么（方案自己都点明了，很重要）方案非常诚实地列出了当前代码没实现的东西，这些恰恰是”从原型到论文”的距离：
-
-连续评分没做有序 Logistic（现在只是 Gaussian 回归，不是真正的”评分”似然）；
-停止反馈没引入基于 Q 的历史风险率（现在只是个简化的逐时刻 Bernoulli）；
-没有显式的共享/任务专属支持集掩码（即方案 2.2 节里的 Bernoulli 掩码  没实现）；
-ELBO 的 KL 项没有正确缩放（代码注释里明说 “not an exactly scaled dataset ELBO”）。
-
-所以：代码证明了”训练链路能跑通、四种反馈能联合训练”，但还没证明任何理论优势。 方案自己说得很清楚——不能据此声称 MF-BNRM 优于 BNRM 或 MAVRL。
-
-4. 我的评估与建议4.1 这个方向最值得做的地方理论（尤其定理二）是这个方向真正的护城河。 原因很简单：模型架构上，MF-BNRM 是 BNRM 和 MAVRL 的自然组合，工程增量有限；但”异质反馈如何通过互补 Fisher 信息提升可辨识性、加速后验收缩”这个问题，之前没有干净的结论。如果把这个定理做扎实，论文就有了不可替代的贡献。
-4.2 需要特别小心的三个坑（方案自己已经点出）
-预算混淆：多反馈带来收益，到底是因为”反馈变多了”还是”稀疏共享”？必须做等标注预算和等计算预算的对照（实验三里强调的）。这是审稿人最爱挑的毛病。
-可辨识性：偏好反馈有”整体平移不变性”，潜因子模型有”尺度/置换对称性”。不讲清楚可辨识条件，定理二的协方差结论站不住。
-负迁移：共享不是万能的。支持集差异大时强行共享会变差。必须把”支持集交叠度”作为自变量来做实验（定理三的意义所在）。
-
-4.3 给你的落地建议按方案第七节的优先级，我的建议顺序是：
-
-先做理论：从”冻结编码器的多任务广义线性模型”出发，把定理一（复杂度界）和定理二（Fisher 互补）证清楚。不要一开始就声称对任意深度网络成立——先从最简单的线性模型下手。
-再补原型：把四个”缺的东西”补上（有序 Logistic、Q 风险率、支持集掩码、正确缩放的 ELBO）。
-最后做对照实验：在 MAVRL 的网格世界上做等预算对照 + 消融（去共享/去稀疏/去贝叶斯）。
-
-
-5. 一句话总结
-MF-BNRM = 让四种反馈共享”稀疏非负贝叶斯表示 θ”，但各自拥有”任务专属的稀疏贝叶斯解码器 Φ_t”，并用三个定理（共享复杂度 / 互补 Fisher 信息 / 共享-专属误差分解）回答”为什么共享有益、为什么多反馈有益、什么时候该共享”。 它的创新重心在理论，不在模型架构；模型架构是 BNRM × MAVRL 的自然组合，理论才是新东西。
-
-]]></content>
-      <categories>
-        <category>论文学习</category>
-      </categories>
-      <tags>
-        <tag>论文</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>MAVRL论文全文中文翻译 - 从多类型反馈学习奖励函数的摊销变分推断</title>
-    <url>/2026/09/05/MAVRL%E8%AE%BA%E6%96%87%E5%85%A8%E6%96%87%E4%B8%AD%E6%96%87%E7%BF%BB%E8%AF%91/</url>
-    <content><![CDATA[
-原文信息
-MAVRL: Learning Reward Functions from Multiple Feedback Types with Amortized Variational Inference（MAVRL：利用摊销变分推断从多类型反馈学习奖励函数）
-作者：Raphaël Baur、Yannick Metz、Maria Gkoulta、Mennatallah El-Assady、Giorgia Ramponi、Thomas Kleine Buening
-机构：¹ ETH AI Center, ETH Zurich；² ETH Zurich 计算机系；³ University of Zurich 信息学系
-会议：Proceedings of the 43rd International Conference on Machine Learning（ICML 2026），首尔，韩国。PMLR 306。
-代码与模型：https://github.com/rabaur/mavrl
-译者说明
-
-本页为论文正文与附录（A–F）的完整中文翻译；参考文献列表按惯例保留英文原文。
-为便于阅读，正文将原文中以数学花体排印的四种反馈类型统一记为：P＝偏好（成对比较）、D＝示范、R＝评分、S＝停止信号；组合记号（如 PDR、PDRS）一律照原文保留，其具体所指以原 PDF 中的图表为准。
-插图（图 1–6）与表格（表 1–5）在正文对应位置以 [图 X] / [表 X] 标注并给出中文图题、所在页码与内容说明，精确图形/数据请对照原 PDF。
-
-
-
-摘要（Abstract）奖励学习（reward learning）通常依赖单一类型的反馈，或者通过手动加权多个损失项来组合不同类型的反馈。目前，如何从异质反馈类型（例如示范、比较、评分与停止信号——它们提供性质上各不相同的信号）中联合学习奖励函数，仍然是一个悬而未决的问题。
-针对这一挑战，本文将”从多类型反馈学习奖励”形式化为对共享的潜在奖励函数进行贝叶斯推断：每种反馈类型都通过一个显式的似然函数（likelihood）贡献信息。我们提出了一种可扩展的摊销变分推断方法（amortized variational inference），它学习一个共享的奖励编码器（reward encoder）以及若干反馈专属的似然解码器（likelihood decoder），并通过优化**单一的证据下界（ELBO）**进行训练。我们的方法既不需要把不同反馈压缩到某种公共中间表示，也消除了手动平衡各项损失的需要。
-在离散（表格型）与连续控制基准上，我们证明：联合推断得到的奖励后验优于单一类型的基线，能够利用不同反馈类型之间的互补信息，并使最终策略对环境扰动更加鲁棒。此外，推断出的奖励不确定性还能提供可解释的信号，用于分析模型置信度以及不同反馈类型之间的一致性。
-
-1. 引言（Introduction）设计能够忠实刻画期望行为的奖励函数是出了名的困难。即使在定义良好的环境中，细微的偏好、安全性考量与各种权衡也很难通过手工编码实现；微小的错误设定就可能引发意料之外甚至不安全的行为（Abouelazm et al., 2024; Amodei et al., 2016; Gershman &amp; Niv, 2015; Hendrycks et al., 2021; Knox et al., 2023）。这一挑战催生了奖励学习这一广泛的研究方向：奖励函数不是被显式给定，而是从人类反馈中推断出来。这类方法之所以有吸引力，是因为它允许领域专家通过判断或干预来表达意图——这往往比给出完整的形式化规格更容易。
-然而，关于行为的人类反馈形式多种多样。以往工作研究了多种反馈形式下的学习，包括：示范学习（demonstrations）（Chan &amp; van der Schaar, 2021; Ng et al., 2000）、比较或偏好（comparisons/preferences）（Christiano et al., 2017; Wirth et al., 2016）、标量评分（scalar ratings）（Knox &amp; Stone, 2009）、排序（rankings）（Brown et al., 2019; Myers et al., 2021），以及纠正或紧急停止之类的干预（corrections / emergency stops）（Ghosal et al., 2023; Hadfield-Menell et al., 2017; Losey et al., 2022）等。每一种反馈类型都只提供了关于底层奖励函数的部分信息：示范对状态–动作空间的覆盖是稀疏的，且只沿着专家行为约束奖励；比较只提供关于回报的相对信息，无法完整刻画被比较备选方案之外的权衡；评分只给出序数信息（ordinal information），而不包含偏好的强度；停止信号通常只表明行为”不可接受”，却不说明此时怎样才算最优。因此，依赖任何单一反馈类型都可能使奖励的某些方面无法被确定。
-上述局限凸显了从多种反馈类型学习的必要性——不同模态能够提供互补信息，从而消解单一来源遗留下来的歧义。此外，不同反馈类型在可获得性、成本与信息量上各有差异，因而理解它们彼此之间的关系、各自携带多少信息、在何处重叠、在何时相互冲突，就显得十分重要。
-尽管潜力互补，从异质反馈类型中联合学习奖励函数仍然充满挑战。现有方法要么为每种反馈分别训练奖励模型、事后（post hoc）再加以组合（Ibarz et al., 2018; Macuglia et al., 2025; Metz et al., 2025），要么只关注一小部分模态（通常是示范与比较）（Bıyık et al., 2022）。这两种策略都会带来显著问题：事后聚合需要回答”如何调和不同反馈类型之间的奖励尺度与不确定性”；而把多样反馈折叠进单一中间表示（例如偏好）则可能抹掉模态专属信息，并且并不适用于所有反馈形式。因此，尽管各种反馈在潜力上互补，实践中要”联合地”从多种反馈学习奖励仍然困难。
-一个更有原则性的视角是：把每种反馈类型都看作对共享潜在奖励函数的一次概率观测。在这个框架下，从多类型反馈学习就自然地对应为贝叶斯推断：每种反馈模态通过其似然贡献信息。已有若干框架按此方式形式化人类反馈，例如把反馈建模为（可能是隐式的）选择集上的奖励理性选择（reward-rational choices）（Jeon et al., 2020）。这种基于似然的表述为异质反馈提供了概念上统一的处理方式，并清楚地揭示出不同反馈类型如何与同一个底层奖励相关联。然而，在此设定下进行精确贝叶斯推断通常不可行，因为需要对反馈实现与奖励函数两者同时做边缘化。
-为应对这些挑战，我们提出一种可扩展的摊销变分推断方法，用于从多类型反馈学习奖励函数。我们的方法建立在可扩展贝叶斯逆强化学习（Scalable Bayesian IRL）的既有工作之上（Chan &amp; van der Schaar, 2021），联合学习一个共享的变分奖励表示与若干反馈专属似然模型，并通过优化单一的证据下界完成训练。
-本文贡献具体如下：
-
-我们提出一个统一的贝叶斯形式化，用于从多类型反馈学习奖励函数：每种反馈模态通过显式似然贡献信息，且无需手动损失平衡（第 4 节）。
-我们提出一个可扩展的摊销变分推断算法，联合学习共享奖励表示与反馈专属似然模型（第 5 节）。
-我们通过实验证明：从多类型反馈联合学习能够利用互补信息、提升奖励恢复与策略鲁棒性，并在多个强化学习基准上产生可解释的奖励不确定性（第 6 节）¹。
-
-
-¹ 代码与训练好的模型见 https://github.com/rabaur/mavrl
-
-
-2. 相关工作（Related Work）奖励学习（Reward Learning）。 当显式指定奖励不切实际时，奖励学习旨在从人类反馈中推断奖励函数（Abbeel &amp; Ng, 2004; Christiano et al., 2017; Ng et al., 2000）。早期工作聚焦于从示范中做逆强化学习（inverse reinforcement learning, IRL），假设专家轨迹来自某个未知奖励下的（近似）最优行为（Abbeel &amp; Ng, 2004; Ng et al., 2000）。近年来，基于偏好的强化学习逐渐兴起，尤其是在语言建模中的应用：人类比较智能体产生的轨迹片段，奖励模型用 Bradley–Terry 模型或相关的概率选择形式化来训练（Christiano et al., 2017; Ouyang et al., 2022）。除示范与偏好之外，学界还探索了其他多种反馈类型，包括纠正（corrections）（Bajcsy et al., 2017; Losey et al., 2022）、排序（rankings）（Brown et al., 2020; Myers et al., 2021）和紧急停止（emergency stops）（Hadfield-Menell et al., 2017）。每种反馈范式都引入各自的建模假设与损失函数，并且通常被孤立地研究。Jeon et al.（2020）提出了一种统一视角，证明许多反馈类型都可以被解释为（可能是隐式的）选择集上的奖励理性选择。尽管这一框架给出了反馈的通用概率解释，但它本身并不产生一种能从异质反馈源联合学习的可扩展方法。
-贝叶斯 IRL 的近似推断（Approximate Inference for Bayesian IRL）。 与本文最密切相关的是可扩展贝叶斯 IRL 的相关文献。贝叶斯 IRL 把从示范学习奖励表述为后验推断，但早期方法依赖 MCMC 或其他基于采样的推断手段，限制了其只能应用于小规模任务（Ramachandran &amp; Amir, 2007; Rothkopf &amp; Dimitrakakis, 2011）。为解决这一问题，Chan &amp; van der Schaar（2021）提出 AVRIL，将摊销变分推断应用于贝叶斯 IRL：联合学习一个变分奖励编码器与一个示范似然解码器。该形式化无需在内循环中反复求解强化学习问题即可高效进行后验推断，并已被证明能扩展到高维控制任务，以及语言建模中基于 Transformer 的奖励模型（Cai et al., 2025）。另有一些近期工作把变分推断用于偏好学习，以捕捉用户专属的奖励差异，但其目标不同于”从多类型反馈学习共享奖励函数”（Poddar et al., 2024）。我们直接在 AVRIL 框架之上构建：用一组反馈专属似然模型替换其单一的示范似然，同时保持对奖励函数单一的共享变分后验。这使得我们可以从多种反馈类型进行联合摊销推断，而无需把它们折叠进某个公共替代目标。
-多类型反馈（Multi-Type Feedback）。 与单类型奖励学习相比，从多种类型的人类反馈学习的工作相对较少。大多数已有工作聚焦于示范与偏好，并且主要把示范用作初始化步骤：先用示范初始化，再施加基于偏好的学习以进一步精修策略与奖励估计（Bıyık et al., 2022; Ibarz et al., 2018; Macuglia et al., 2025; Palan et al., 2019）。少数方法尝试在单一学习流程中纳入两种以上的反馈类型：Mehta &amp; Losey（2024）在机器人设定中，用”奖励理性选择”框架整合示范、纠正与偏好，但最终还是通过加性损失项来组合各模态，而各损失项的相对影响由设计选择（例如采样率）固定。近期的基准套件与评估平台强调了异质反馈的实践相关性（Metz et al., 2023; Yuan et al., 2024）；已有的大规模研究则用集成式方法评估反馈类型的组合（Metz et al., 2025）。然而，这些方法并不对单一奖励函数做联合推断，而是依赖启发式来调和不同反馈类型之间在奖励尺度与不确定性上的差异。
-与之相对，我们的方法通过把反馈专属似然整合进同一个变分目标，从多类型反馈中对共享奖励函数进行联合贝叶斯推断。
-
-3. 预备知识（Preliminaries）我们考虑马尔可夫决策过程（MDP） ，其中  为状态空间， 为动作空间， 为转移动力学，    为真实奖励函数，  为折扣因子。 与  既可以是离散的也可以是连续的，且我们不假设能够访问转移动力学。此外，奖励函数  被假定为不可观测的。
-智能体通过一个（可能是随机的）平稳策略  与 MDP 交互，该策略在 MDP 上诱导出轨迹   上的分布。用  表示所有平稳策略构成的空间， 表示所有轨迹构成的空间²。给定奖励函数 ，轨迹  的回报为  ，策略  的期望回报为  。对给定的奖励函数 ，记     为最优动作值函数。
-
-² 所有定义与结论都能直接推广到有限时域 MDP：只需把无穷折扣和替换为有限时域回报。这里采用无穷时域折扣表述仅为记号方便。
-
-从多类型反馈进行贝叶斯学习。 给定一组多类型人类反馈 ，我们的目标是学习奖励函数。具体地，我们考虑  ，其中  对应于类型  的反馈（例如偏好）。从贝叶斯视角出发，我们的目标是推断给定数据下奖励函数的后验分布。据此，我们把奖励函数  视为潜变量，考虑
-
-其中  是奖励函数上的先验， 是在  下观测到多类型反馈  的似然。关键在于，给定  时观测反馈的似然以一种有用的方式因子分解：由于观测在给定奖励函数后条件独立，联合似然可写为  。因此，多类型反馈后验满足   。
-摊销变分推断（Amortized Variational Inference）。 尽管优雅，方程 (1) 通常是双重不可解的（doubly intractable）：一方面似然中需要对反馈选择做积分，另一方面分母需要对所有奖励函数做积分。变分推断（VI）用更简单的变分分布   来逼近后验，其参数  通过最大化证据下界（ELBO）学习：
-
-第一项最大化期望数据似然，第二项把  向先验  做软性正则化。变分自编码器（VAE）框架（Kingma &amp; Welling, 2014）通过把变分分布  表示为将观测  映射到潜变量  的神经网络编码器，使变分推断得以广泛应用与扩展，从而把后验推断在数据点之间”摊销”。此外，VAE 联合学习似然模型 ——即解码器——它从潜表示  重建观测响应 ³。这依赖重参数化技巧：把采样表达为确定性变换  （  ），从而使梯度能够穿过编码器流动。
-
-³ 通常，在 VAE 中目标是通过重建任务（ ）学习有意义的潜表示 。
-
-
-4. 反馈专属似然模型（Feedback-Specific Likelihood Models）我们为每种反馈类型定义概率似然模型，它们共同构成贝叶斯奖励学习目标（式 1）中的联合数据似然 ，从而决定我们的算法所优化的变分目标。在本文中，我们聚焦于偏好（成对比较）、示范、评分与停止信号四类反馈；但所提出的框架与算法适用于任何能够指定概率似然的反馈类型。重要的是，我们的方法与具体似然模型的选择无关，不依赖共享的中间表示，也不需要跨反馈类型的手动损失平衡。
-偏好（Preferences，P）。 这里采用广泛使用的 Bradley–Terry 模型：在奖励函数  下，轨迹  优于轨迹 （记为  ）的概率为
-
-该形式可以自然地扩展到轨迹片段之间的比较，正如 Christiano et al.（2017）所做的那样。逆温度参数  控制偏好判断的随机性。
-示范（Demonstrations，D）。 专家示范是另一种常用的反馈形式。Ramachandran &amp; Amir（2007）及其后续工作（例如 Chan &amp; van der Schaar, 2021; Rothkopf &amp; Dimitrakakis, 2011）用 Boltzmann 理性策略   对专家示范建模。我们沿用该建模方式，于是在奖励函数  下，一条专家轨迹  的似然为
-
-其中逆温度   控制专家的最优程度。
-评分（Ratings，R）。 评分提供序数反馈：人类给一条轨迹赋予离散分数以反映其感知质量，类似于李克特量表（Likert scale）判断（Likert, 1932）。我们用标准的序数回归框架——有序 logit 模型（ordered logit model）——对这一反馈形式建模（McCullagh, 1980）。
-我们假设每条轨迹在奖励函数  下会诱导一个未观测的潜在效用（latent utility），用以反映其质量，并叠加随机的判断噪声。报告的评分   通过一组有序切点         对这个潜在效用离散化而得到：当轨迹  的潜在效用落在  与  之间时，它得到评分  。在该模型下，对轨迹  观测到评分   的似然为
-
-其中  表示 logistic 累积分布函数。重要的是，这一反馈模态不等价于对奖励值的直接回归：它只提供序数信息，而不提供绝对判断。切点  不必等距，这反映了人类在把感知质量映射到离散评分时通常不会采用均匀或线性的阈值。
-停止信号（Stops，S）。 停止信号刻画这样一种场景：一旦智能体的表现退化到可接受水平之下，人类监督者就介入并终止其行为。这类反馈在实践中很普遍——例如机器人领域的安全停止、人在环路（human-in-the-loop）控制——但作为奖励或策略学习信号，受到的关注却很少。我们的框架通过对终止时间上的显式似然建模，自然地容纳了停止反馈。
-设  为用户介入的（随机）时间步。我们用离散时间风险模型（hazard model）对  建模：在时间  的瞬时风险（hazard）依赖于截至该时刻轨迹的累积次优程度。具体地，在奖励  下，动作  在状态  的瞬时次优程度定义为
-
-并引入一个回溯折扣因子   来折扣较早的偏差。由此得到的风险函数为
-
-其中   越大表示专家越”不宽容”。观测到在时间  发生停止的似然即为如下几何分布：
-
-如果片段内没有发生停止，则观测被视为右删失（right-censored）。
-其他反馈类型（Additional Feedback Types）。 文献中研究的其他反馈类型还包括排序（rankings）（Brown et al., 2019; Myers et al., 2021）、纠正（corrections）（Losey et al., 2022），以及其他形式的人为干预（human intervention）（Jeon et al., 2020）。虽然本文没有显式建模它们，但反馈专属似然可以类似地推导出来。关键在于，任何这类似然都可以直接纳入我们的框架与算法，无需额外的结构性修改。关于反馈模拟的实现细节见附录 A.2。
-
-5. MAVRL：多反馈摊销变分奖励学习（MAVRL: Multi-Feedback Amortized Variational Reward Learning）下面介绍 MAVRL——一种从多类型反馈进行贝叶斯奖励推断的通用学习算法。该算法（算法 1）用摊销变分推断实例化第 3 节引入的贝叶斯目标，并直接利用第 4 节定义的反馈专属似然模型。
-[算法 1] 位置说明：原文第 5 页顶部，题为 “Algorithm 1 (MAVRL): Multi-Feedback Amortized Variational Reward Learning”。 算法内容以如下伪代码表达：
-
-输入：多类型反馈 ，超参数 、，学习率 
-重复直到收敛：
-
-为所有反馈类型采样小批量： 
-编码所有转移： 
-重参数化奖励：    
-计算 Q 值： 
-计算各反馈专属负对数似然：  
- ，其中先验  
- 
-聚合损失：   
-更新参数：   
-
-返回：奖励编码器 、动作值模型 
-
-
-5.1 目标函数（Objective）我们的目标是联合学习一个概率奖励模型与一个辅助的动作值函数，后者用于支持那些基于状态–动作值来定义的反馈类型。具体来说，我们参数化一个条件奖励分布
-
-其中  与  都是神经网络，把状态–动作对  映射到局部奖励值上的一个分布。从这个编码器采样会在轨迹回报上诱导出一个分布，用来评估各类反馈的似然。
-此外，我们还学习一个辅助的动作值函数 ，它是依赖价值估计的反馈类型所必需的；当适用时，还会学习与反馈专属似然模型相关的参数 ，例如评分模型的切点。关键在于，奖励编码器本身与反馈的类型和结构无关；所有反馈专属的语义完全由相应的似然函数承载。
-学习过程直接来自贝叶斯奖励学习问题的证据下界（ELBO）。给定反馈数据集 （其中每个  包含类型  的反馈观测），MAVRL 所要最大化的统一目标为
-
-这里  表示一个通用的反馈观测，其结构取决于反馈类型——可以是轨迹、比较、标量评分或终止时间。每种反馈类型都为目标贡献一项似然，无需手动加权或分阶段优化。
-最后一项  强制推断得到的奖励分布与辅助动作值函数保持一致。借鉴 Chan &amp; van der Schaar（2021），我们加入一个时序差分（TD）正则化项，它鼓励编码器预测的奖励与  所蕴含的单步 Bellman 差分相一致。
-为定义这一项，我们利用与观测反馈相关联的轨迹。每条反馈观测  都植根于一条或多条轨迹，我们从中提取状态–动作转移。设   表示这样的转移元组，其中  是在状态  中采取的动作。相应的 TD 目标定义为
-
-我们通过最大化 TD 目标在编码器分布下的对数似然，来惩罚该 TD 目标与编码器预测奖励之间的偏差：
-
-其中  表示从观测反馈所依据的轨迹中提取出的转移集合。
-[图 1] 位置说明：原文第 6 页中部，标题为 “Figure 1. Visualizations of inferred reward functions from 2 demonstrations, 256 pairwise comparisons, or 128 ratings on a 10×10 grid_trap environment.”内容说明（中文）：该图在   的 grid_trap 网格环境中，可视化了分别由 2 条示范、256 对成对比较、128 条评分 推断得到的奖励函数。每一行对应一种单一反馈模态的推断结果；最后一列展示的是组合全部反馈模态后的结果。图中同时呈现学习到的奖励均值估计及其由方差量化的不确定性（原文采用均值与方差的双重视觉编码）。
-5.2 MAVRL 的性质（Properties of MAVRL）可扩展性（Extensibility）。 MAVRL 的一个核心性质是：它能使用任何只要可以指定似然的人类反馈形式。每种反馈类型都仅通过其似然项   对目标做出贡献。因此，加入一种新的反馈模态只需要定义它的似然，而无需改动奖励编码器、辅助价值函数或优化过程。
-无需跨模态损失平衡的统一目标（Unified Objective Without Cross-Modal Loss Balancing）。 MAVRL 不假设不同反馈模态除了奖励函数之外还共享某种公共中间表示或监督信号。反馈专属似然通过不同的统计关系把观测与奖励联系起来——例如动作概率、回报比较、序数阈值或累积遗憾（cumulative regret）。由于所有反馈都以对数似然项的形式出现在同一个变分目标中，每个模态的相对影响力由数据与反馈模型决定，而非由手工调节的跨模态权重决定。因此，MAVRL 完全消除了”每种反馈类型在奖励估计中该占多大比重”的选择难题：举例来说，当有   条示范和   个偏好、且噪声参数已知时，它们在一个组合损失或事后集成中的相对权重在一般 MDP 中是任意的。MAVRL 彻底避免了这一问题。
-剩余的参数有两类：
-
-似然专属的噪声参数（例如 Bradley–Terry 温度 、评分切点 、停止风险参数 ）刻画标注者的行为，它们植根于成熟的人类反馈模型；这些参数可以（可选地）被当作潜变量，在行为上合理的先验下被推断。
-正则化系数  与  控制后验正则化与”奖励–Q 值”一致性；我们通过标准模型选择调参，性能在很宽取值范围内都很稳定；其中基于 Q 值的反馈（示范与停止信号）需要非零的 。
-
-顺序无关与异步训练（Order-Invariant and Asynchronous Training）。 训练目标与反馈模态的顺序、频率和交错方式无关。来自各个类型反馈数据集的 mini-batch 被独立采样，并且可以在优化过程中任意组合。
-
-6. 实验（Experiments）我们在多种环境与反馈配置下评估 MAVRL，回答三个问题：
-
-学习奖励函数时，不同反馈类型如何在性质上互补（第 6.1 节）；
-这种互补性如何转化为下游策略性能与奖励保真度（第 6.2 节）；
-从多类型反馈推断出的奖励，是否会在环境扰动或奖励错误设定下带来更鲁棒的行为（第 6.3 节）。
-
-我们的实验横跨表格型网格世界域与连续控制基准，并把示范、成对比较、评分和停止反馈在单独使用与组合使用两种情形下都纳入考察。
-除特别说明外，所有方法都在每个环境固定的反馈预算下训练，且每种模态被分配相同数量的反馈样本，以保证公平比较。记 、、、 分别为偏好、示范、评分与停止信号的样本数。在网格世界环境中，我们设置   、 、 ；在 Acrobot-v1 与 CartPole-v1 中，  、 、 ；在 LunarLander-v3 中，   、 。
-6.1 反馈类型互补（Feedback Types Complement One Another）在 [图 1]（原文第 6 页，图题见上文）中，我们可视化 MAVRL 基于不同单一反馈类型及其组合在网格世界环境中学习到的奖励估计。我们同时报告学习到的奖励均值估计及相应的、以方差量化的不确定性。更多示例见附录 F。
-我们发现每种反馈类型都会在推断出的奖励与不确定性估计上引起一种特征性的模式：
-
-示范在专家轨迹沿线给出低不确定性的奖励估计，但会留下大片状态空间区域”欠确定”（underdetermined）；
-成对偏好提供更广的覆盖，但可能把较高的奖励赋给那些被频繁访问、却并非全局最优的中间状态；
-评分能可靠地识别出目标状态，但对其周围奖励地形的信息有限；
-停止信号强烈约束不安全或低奖励区域，但在”避开之外什么行为是值得要的”这一点上提供相对较少的指引。
-
-这些局限恰好说明了不同反馈类型的互补本质——当它们被组合时，上述局限得以缓解。我们基于组合反馈训练的奖励模型能够以很高的保真度重建原始的真实奖励函数，并可靠地同时识别高奖励与低奖励状态。
-6.2 组合反馈提升策略性能与奖励识别（Combining Feedback Improves Policy Performance and Reward Identification）我们在 [表 1]（原文第 8 页，跨栏表格）中评估不同反馈组合在一系列网格世界与连续控制环境中的下游策略性能。对每种组合，我们都针对学习到的奖励估计优化一个策略，并报告该策略关于真实奖励函数的总回报。
-所有结果在 10 次运行上取平均；回报按环境线性缩放，使得 100 对应于用真实奖励训练出的近似最优策略的性能，0 对应于均匀随机策略的回报。因此，超过 100 的数值表示学习策略优于用真实奖励训练的策略。虽然这些归一化指标刻画了下游策略性能，但它们并不整体反映奖励恢复的质量。为此，我们还报告 EPIC 距离（Gleave et al., 2021）：对仅在基于势的塑形（potential-based shaping）、正缩放与常数平移意义下等价的奖励函数，EPIC 距离为 0。我们只在可精确比较奖励的表格型环境中报告 EPIC 距离。
-[表 1] 说明：主表分为上下两部分——上部分为”归一化平均回报（越高越好）”，下部分为”平均 EPIC 距离（越低越好）”，环境行依次为 grid_cliff、grid_sparse、grid_trap、Acrobot-v1、CartPole-v1、LunarLander-v3；列对应各种单模态与多模态反馈组合（深灰底为最优，浅灰底为次优）。原文表格位于第 8 页，请对照原 PDF 查看逐列数值。
-组合全部反馈类型获得最强的整体性能。 总体上，PDR（偏好＋示范＋评分等组合）在各环境中表现强劲，在 6 个环境中的 4 个取得最好或接近最好的性能，例外是 Acrobot-v1 与 LunarLander-v3。这支持我们的核心假设：MAVRL 能够利用不同反馈类型中包含的互补信息。
-没有任何单一类型基线在所有环境中占优。 或许并不令人意外：示范（D）在稀疏奖励设置中表现出色——例如 grid_sparse（95.0）与 LunarLander-v3（115.7）；评分（R）在 CartPole-v1 的单一反馈方法中表现最好（100）。偏好（P）作为独立模态表现相对温和，但在与其他模态组合时贡献显著——这与以往”成对比较需要大量样本才能达到有竞争力的性能”的发现一致（Christiano et al., 2017）。
-停止反馈与其他反馈互补。 在若干环境中，包含停止反馈的组合通常优于不含停止反馈的对应组合。例如在 grid_sparse 中，加入停止反馈的组合（100.0）优于仅用示范 D（95.0）；含停止反馈的偏好组合（70.6）也优于仅偏好（58.8）。这说明停止信号提供了关于轨迹次优性的宝贵信息，而这种信息很难从其他反馈中获取。
-EPIC 距离揭示策略性能之外的奖励恢复质量。 在计算 EPIC 的三个表格型环境中，PDR 取得最低（grid_cliff：0.481；grid_trap：0.520）或次低（grid_sparse：0.383）的 EPIC 距离。EPIC 与性能的偏差只出现在 grid_sparse 上：某一组合达到最低 EPIC（0.380）却只有中等的策略性能（82.3），这表明”忠实的奖励恢复”与”较高的下游性能”虽不完全等价，但通过组合所有反馈模态可以同时实现。
-相对非变分基线，MAVRL 既有效又高效。 [表 2]（原文第 8 页底部）把 MAVRL 与两种自然的替代方法对比：
-
-MCMC：一种非摊销的贝叶斯奖励学习方法，代表后验推断的”金标准”；
-事后奖励平均（Post-Hoc Reward Averaging）：一种非变分启发式，通过集成平均组合多个独立训练的奖励估计（参见 Metz et al., 2025）。
-
-[表 2] 说明：表列依次为 Post-Hoc Avg 与 MCMC 与 MAVRL 的性能（归一化回报，n=10，越高越好）与每轮奖励模型训练的墙钟时间；环境行 grid_sparse / grid_cliff / grid_trap / LunarLander-v3。原文数值请对照原 PDF。
-与 MCMC 相比，MAVRL 在网格环境中以约 30 倍更低的计算量取得相当或更优的性能；并且与 MCMC 不同，它不需要内循环 MDP 求解，因此在 MCMC 不可行的连续控制设定下依然可解。与事后平均相比，MAVRL 在所有环境上都大幅优于朴素集成——这表明独立训练的奖励模型会把尺度与塑形各异的信号混在一起，错失了联合推断才能捕捉到的跨模态互补性。
-在匹配的反馈预算下增益仍然成立。 为检验组合反馈带来的改进反映的是”真正的互补性”而非”更大的总监督量”，我们做了等预算消融：用贝叶斯优化把固定总样本量分配到各模态之间（附录 C，表 4）。在连续控制基准上，组合方式一致地达到或超过最强的单一模态，PDR 位列顶尖。在表格型网格上，单一信息模态在满预算下往往胜过被切碎的多种模态分配；而像 D 或某些双模态组合则成为最强组合。总体而言，组合反馈带来真正的跨模态互补性——是否纳入某个模态，取决于它在目标环境中的信息量。
-6.3 从多类型反馈学习到的奖励更鲁棒（Rewards Learned from Multi-Type Feedback are More Robust）我们沿两条互补的轴评估用 MAVRL 推断的奖励函数的鲁棒性：(i) 部署时环境动力学发生偏移的鲁棒性；(ii) 训练时所用反馈含噪声或被错误设定的鲁棒性。在两种设定下，奖励模型都在名义配置下只训练一次，之后保持固定；策略则在不做任何进一步奖励适配的情况下重训——从而把奖励质量的影响与策略优化的影响分离开。我们比较单一反馈模态、其组合（PDR）以及行为克隆（BC）基线。完整实验细节与所有反馈组合的结果见附录 E。
-在动力学扰动下，多类型反馈衰减得更平缓。 我们在奖励学习完成后扰动每个环境的转移动力学：在 grid_cliff 与 grid_trap 中增加动作随机性，在 Acrobot-v1 中改变系统动力学的结构性参数，在 LunarLander-v3 中改变重力与风。[图 2]（原文第 9 页）展示了这些扰动下的性能。
-[图 2] 内容说明（中文）：该图是三组子图的组合，纵轴均为”归一化回报”（n=10，误差棒为标准误），横轴为扰动强度。
-
-左：grid_cliff 与 grid_trap 的”环境随机性”从 0 增大到 0.8 时，各方法的归一化回报曲线；
-中：Acrobot-v1 中摆杆两段长度之比（link length asymmetry，约 1.0→2.0）增大时的表现；
-右：LunarLander-v3 中重力（g 从 −10 到 −12）与风（wind 0→25）增强时的表现（横轴同时示意了仅重力变化与固定 g=−12 时变化风两段）。
-
-图中奖励模型与基线都在未扰动设定下训练并在整个变化过程中保持固定。可以观察到：在网格环境中，由多类型反馈推断的奖励训练出的策略在扰动下比由单一反馈模态或仅靠模仿训练的策略衰减得更平缓。虽然组合反馈的下游性能仍比模仿基线衰减得更平缓，但某些单模态（例如 R）的性能反而超过它——这与未扰动设定下的情况一致。在网格世界中，动作随机性增大导致模仿与单反馈奖励模型（例如 R、P、D）快速恶化，而从组合反馈学到的奖励能保持更高的平均回报。Acrobot-v1 中也有类似模式：系统动力学的结构性变化对模仿策略与单反馈奖励模型的冲击不成比例地大，而组合反馈在各级扰动下给出持续更稳定的性能。在 LunarLander-v3 中，重力与风扰动严重削弱了 BC 的性能；相比之下，MAVRL——尤其是用多类型反馈（PDR）和示范反馈（D）训练时——在越来越有挑战性的动力学下依然显著更鲁棒。
-多类型反馈能补偿大多数被错误设定的模态。 接下来我们检验多类型优势能否延伸到”反馈信号本身被污染”的情形——采用与第 6.2 节相同的固定分配反馈预算。我们施加四种错误设定（分别或联合）：低估偏好（）与示范（）的标注者理性程度、在评分效用上加性高斯噪声、以及停止倾向被误校准。grid_cliff 与 grid_sparse 的结果见 [表 3]（原文第 9 页；grid_trap 上的同样结论见表 5）。
-[表 3] 说明：上半部分为单模态模型，下半部分为使用完整反馈集合的 MAVRL；每一行把指定通道的数据侧参数破坏掉，而模型仍假设其取值完好（被破坏的模态在原表中以模糊/灰色标出，例如 PDRS 表示偏好被错误设定）。列含义：Base＝完好设定的归一化回报；Misspec.＝均值±标准误；Rat.＝Misspec./Base。原文数值请对照原 PDF。
-两点观察很突出。第一，在四种污染中的三种（偏好、评分与停止）下，PDR 保留了其完好设定性能的 ≥90%，而相应的单模态基线则崩塌到低至 0.10 的比例。这表明存在很强的补偿效应：在多个反馈类型上的联合推断吸收来自单一来源的污染，而不是把它传播开。第二，例外是示范：污染示范把 PDR 打到 0.38–0.50 的比例；同时污染全部四个通道也大致达到同一水平（0.43–0.50）。因此 PDR 的最坏情况退化受限于示范通道，而不是在各通道之间叠加恶化。总体而言，多类型优势可延伸到四个反馈通道中三个的上游污染场景，而示范仍是结构性的薄弱点。
-
-7. 结论（Conclusion）本文将”从多类型反馈学习奖励”表述为对共享潜在奖励函数的贝叶斯推断：每种反馈模态都通过显式似然作出贡献。我们提出了 MAVRL——一种可扩展的摊销变分推断算法，它优化单一统一目标。经验上我们发现：不同反馈类型会诱导出不同的奖励与不确定性结构，而从多个模态联合推断奖励能够利用它们的互补优势，从而提升奖励恢复、下游策略性能与鲁棒性。
-局限性（Limitations）。 我们的评估局限于仿真环境——虽然这允许对不同类型的反馈做受控分析，但并未捕捉真实世界任务的完整复杂性。此外，我们依赖合成生成的反馈；把 MAVRL 应用到可能表现出系统性偏差、不一致或依赖上下文的判断的真实人类反馈，仍是未来工作的重要方向。最后，尽管我们的框架能推断奖励不确定性，我们尚未利用这种不确定性来引导反馈采集，因此把异质反馈的主动学习（active learning）留作一个有前景的未来方向。
-
-致谢（Acknowledgments）本研究主要由 ETH AI Center 资助：其中 Raphaël Baur 获得 ETH AI Center 博士奖学金，Thomas Kleine Buening 获得 ETH AI Center 博士后奖学金。
-影响声明（Impact Statement）本文工作旨在推动机器学习领域的发展。我们的工作可能存在许多潜在的社会影响，但我们认为其中没有哪一项需要在此特别强调。
-
-参考文献（References）
-以下按惯例保留英文原文（按原 PDF 整理，作者与年份信息供检索）。
-
-
-Abbeel, P. and Ng, A. Y. Apprenticeship learning via inverse reinforcement learning. ICML, 2004.
-
-Abouelazm, A., Michel, J., and Zöllner, J. M. A review of reward functions for reinforcement learning in the context of autonomous driving. IEEE IV, 2024.
-
-Akiba, T., Sano, S., Yanase, T., Ohta, T., and Koyama, M. Optuna: A next-generation hyperparameter optimization framework. ACM SIGKDD, 2019.
-
-Amodei, D., Olah, C., Steinhardt, J., Christiano, P., Schulman, J., and Mané, D. Concrete problems in AI safety. arXiv:1606.06565, 2016.
-
-Bajcsy, A., Losey, D. P., O’Malley, M. K., and Dragan, A. D. Learning robot objectives from physical human interaction. CoRL, PMLR 78, pp. 217–226, 2017.
-
-Brown, D., Goo, W., Nagarajan, P., and Niekum, S. Extrapolating beyond suboptimal demonstrations via inverse reinforcement learning from observations. ICML, PMLR 97, pp. 783–792, 2019.
-
-Brown, D. S., Coleman, R., Srinivasan, R., and Niekum, S. Safe imitation learning via fast Bayesian reward inference from preferences. ICML, 2020.
-
-Bıyık, E., Losey, D. P., Palan, M., Landolfi, N. C., Shevchuk, G., and Sadigh, D. Learning reward functions from diverse sources of human feedback: Optimally integrating demonstrations and preferences. IJRR, 41(1):45–67, 2022.
-
-Cai, Y., Yuan, Y., Shi, J., and Lin, Q. Approximated variational Bayesian inverse reinforcement learning for large language model alignment. AAAI, vol. 39, pp. 23505–23513, 2025.
-
-Chan, A. J. and van der Schaar, M. Scalable Bayesian inverse reinforcement learning. ICLR, 2021.
-
-Christiano, P. F., Leike, J., Brown, T. B., Martic, M., Legg, S., and Amodei, D. Deep reinforcement learning from human preferences. NIPS, pp. 4302–4310, 2017.
-
-Gershman, S. J. and Niv, Y. Novelty and inductive generalization in human reinforcement learning. Topics in Cognitive Science, 7(3):391–415, 2015.
-
-Ghosal, G. R., Zurek, M., Brown, D. S., and Dragan, A. D. The effect of modeling human rationality level on learning rewards from multiple feedback types. AAAI, 2023.
-
-Gleave, A., Dennis, M. D., Legg, S., Russell, S., and Leike, J. Quantifying differences in reward functions. ICLR, 2021.
-
-Hadfield-Menell, D., Dragan, A., Abbeel, P., and Russell, S. The off-switch game. IJCAI, pp. 220–227, 2017.
-
-Hendrycks, D., Carlini, N., Schulman, J., and Steinhardt, J. Unsolved problems in ML safety. arXiv:2109.13916, 2021.
-
-Ibarz, B., Leike, J., Pohlen, T., Irving, G., Legg, S., and Amodei, D. Reward learning from human preferences and demonstrations in Atari. NeurIPS, 31, 2018.
-
-Jeon, H. J., Milli, S., and Dragan, A. D. Reward-rational (implicit) choice: A unifying formalism for reward learning. arXiv:2002.04833, 2020.
-
-Kingma, D. P. and Welling, M. Auto-Encoding Variational Bayes. ICLR, 2014.
-
-Knox, W. B. and Stone, P. Interactively shaping agents via human reinforcement: The TAMER framework. K-CAP ‘09, pp. 9–16, 2009.
-
-Knox, W. B., Allievi, A., Banzhaf, H., Schmitt, F., and Stone, P. Reward (mis)design for autonomous driving. Artificial Intelligence, 316:103829, 2023.
-
-Likert, R. A technique for the measurement of attitudes. Archives of Psychology, 140:1–55, 1932.
-
-Losey, D. P., Bajcsy, A., O’Malley, M. K., and Dragan, A. D. Physical interaction as communication: Learning robot objectives online from human corrections. IJRR, 41(1):20–44, 2022.
-
-Loshchilov, I. and Hutter, F. Decoupled weight decay regularization. arXiv:1711.05101, 2019.
-
-Macuglia, M., Friedrich, P., and Ramponi, G. Fine-tuning behavioral cloning policies with preference-based reinforcement learning. arXiv:2509.26605, 2025.
-
-McCullagh, P. Regression models for ordinal data. JRSS-B, 42(2):109–127, 1980.
-
-Mehta, S. A. and Losey, D. P. Unified learning from demonstrations, corrections, and preferences during physical human–robot interaction. J. Hum.-Robot Interact., 13(3), 2024.
-
-Metz, Y., Lindner, D., Baur, R., Keim, D. A., and El-Assady, M. RLHF-Blender: A configurable interactive interface for learning from diverse human feedback. Interactive Learning with Implicit Human Feedback Workshop at ICML, 2023.
-
-Metz, Y., Geiszl, A., Baur, R., and El-Assady, M. Reward learning from multiple feedback types. ICLR, 2025.
-
-Myers, V., Bıyık, E., Anari, N., and Sadigh, D. Learning multimodal rewards from rankings. CoRL, 2021.
-
-Ng, A. Y., Harada, D., and Russell, S. J. Policy invariance under reward transformations: Theory and application to reward shaping. ICML, 1999.
-
-Ng, A. Y., Russell, S., et al. Algorithms for inverse reinforcement learning. ICML, vol. 1, 2000.
-
-Ouyang, L., Wu, J., Jiang, X., et al. Training language models to follow instructions with human feedback. arXiv:2203.02155, 2022.
-
-Palan, M., Landolfi, N. C., Shevchuk, G., and Sadigh, D. Learning reward functions by integrating human demonstrations and preferences. RSS, 2019.
-
-Paszke, A., Gross, S., Massa, F., et al. PyTorch: An imperative style, high-performance deep learning library. NeurIPS, 2019.
-
-Poddar, S., Wan, Y., Ivison, H., Gupta, A., and Jaques, N. Personalizing reinforcement learning from human feedback with variational preference learning. NeurIPS (NIPS ‘24), 2024.
-
-Raffin, A., Hill, A., Gleave, A., Kanervisto, A., Ernestus, M., and Dormann, N. Stable-Baselines3: Reliable reinforcement learning implementations. JMLR, 22(268):1–8, 2021.
-
-Ramachandran, D. and Amir, E. Bayesian inverse reinforcement learning. IJCAI’07, pp. 2586–2591, 2007.
-
-Rothkopf, C. A. and Dimitrakakis, C. Preference elicitation and inverse reinforcement learning. ECML/PKDD, pp. 34–48, Springer, 2011.
-
-Wirth, C., Fürnkranz, J., and Neumann, G. Model-free preference-based reinforcement learning. AAAI’16, pp. 2222–2228, 2016.
-
-Yuan, Y., Hao, J., Ma, Y., Dong, Z., Liang, H., Liu, J., Feng, Z., Zhao, K., and Zheng, Y. Uni-RLHF: Universal platform and benchmark suite for reinforcement learning with diverse human feedback. ICLR, 2024.
-
-
-
-附录（Appendix）附录 A 实现细节（Implementation Details）A.1 模型结构（Model Architecture）奖励编码器  与 Q 值估计器  都实现为两层 MLP，激活函数为 Leaky ReLU。对于网格环境，使用学习率  、批大小 32，奖励只依赖状态：。对于控制任务（CartPole-v1、Acrobot-v1、LunarLander-v3），使用学习率 、批大小 128，奖励依赖状态–动作对：。所有模型都用带梯度裁剪（最大范数 1.0）的 AdamW 训练（Loshchilov &amp; Hutter, 2019）。奖励编码器参数化一个以标准正态分布为先验的高斯后验，并用重参数化技巧训练。专家参考策略用 Stable-Baselines3 的 DQN（LunarLander-v3 以外）与 PPO（LunarLander-v3）训练（Raffin et al., 2021）。
-超参数优化。 对每个环境与反馈组合，用 Optuna 的多元 TPE 采样器（constant_liar=True，20 个启动试验）调优超参数（Akiba et al., 2019）。每个试验在采样配置下、跨多个随机种子训练模型，并按所选验证指标打分。联合搜索空间包括：
-
-损失权重  与 ，在  上对数均匀采样；
-奖励编码器宽度：网格为每层 16 / 32 / 64 个隐单元，控制任务为 64 / 128 / 256；
-奖励模型优化器：学习率（对数均匀 ）、批大小（网格为 16 / 32 / 64 / 128，控制任务为 32 / 64 / 128 / 256）；
-对 LunarLander-v3，还包括 PPO 重训的超参数（学习率、裁剪范围、熵/价值系数、GAE-、梯度范数上界等）。
-
-调优在两种”反馈分配模式”下进行：
-
-等预算（Dirichlet）模式：把固定的总反馈预算通过平坦-Dirichlet 分配（由 Optuna 建议）切分到各个激活模态。每种模态设置上限（例如网格/控制任务分别 ≤16/≤32 条示范，因为示范似然会很快饱和），通过裁剪 Dirichlet 比例并重新分配超出的部分来实施。
-固定分配模式：每个模态被分配规定的样本数（FIXED_SAMPLE_COUNTS），只搜索上述优化超参数。该模式用于在”有用且可比”的预算下刻画每个模态的贡献，而不与分配选择相混淆。
-
-对同一环境内的所有方法统一施加相同的调优协议（采样器、搜索空间、每试验种子数、验证指标），从而保证所报数字反映的是匹配计算量下的最佳搜索性能。模型与训练代码基于 PyTorch 实现（Paszke et al., 2019）。
-A.2 反馈模拟（Feedback Simulation）我们用温度参数为  的 Boltzmann 理性策略 rollout 收集轨迹，并从中模拟人类反馈。下面给出各类反馈的生成过程。
-偏好（Preferences）。 从收集到的轨迹中随机提取固定长度  的片段。对每对片段 ，计算其归一化回报  ，并按 Bradley–Terry 模型生成一个偏好：
-
-其中  表示 logistic sigmoid， 控制偏好理性程度。观测偏好按该概率作为 Bernoulli 随机变量采样。取值： ；片段长度  （网格）或  （其余环境）；轨迹理性  （网格，均匀策略）或 （其余环境）。
-示范（Demonstrations）。 专家示范通过 rollout Boltzmann 理性策略    生成，其中  为最优 Q 函数。示范理性  控制专家最优程度。取值： （网格）， （其余所有环境）。
-评分（Ratings）。 从轨迹中提取随机片段并计算其归一化回报。切点  放在逐步片段回报的   百分位处。随后在累积 logit 模型下随机采样评分：
-
-该式产生近似均衡的类别。典型参数：  个类别，片段长度  （网格；其余环境），轨迹理性    （分别对应网格、Acrobot-v1 与 CartPole-v1、LunarLander-v3）。
-停止信号（Stops）。 用基于累积遗憾的离散时间风险模型模拟停止反馈。对一条轨迹片段，在每个时间步计算瞬时遗憾   ，并维护一个折扣累积遗憾：
-
-其中   是遗憾折扣因子，控制过去次优性被”遗忘”的速度。风险率（给定此前未停止时在时刻  停止的概率）为
-
-灵敏度参数  从数据校准为  ，其中  是缩放常数， 是参考遗憾水平（通常取所有片段最大累积遗憾的第 50 百分位）。 越大，停止行为越激进。停止时间顺序采样：在每个时间步  以概率  采样一个停止事件；若片段内没有停止发生，则观测右删失。参数： ，遗憾折扣  ，参考百分位 50%，片段长度  （网格；其余环境），轨迹理性  。
-附录 B 硬件与计算资源（Hardware and Computational Resources）由于第 6 节要评估大量配置，单个奖励模型的训练与评估运行被分发到由 SLURM 管理的机构集群上，每个 worker 分配 4 个 CPU 核与 8 GB 内存。由于奖励编码器与 Q 值估计器网络很小，无需 GPU 加速。最终实验总计算量约为   CPU·小时。
-需要说明的是，在单机上，单次奖励模型训练大约耗时：网格环境 2 分钟，其余环境约 15 分钟；其中大部分计算时间花在”用推断出的奖励函数重训策略以进行评估”上。
-附录 C 等预算结果（Equal Budget Results）对每个环境，我们固定一个总反馈预算 ，由等预算表中的全部 11 个模态子集共享：四种反馈各自单独使用（P、D、R、S）、全部六种两两组合，以及四者的完整组合（PDRS）。预算为：三个表格型网格（grid_cliff、grid_sparse、grid_trap）、Acrobot-v1 与 CartPole-v1 取   个样本；LunarLander-v3 取   个样本。
-对每一对（环境，模态子集），我们运行一次独立的 TPE（Tree-structured Parzen Estimator）搜索，联合调节 (i)  分配给每个激活反馈类型的比例，以及 (ii) 奖励模型的训练超参数（编码器大小、学习率、批大小、重要性加权开关、KL 权重、TD 权重）；对非表格环境，搜索还额外调节下游 PPO 重训超参数。每个试验在表格环境下用 20 个随机种子、非表格环境下用 10 个随机种子训练奖励模型，并按”逐种子归一化折扣回报均值”（表格）或”平均回合回报”（非表格）打分；每个研究运行 125–200 个试验。最佳试验的奖励模型 checkpoint 就是本文所有下游迁移与误设实验所使用的那一批。
-[表 4] 位置与内容说明：原文第 15 页。该表给出等预算设定下、跨环境的各反馈组合的归一化平均回报与平均 EPIC 距离（ ）。表结构同表 1（上半部分为回报、下半部分为 EPIC，越低越好）。回报按环境归一化，100 对应真实奖励训练出的近似最优策略、0 对应均匀随机策略；深灰底为该环境最优（回报在 1% 以内），浅灰底为该区间外次优。具体数值请对照原 PDF。
-附录 D 完整误设结果（Full Misspecification Results）我们考虑四种误设变体，可单独或联合施加：
-
-偏好：低估标注者噪声——  而模型假设  ；
-示范：同样低估标注者噪声——  而模型假设  ；
-
-（上述两者都表示：数据在高度含噪标注下生成，而模型假设标注者近乎理性。）
-
-评分：在评分分配之前给片段效用叠加高斯噪声  ，而模型假设效用无噪声；
-停止倾向：误校准——  而模型假设  。
-
-在所有情况下，奖励模型都用与主表相同的、良好设定的参数训练，因此未扰动基线不变。
-[表 5] 位置与内容说明：原文第 15 页（表 3 的补全版，包含 grid_trap 一列）。表结构同表 3：上为单模态模型，下为完整反馈集合的 MAVRL；每行破坏指定通道的数据侧参数，被破坏的模态在原表中以模糊方式标出（例如 PDRS 表示偏好被误设）。列：Base（完好设定归一化回报）、Misspec.（均值±标准误）、Rat.（=Misspec./Base）。正文第 6.3 节所述规律在 grid_trap 上同样成立，具体数值请对照原 PDF。
-附录 E 额外迁移结果与扰动详细描述（Additional Transfer Results and Detailed Perturbation Description）所有反馈组合的迁移性能结果见 [图 3]（原文第 17 页）。
-[图 3] 内容说明（中文）：该图展示三种动力学扰动场景下、由各方法推断的奖励训练出的策略的归一化平均回报（ ）。奖励模型与基线在未扰动设定下训练、并在整个变化过程中保持固定。图 (a)(b) 分别对应 grid_cliff 与 grid_trap 中”环境随机性”（0→0.8）的逐步增强；(c) 为 Acrobot-v1 摆杆两段长度之比的增大（约 1.0→2.0）；(d) 为 LunarLander-v3 重力与风力的增强。回报按”未扰动设定下用真实奖励训练出的近似最优策略＝100.0、均匀随机策略＝0.0”归一化，误差棒为标准误。各曲线对应本文全部单模态与多模态组合以及行为克隆基线，请对照原 PDF 查看逐条曲线。
-下面总结用于评估”系统动力学系统性变化下下游策略性能鲁棒性”的环境扰动。
-网格世界环境（grid_cliff、grid_sparse、grid_trap）。 通过在智能体的动作执行中引入随机性来扰动转移动力学：具体地，提高执行随机动作的概率  ，其中   对应确定性动力学。这些环境具有稀疏奖励以及悬崖或陷阱等惩罚区域，因此对动作噪声的鲁棒性尤为重要。
-在网格实验中，所有方法在   时收敛到相同性能。这一行为直接源于随机动作的定义方式。设  是确定性策略  选中的动作，即  。在动作噪声下（概率 ），实际执行的策略变为
-
-在   的网格环境中，令   会对所有动作  给出  ——等价于均匀随机策略。由于回报按”均匀策略取得 0.0”归一化，所有方法在   处都收敛到这个值。对于更大的 ，非意图动作获得比原始意图动作更高的概率质量，使确定性动作选择变得次优，因此我们把分析限制在  。
-LunarLander-v3。 我们通过联合增大重力大小与风的强度来扰动动力学。具体地，重力参数在     中变化（默认 ），风力在  中变化（默认 0.0）。这些扰动产生越来越有挑战性的动力学：智能体既要缓解更强重力导致的快速下落，又要补偿风引起的横向漂移。
-Acrobot-v1。 我们通过改变双摆两段连杆长度的比例来扰动系统。连杆间不对称性增大改变了系统的惯量与耦合，从而相对未扰动设定产生逐步不同且更具挑战性的动力学。
-附录 F 额外定性结果（Additional Qualitative Results）本节给出所有网格环境的额外定性结果。[图 4]（grid_sparse，原文第 18 页）、[图 5]（grid_cliff，原文第 19 页）、[图 6]（grid_trap，原文第 20 页） 每幅都展示了同一推断奖励模型的两种可视化：
-
-(a) 均值与方差的联合视觉编码（与图 1 一致）；
-(b) 对同一数据，均值与方差的分离视觉编码。
-
-每幅图都由   网格上、来自 2 条示范、256 对成对比较、128 条评分 的推断结果组成；最右列展示组合全部反馈模态后的结果（各子图上方或图内标注了对应反馈模态与数据量，请对照原 PDF）。
-
-需要说明的是，原文按反馈类型对推断出的奖励值做了线性归一化（这不会影响策略性能，因为最优策略诱导的行为对奖励函数的正缩放与常数平移不变，见 Ng et al., 1999）。
-
-
-译后小结（供学习参考）
-一句话概括：MAVRL 把”从人类反馈学奖励”统一成一个贝叶斯问题——共享一个潜在奖励函数 ，每种反馈（示范 D、偏好 P、评分 R、停止 S）都用自己的概率似然说话，全部放进一个 ELBO 里端到端训练，不再需要手工配损失权重。
-方法骨架：奖励编码器   ＋ 辅助 Q 函数 （支持示范/停止这类需要价值估计的反馈）＋ 各类反馈的似然解码器  ＋ TD 正则把奖励与 Bellman 差分对齐。
-四个似然：偏好＝Bradley–Terry；示范＝Boltzmann 理性策略；评分＝有序 logit（切点不等距）；停止＝关于终止时间的风险模型（几何分布，右删失）。
-核心结论：(1) 组合反馈优于任何单模态；(2) 示范在稀疏奖励环境最强，评分在 CartPole 最好，偏好单用平庸但组合时贡献大，停止信号补充”次优性”信息；(3) 多类型联合推断对动力学扰动和大部分反馈误设（偏好/评分/停止）都很鲁棒，唯独示范通道被污染时仍是结构性短板；(4) 相对 MCMC 快约 30 倍、且能做连续控制，相对事后平均大幅更优。
-阅读时建议对照原图：图 1 / 图 4–6 的”热力图”直观展示各类反馈留下的”不确定性模式”；图 2 / 图 3 的”鲁棒性曲线”直观展示组合反馈衰减更平缓。
-
-
-本翻译由学习者整理发布，仅供学习交流；原文版权归作者所有。若用于正式引用，请引用原论文。
-]]></content>
-      <categories>
-        <category>论文学习</category>
-      </categories>
-      <tags>
-        <tag>论文</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>BNRM论文复现全过程与原理详解</title>
-    <url>/2026/10/20/BNRM%E8%AE%BA%E6%96%87%E5%A4%8D%E7%8E%B0%E5%85%A8%E8%BF%87%E7%A8%8B/</url>
-    <content><![CDATA[
-本文目的：把复现《Mitigating Reward Hacking in RLHF via Bayesian Non-negative Reward Modeling》(BNRM) 论文的全过程 + 每一步背后的原理讲清楚。昨天是”机械跟着步骤跑”，今天这篇文章让你彻底弄懂每一步为什么这么做。
-配套阅读：本站《reward_model原文》《reward_model中文翻译》《agent对reward_model的理解》三篇，讲论文本身；本文讲复现。
-
-
-一、这篇论文在干什么（30 秒回顾）
-目标：训练一个”奖励模型”（给大模型回答打分），但要防”奖励黑客”——即模型钻空子靠”回答长度”这种虚假信号刷高分。
-核心办法：把奖励表示成”稀疏非负因子的内积“  ，让”长度”这种虚假因子没有容身之处，再从根上抑制它。
-实现：LLM 主干（gemma-2b）→ 一个 MLP 头输出 Weibull 分布参数 → 采样出稀疏非负因子  → 乘全局字典  得到奖励 r → 用 Bradley-Terry 偏好损失 + KL 项训练。
-
-（细节看《agent对reward_model的理解》，这里不再展开。）
-二、复现的整体流程（一张图）① 检查 GPU      → 确认 8GB 能跑② 建 conda 环境  → 隔离依赖③ 装 CUDA 版 torch → 用显卡④ 装依赖        → transformers/peft 等⑤ 下代码/模型/数据 → 三件套（代码=GitHub，模型=翻墙官方站，数据=镜像）⑥ 改代码适配    → Windows 上的几个 bug⑦ 训练          → accelerate + LoRA⑧ 评估          → RewardBench / RM-Bench
-
-下面按顺序，把每一步的”做了什么 + 为什么“讲透。
-
-三、每一步的原理1. 为什么先检查 GPU，为什么 8GB 能跑训练大模型必须用 GPU（显卡）。你的是 RTX 4060 Laptop，8GB 显存。
-为什么 8GB 能跑 2B 模型？关键在 LoRA/QLoRA：
-
-
-
-微调方式
-原理
-显存
-
-
-
-全参微调
-更新全部 25 亿参数
-20GB+，8GB 跑不了
-
-
-LoRA
-冻结原模型，只训练额外的小”适配矩阵”
-权重 4GB 仍要完整放显存，~6GB，勉强
-
-
-QLoRA
-LoRA + 4bit 量化，权重压到 1/4
-~2GB，舒服
-
-
-LoRA 原理一句话：大模型每个线性层有个大矩阵 W（如 4096×4096），LoRA 不动 W，只加两个瘦矩阵 A、B，前向变成 W·x + (B·A)·x，只训练 A、B。所以”可训练参数”从 25 亿降到 1367 万（你训练日志里 trainable params: 13672450 就是这个）。
-2. 为什么建 conda 环境（隔离）每个项目要装特定版本的库，全塞一起会冲突。conda create -n bnrm = 开一个独立工具箱，BNRM 要的库装在里面，不碰你 MAVRL 的环境。
-3. 为什么必须 CUDA 版 torch
-CPU 版 torch：只能用 CPU 算，显卡闲着，训练极慢甚至跑不动。
-CUDA 版 torch（版本号带 +cu121）：能调用显卡加速。
-你中途装错过一次（CPU 版），报 Torch not compiled with CUDA enabled，就是因为装了 CPU 版。
-
-4. 为什么”代码、数据、模型”是三件套
-代码：GitHub 仓库（训练程序，几 MB）。
-模型：gemma-2b-it 权重（~5GB）。
-数据：Unified-Feedback 偏好数据集（几个 GB）。
-
-后两者太大，GitHub 放不下，所以代码放 GitHub，模型/数据放 HuggingFace/魔搭，需要时再下载。
-5. 为什么 gemma 要翻墙下官方站、数据集用 hf 镜像国内网络访问国外服务器慢/被墙，具体：
-
-HuggingFace 官方站：国内经常超时（ConnectTimeout），但翻墙后能下。
-hf-mirror.com 镜像：国内能直连，但 gemma 是”受限模型”（gated），镜像访问它报 403；而 Unified-Feedback 数据集不受限，镜像能下。
-魔搭（ModelScope）：阿里的国内平台，上面也有 gemma 镜像（AI-ModelScope/gemma-2b-it），本可以不用翻墙。但当时魔搭的 CLI 命令没在你终端里配好（命令回显没执行），所以最终 gemma 改走”翻墙 + 官方站”这条路。
-
-所以实际做法：gemma 用 HF 官方站 + 翻墙下（受限模型镜像 403），数据集用 hf 镜像下（不受限，不用翻墙）。
-6. 训练命令每个参数的含义accelerate launch --num_processes 1 --mixed_precision bf16 BTBNRM_train.py \  --base_model D:\Model\gemma-2b-it \      # 底座模型（本地路径）  --dataset llm-blender/Unified-Feedback \  # 数据集  --dataset_mode 40k \                      # 只用 4 万样本  --num_train_epochs 2 \                    # 训 2 轮  --max_length 512 \                        # 序列最长 512  --use_lora True \                         # 用 LoRA  --lora_r 32 --lora_alpha 64 \             # LoRA 的秩和缩放系数  --per_device_train_batch_size 1 \         # 每卡 batch=1（8GB 显存限制）  --gradient_accumulation_steps 8 \         # 累积 8 步再更新（模拟 batch=8）  --learning_rate 1e-4 \                    # 学习率  --loss_type bt \                          # Bradley-Terry 偏好损失  --KL_ratio 1e-5 \                         # 论文里的 η，KL 正则的强度  --attn_implementation eager \             # 不用 flash_attention（难装）  --report_to none                          # 不接 wandb
-
-下面把容易含糊的参数展开讲透：
-（1）”只用 4 万样本”——1 个样本是啥，总共有多少
-1 个样本 = 一条”人类偏好数据”：同一个问题（prompt），回答 A（chosen，被选中）和回答 B（rejected，被拒绝），人标注”A 比 B 好”。
-Unified-Feedback 的 all 子集原始约 88 万条（日志里 “Filter: 884515”）。
---dataset_mode 40k = 只取其中约 4 万条训练（论文对比 40K / 400K 两种”数据量”设置）。
-实际训练集是 42429 条（日志 “Training dataset size: 42429”，过滤掉”两个回答评分一样”的无效数据后）。
-
-（2）”训 2 轮”是什么意思
-1 轮（epoch）= 把全部训练数据完整过一遍；2 轮 = 过两遍。过一遍可能没学透，多过几遍更充分（过多会过拟合）。
-
-（3）LoRA 的”秩 r=32”和”缩放系数 alpha=64”
-秩 r：LoRA 加的 A、B 两个瘦矩阵的”中间宽度”。A 是 (d×r)、B 是 (r×d)。r 越大，LoRA 能表达的更新越丰富（参数越多）；r 越小越省。r=32 就是中间维度取 32。
-缩放系数 alpha：LoRA 更新项会乘 alpha/r 控制强度。alpha=64、r=32 → 系数 64/32 = 2（更新放大 2 倍）。
-一句话：r 决定”适配器多大”，alpha 决定”影响多强”。
-
-（4）”batch”是啥，为什么每卡 batch=1
-batch = 一批。训练不是一条条喂，而是一次喂一批。batch=1 = 每次 1 条。
-大 batch 梯度噪声小、训练稳，但显存占用大；8GB 卡只能 batch=1。所以 batch=1 是”显存所迫”，靠梯度累积补救。
-
-（5）”累积 8 步再更新”（gradient_accumulation_steps=8）
-正常：每喂一个 batch 就更新一次权重。
-梯度累积：喂好几个 batch 把梯度攒着不更新，攒够 8 个才更新一次。
-效果：等效 batch=8，但显存只占 batch=1。本质是”用时间换等效大批量”。
-验证：42429 ÷ 8 ≈ 5303 步/轮 × 2 轮 ≈ 10606 步（正好是日志总步数）。
-
-（6）flash_attention 和 wandb 是什么
-flash_attention：加速注意力计算的优化技术，更快更省显存，但要装 flash-attn 库（Windows 极难装）。改 eager = PyTorch 标准实现，慢一点但不用装额外库。
-wandb（Weights &amp; Biases）：在线训练日志可视化平台（画 loss 曲线、记超参）。--report_to none = 不接它，日志只打到终端。不接不影响训练。
-
-其余参数一句话
-max_length 512：每条样本截断到最长 512 个 token（超长截断，省显存）。
-learning_rate 1e-4：学习率，每次更新权重时”迈多大步”。太大震荡、太小学得慢。
-loss_type bt：用 Bradley-Terry 偏好损失（论文式 7）。
-KL_ratio 1e-5：论文里的 η，KL 正则项的强度（很小，因为 KL 只是”轻微正则”）。
-mixed_precision bf16：半精度浮点，省一半显存、加速，40 系卡支持。
-
-四、踩过的 8 个坑（每个：现象 → 原理 → 解决）这是这次复现最有价值的部分。每个坑都是真实踩过的，弄懂它们，你就理解了”Windows + 国内网络”下复现 LLM 论文的常见雷区。
-坑 1：pip 装包超时 / 清华源挂 / DNS 失败现象：
-
-Read timed out（连 pypi.org 超时）；
-getaddrinfo failed（连清华源域名解析失败）；
-WinError 10061 目标计算机积极拒绝（清华源直接拒绝连接）。
-
-原理：pip 默认从国外 pypi.org 下载，国内慢/超时；换成清华源后，清华源本身又”时好时坏”（DNS 解析失败、连接被拒）。
-解决：把 pip 源换成阿里云：
-pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/pip config set global.trusted-host mirrors.aliyun.com
-
-教训：国内装任何 Python 包，都要用国内镜像源；一个源不行就换另一个。
-坑 2：HuggingFace 超时 / 镜像 403（gated 模型）现象：
-
-下数据集报 ConnectionError: Couldn't reach 'llm-blender/Unified-Feedback' (ConnectTimeout)；
-下 gemma 报 403 Forbidden: Please enable access to public gated repositories。
-
-原理：
-
-HF 官方站在国内超时；
-gemma 是 Google 的”受限模型”，要登录 + 同意协议才能下；
-hf-mirror 镜像不认受限模型的认证，所以 gemma 走镜像报 403；但数据集不受限，镜像能下。
-
-解决：
-
-gemma → 翻墙用 HF 官方站（受限模型镜像 403，只能官方站）；
-数据集 → 用 hf-mirror 镜像（不受限）。
-
-坑 3：torch 装成了 CPU 版现象：AssertionError: Torch not compiled with CUDA enabled。
-原理：从普通 pip 源装的 torch 是 CPU 版（不带显卡支持）。CUDA 版必须从 pytorch 专用源下载。
-解决：卸载 CPU 版，从专用源装 CUDA 版：
-pip uninstall torch -ypip install torch --index-url https://download.pytorch.org/whl/cu121
-
-验证：python -c "import torch; print(torch.cuda.is_available())" 必须输出 True。
-教训：装 torch 一定要看版本号有没有 +cu121 这种后缀——有就是 CUDA 版，没有就是 CPU 版。
-坑 4：数据集有”子集”和”分片”两个隐藏维度现象：
-
-Config name is missing. Please pick one among ['Nectar', 'UltraFeedback', 'all', ...]；
-split='validation' 找不到（实际叫 val）。
-
-原理：
-
-llm-blender/Unified-Feedback 数据集下面有多个子集（config），论文用的是 all 这个子集；
-子集 all 的分片叫 train 和 val（不是 validation）。
-
-解决：改两处代码：
-
-load_dataset(data_path, split=...) → load_dataset(data_path, 'all', split=...)（指定子集）；
-split='validation' → split='val'（修正分片名）。
-
-坑 5：Windows 多进程递归崩溃（num_proc）现象：疯狂刷 RuntimeError: An attempt has been made to start a new process before the current process has finished its bootstrapping phase，无限递归。
-原理：数据集的 filter/map 用了 num_proc=30（开 30 个进程并行处理）。Windows 的多进程用 “spawn” 方式，会重新导入主脚本 BTBNRM_train.py，而它没有 if __name__ == '__main__': 保护，于是每个子进程又触发一次数据加载、又开 30 个进程……无限递归。
-解决：把 load_datasets.py 里所有 num_proc=N 改成 num_proc=1（单进程处理，慢一点但稳定）。
-教训：Windows 上跑 HuggingFace 数据集，num_proc 设为 1 最安全（除非脚本有 if __name__ == '__main__' 保护）。
-坑 6：Windows 路径反斜杠 bug（output_dir 盘符）现象：OSError: [WinError 123] ... '../save_BNRM/D:'。
-原理：代码里 base_model.split("/") 是按正斜杠切分，但你传的 --base_model D:\Model\gemma-2b-it 是 Windows 反斜杠路径，切分失败，导致整个 D:\Model\gemma-2b-it（含盘符 D:）被拼进输出目录名，而 Windows 不允许目录名里有 D: 这种盘符。
-解决：改成 os.path.basename()（正反斜杠都兼容）：
-model_name_split = os.path.basename(script_args.base_model)
-
-教训：复现别人的代码时，作者在 Linux 上写的”路径处理”往往在 Windows 上会翻车，反斜杠/盘符是常见雷。
-坑 7：断点续训缺 _keys_to_ignore_on_save现象：AttributeError: 'AutoModelForCausalLMWithBNValueHead' object has no attribute '_keys_to_ignore_on_save'。
-原理：用 trainer.train(resume_from_checkpoint=True) 续训时，HF Trainer 会检查模型的 _keys_to_ignore_on_save 属性。但作者自定义的模型类（AutoModelForCausalLMWithBNValueHead）没定义这个属性，标准 HF 模型都有。
-解决：在模型类的 __init__ 里补一句：
-self._keys_to_ignore_on_save = None
-
-坑 8：断点续训”续上了进度条，没续上权重”（随机模型）现象：续训后 loss 从 0.3~0.5 又变回 0.69（随机基线），但 epoch 显示 1.89（快训完）。
-原理：断点续训要恢复两样东西——① 模型权重（”模型学会了什么”）② 优化器/调度器状态（”训练到第几步了”）。这次续训，优化器状态加载成功了（所以 epoch=1.89），但模型权重加载失败了（键名对不上）：
-
-保存时用的是”短前缀”键名（作者自定义 save_model 存的是 model.base_model.model 的 state dict）：model.layers.0...lora_A.default.weight；
-加载时 HF 官方续训用”长前缀”键名（模型外面被 PeftModel 包了一层）：base_model.model.pretrained_model.model.layers.0...lora_A.default.weight。
-
-两边对不上 → 输出 “missing keys”（模型要的键，checkpoint 没有）+ “unexpected keys”（checkpoint 有的键，模型不认）→ 权重静默地没加载。
-结果：模型保持”刚初始化的随机权重”，但训练循环以为自己在 epoch 1.89——等于”用一个随机模型从第 1.89 轮继续跑”。
-证据：loss ≈ 0.69 = log 2 = BT 损失的”随机猜”基线（训练好的模型应是 0.3~0.5）。
-解决：放弃续训。用第一次训练的 checkpoint-7000（71.9% 准确率）直接做评估；或从头重跑（加 --save_steps 100）。
-
-五、结果解读训练日志里几个关键数字怎么看：
-
-
-
-指标
-你的值
-含义
-
-
-
-trainable params: 13672450
-1367 万
-LoRA 只训练 1367 万参数（模型总共 25 亿）
-
-
-loss: 0.71 → 0.3~0.5
-下降
-偏好损失在降，模型在学
-
-
-eval_BNBT_accuracy: 0.719
-71.9%
-验证集准确率（论文 gemma-2b + 40k 目标是 ~74.2%）
-
-
-grad_norm
-波动
-梯度范数，没爆（没 NaN）就正常
-
-
-
-loss ≈ 0.69 是”随机猜”的基线（log 2），低于它就说明模型学到了偏好；
-你训练到 75%（epoch 1.5）时准确率 71.9%，已经接近论文水平，继续训完剩余 epoch 会更高。
-
-
-六、一句话总结整个复现
-复现 BNRM = 检查 GPU（8GB 用 LoRA）→ 建隔离环境 → 装 CUDA 版 torch → 用国内镜像装依赖 → 翻墙下模型、镜像下数据 → 改掉 Windows 上的几个路径/多进程 bug → accelerate launch BTBNRM_train.py 训练 → 看 loss 下降、准确率上升。
-
-踩的 8 个坑，本质上就三类：① 国内网络（坑 1、2）② torch/环境（坑 3）③ Windows 兼容性（坑 4~8）。这三类懂了，以后复现任何 LLM 论文都会顺利很多。
-]]></content>
-      <categories>
-        <category>论文学习</category>
-      </categories>
-      <tags>
-        <tag>论文</tag>
       </tags>
   </entry>
   <entry>
@@ -3105,52 +3783,126 @@ Arena-Hard 与人工评估。 为检验奖励黑客的缓解是否带来与人�
       </tags>
   </entry>
   <entry>
-    <title>大模型</title>
-    <url>/2026/09/08/%E5%A4%A7%E6%A8%A1%E5%9E%8B/</url>
-    <content><![CDATA[Transformer基本架构词嵌入与位置编码模型首先将输入文本拆分为一个个 Token，再通过词嵌入矩阵将每个 Token 映射为高维词向量。所谓词嵌入矩阵其实就是Token list，只不过矩阵的参数会不断更新，查表的时候直接 one-hot向量x词嵌入矩阵。词嵌入矩阵可以从零开始训练，也可以直接加载预训练好的权重，通过查表快速完成 Token 到向量的转换词向量能够编码词汇的语义特征，且在向量空间中体现语义关联，比如说希特勒和墨索里尼的差值会跟德国和意大利相似，语义相近的词在空间中距离更近。模型没有办法读懂文字，但他可以通过这些向量展现文字的内容。词向量的维度往往很高，比如GPT-3有12288维。词嵌入本身不包含位置信息，Transformer 会额外引入位置编码，将位置信息与词向量逐元素相加，让模型感知词汇的顺序关系
-自注意力机制词嵌入能提取单个Token的特征，但无法结合上文提取更加符合语境的特征，自注意力的作用是让每个 Token 融合所有相关 Token 的信息，输出符合上下文的向量
-单头自注意力对于每个 Token，用三个独立的投影矩阵，将词向量分别映射为三类向量
+    <title>agent对BNRM研究思路的整理</title>
+    <url>/2026/10/16/agent%E5%AF%B9BNRM%E7%A0%94%E7%A9%B6%E6%80%9D%E8%B7%AF%E7%9A%84%E6%95%B4%E7%90%86/</url>
+    <content><![CDATA[
+配套阅读：本文是对《BNRM的研究思路》的解读与整理，建议先读那篇原始方案，再回来看这篇”理解向”梳理。
+一句话背景：老师给的方向叫 MF-BNRM（Multi-Feedback Bayesian Non-negative Reward Modeling），目标是把 BNRM 的”稀疏非负贝叶斯表示”和 MAVRL 的”多反馈统一学习”结合起来，做出一个有理论贡献的 ICML 级工作。
 
-查询向量 Q (Query)：代表 “我要检索什么信息”
-键向量 K (Key)：代表 “我包含什么可匹配的特征”
-值向量 V (Value)：代表 “我携带的实际语义内容”
 
-通俗来说，每个Token会向所有Token发问（Query），我们有关系吗，即每一个Token的词嵌入向量乘以矩阵  得到查询向量 。每个词向量乘以键矩阵  得到 K 向量，与 维度相同。如果两个向量相似，就说明两个Token关系匪浅，我们用QK的点积乘来表示相关程度。得到所有Token的QK点积，即我们对Token两两之间的相关程度打了分,将得分除以 （  为键向量维度）做缩放，保证数值稳定性。然后用softmax把得分变成0~1的概率分布，作为两两之间的相关性权重。我们取值矩阵  乘以前面的词向量，得到这个Token携带的实际语义，并用相关性权重对所有Token的V向量加权求和，得到当前 Token 的注意力输出。这一步可以形象的理解成我们将当前Token的词向量移动到了更适合当前语境的地方
+1. 这个研究思路到底想干什么1.1 用一句话说清核心创新先看老师方案里最关键的一句话：
 
-同一层自注意力中，所有 Token 共享同一组    投影矩阵，他们并不是能有效预测下一个值，他们只是把某个词向量分别投影成“我想找什么”，“我是什么”，“我携带的信息是什么”。需要注意的是，以上是双向自注意力，可访问所有位置的Token。在现在的主流大模型，如GPT中，模型不能读取未来信息，因此加入因果掩码：将当前Token之后所有位置的QK得分设为 ，softmax后对应权重变为0，实现仅关注历史与当前Token。不过在推理过程中，我们不用先算出所有Token之间的QK值，只用算出当前Token和之前的，就不需要掩码了
-多头注意力多头注意力把原向量拆成很多分，每分独立计算注意力，最后将所有头的输出在维度上拼接，但直接拼接的向量头和头之间没有交流，所以我们再通过输出矩阵  线性投影一次，这样就可以把不同头之间信息共享。这样可以从不同角度提取注意力，得到词语间更多的信息和特征
-MLP经过多头注意力后，每个 Token 得到融合上下文的向量，我们把这个向量做一个简单的激活具体实现为：首先通过一个线性层将向量升维（通常为原维度的 4 倍）并加偏置，经过激活函数引入非线性，再通过第二个线性层将向量降维回原始维度并加偏置
-Transformer 层的完整结构Transformer的每一层，核心是注意力 + MLP，还搭配残差连接与层归一化，这俩是深度网络稳定训练的关键，残差连接可以将模块输入与输出直接相加，缓解梯度消失，层归一化对向量做特征归一化，加速训练收敛当前主流的一层：输入 → LayerNorm → 多头自注意力 → 残差连接 → LayerNorm → MLP → 残差连接 → 输出
-输出与损失函数经过多层Transformer解码器后，每个位置的向量都会先通过LM Head（线性投影层）映射到整个词表的维度，再经过softmax归一化，得到该位置下一个Token的概率分布其中LM Head主要干的事情就是把输入向量的维度变成词表的维度，这样softmax输出之后每个位置上的概率就能直接对应这个词的预测概率在训练阶段，所有位置同时输出概率分布，并行计算损失，推理生成阶段，仅取最后一个位置的概率分布，通过贪心、采样或束搜索等策略选出下一个输出 Token
-损失函数：
+不同类型的人类反馈并非对应完全独立的奖励函数，而是对一组潜在奖励语义因子的不同观测。
 
-: 整条文本一共多少个 Token（词片段）: 当前位置: 前面所有已经读过的 token: 真实的下一个 token : 模型看完上文之后，预测“下一个词刚好等于标准答案”的概率
-这种损失的本质就是标准的多分类交叉熵损失：每个位置都是一个分类任务，真实Token是标签，模型输出词表上的概率分布，计算两者的交叉熵
-RNN 的隐藏状态存在严格的时序依赖，t 时刻的计算必须等待 t-1 时刻完成，因此整条序列只能串行逐步前向传播，损失也只能分步计算。Transformer 的自注意力机制天然支持并行计算，所有位置的 QKV 投影、注意力计算可通过矩阵运算一次性完成
-具体实现需要注意的是，上述基本架构只是思路，实际实现远比这复杂，具体细节写在代码注释中
-以nanoGPT为例：
-1.prepare文件，获取文本，将文本转换为bin文件，其中train.bin为训练数据集，val.bin为测试数据集，meta.pkl记载元信息注意，nanoGPT每一个Token不是单词或者部分单词，而是一个个字母
-import os# 提供操作系统底层接口，让python代码可以跨平台操作文件import pickle# 进行序列化，反序列化# 序列化：把内存的python对象转成二进制存入磁盘# 反序列化：读取磁盘二进制，还原成python对象    import requests# 实现网页请求import numpy as np# 这一块是负责提取文本，将文本写入 input.txtinput_file_path = os.path.join(os.path.dirname(__file__), 'input.txt')# __file__：提供当前文件的路径# os.path.dirname：把文件名取掉，只保留路径# os.path.join：把路径和文件名字拼接到一起# 这行代码的意思就是，找当前文件同一文件夹下有没有input.txt这个文件，如果有就返回路径if not os.path.exists(input_file_path):    # os.path.exists(路径)：判断文件存不存在    data_url = 'https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt'    # 如果不存在，就从data_url这个网址上下载，这个链接指向的是nanoGPT 作者仓库里的原始文本文件，内容是莎士比亚的剧本合集，纯文本格式    with open(input_file_path, 'w') as f:        # with..f：操作系统有个文件钥匙，with表示拿钥匙，起名叫f，打开文件，代码离开with时自动归还钥匙关上文件        # open(input_file_path, 'w')：打开一个本地文件（注意这不是文件名，而是路径），准备写入，如果文件不存在，就新建一个；如果已经存在，就覆盖它        f.write(requests.get(data_url).text)        # 向网址发送一个请求，并提取文本内容# 这一块会把提取出的文本存入 data 变量并输出文本长度with open(input_file_path, 'r') as f:    # 打开文件 "r"表示只读    data = f.read()    # f.read()：一次性读取文件中的所有内容，返回超大字符串。这一步会把硬盘中的文件全部加载进内存print(f"length of dataset in characters: {len(data):,}")# 这一块会统计有多少不同的字符，来制作词表大小chars = sorted(list(set(data)))# set负责去重，转换成list格式再排序vocab_size = len(chars)# 统计词表长度print("all the unique characters:", ''.join(chars))# ''.join 把list拼成字符串输出print(f"vocab size: {vocab_size:,}")# 创建字符与整数的对照表stoi = { ch:i for i,ch in enumerate(chars) }# enumerate，遍历列表同时拿到内容与索引；stoi：string to integer，最终是字母到数字的字典itos = { i:ch for i,ch in enumerate(chars) }def encode(s):    return [stoi[c] for c in s] # encoder: take a string, output a list of integersdef decode(l):    return ''.join([itos[i] for i in l]) # decoder: take a list of integers, output a string# 分别为编码和解码函数，encode会把输入的文本变成整数数组，decode会把整数数组变成文本# 划分训练集和测试集n = len(data)train_data = data[:int(n*0.9)]# 90% 当训练集val_data = data[int(n*0.9):]# 10% 当训练集# 将文本转换为整数listtrain_ids = encode(train_data)val_ids = encode(val_data)print(f"train has {len(train_ids):,} tokens")# :,是python数字格式化语法，给大数添加千位分隔符print(f"val has {len(val_ids):,} tokens")# 导出二进制bin文件train_ids = np.array(train_ids, dtype=np.uint16)# 转换为无符号16位整数的numpy数组val_ids = np.array(val_ids, dtype=np.uint16)train_ids.tofile(os.path.join(os.path.dirname(__file__), 'train.bin'))# tofile：numpy 数组的写法，直接把数组原始二进制数据写入文件，不附带元信息（不保存 shape、dtype）val_ids.tofile(os.path.join(os.path.dirname(__file__), 'val.bin'))# 机器读取bin文件速度极快，并且bin文件体积小，所以把txt转换成bin# bin文件只有纯数字Token，这一步保存信息meta = {    'vocab_size': vocab_size,    'itos': itos,    'stoi': stoi,}with open(os.path.join(os.path.dirname(__file__), 'meta.pkl'), 'wb') as f:    # wb:w=write 写入,b=binary 二进制模式,pickle 必须用二进制模式读写    pickle.dump(meta, f)    # 把python对象直接打包存入文件
+把它翻译成人话，同时结合你已经会的两篇论文：
 
-输出：
-length of dataset in characters: 1,115,394all the unique characters:  !$&amp;',-.3:;?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzvocab size: 65train has 1,003,854 tokensval has 111,540 tokens
+BNRM 教会我们：奖励可以表示成”稀疏非负语义因子”的内积  ，稀疏 + 非负让它可解释、抗虚假相关（治”奖励黑客”）。但它只处理”偏好”这一种反馈。
+MAVRL 教会我们：偏好、示范、评分、停止这四种反馈可以共享同一个奖励，各自用一个似然头去解释，统一进一个 ELBO。但它用的是稠密的高斯奖励，没有”稀疏非负因子”这种结构。
 
-2.model.py，里面是模型本身
-import mathimport inspect# 自省库，可以查看函数的源码，实现灵活传参，版本兼容from dataclasses import dataclass# @dataclass是数据类装饰器，省去手写__init__，__repr__import torchimport torch.nn as nnfrom torch.nn import functional as F# 直接导入nn下面的函数式，F.xx是纯函数，直接计算class LayerNorm(nn.Module):# 在层归一化中，有weight和bias两个参数，但bias参数在Transformer中价值很小，所以我们直接关掉bias# 但nanoGPT写的时候的torch还不支持只关bias不关weight，所以我们自己写    def __init__(self, ndim, bias):    # ndim：输入向量维数，bias：要不要带偏置        super().__init__()        self.weight = nn.Parameter(torch.ones(ndim))        # torch.ones(ndim)：创造一个全部为1，大小为ndim的张量        # nn.Parameter：把这个张量标记为可训练参数，训练时反向传播会自动更新它        self.bias = nn.Parameter(torch.zeros(ndim)) if bias else None    def forward(self, input):    # input：输入张量，一般为（B,T,C），B：批次，T：序列长度，有多少Token，C：维度，每个Token多长        return F.layer_norm(input, self.weight.shape, self.weight, self.bias, 1e-5)        # F.layer_norm(input, normalized_shape, weight=None, bias=None, eps=1e-5)        # normalized_shape：最后哪几个维度需要归一化，需要归一化的维度写上他的大小        # nn.LayerNorm不能单独关闭bias，但是F.layer_norm可以        class CausalSelfAttention(nn.Module):# 自注意力模块    def __init__(self, config):        # config：存放模型所有超参数的配置对象        # config.n_embd：向量维度数        # config.n_head：头数        # config.bias：线性层要不要偏置        # config.dropout：随机失活概率        # config.block_size：模型的最大上下文长度，即单个样本最多能读多少个token        super().__init__()        assert config.n_embd % config.n_head == 0        # 看看维度数能不能整除头数，如果不能直接终止程序        self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=config.bias)        # 一次性算出QKV三个矩阵        self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=config.bias)        # 把所有头的结果拼接后，用投影矩阵映射一遍        self.attn_dropout = nn.Dropout(config.dropout)        self.resid_dropout = nn.Dropout(config.dropout)        # 通过随机失活正则化        self.n_head = config.n_head        self.n_embd = config.n_embd        self.dropout = config.dropout        # config只是__init__传进来的参数，前向传播无法直接使用，所以我们把有用的值保留        self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')        # hasattr(对象, "属性名字符串")：判断这个对象有没有叫这个名字的成员        # 这句话检测当前环境torch版本，看有没有自带的 Flash Attention，如果没有就要自己写        # Flash Attention：原始的注意力机制会直接算出所有Token之间的QK值，但是句子一长就很慢（显存读写慢）        # 于是我们就分块做，每次拿一些Token算出局部QK分数，累加这块对最终输出的贡献，然后直接丢掉这块 QK 结果        # 我们不会单独对这块做softmax，全部块处理完，最后再做全局softmax归一化        # 虽然这样反向传播的时候需要重新计算QK矩阵，但相对于显存读取数据的时间这会快很多        # 至于softmax在没有完整的数据的情况下为什么可以求，豆包给了完整的数学证明，总之是可以求的        if not self.flash:        # 如果没有Flash，就老老实实用慢速版的原始注意力机制            print("WARNING: using slow attention. Flash Attention requires PyTorch &gt;= 2.0")            # 发现版本老旧，提醒用户该升级了            self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size))                                        .view(1, 1, config.block_size, config.block_size))            # torch.ones：生成全1矩阵，torch.tril：取下三角，.view：reshape 维度变成 [1,1,T,T]，适配多头注意力            # self.register_buffer("bias", tensor)：把这个下三角 mask 矩阵，挂靠到模型里面，变成模型自带的一块固定数据            # 他给这个mask起名叫bias，但他并不是偏置，有点挂羊头卖狗肉的感觉    def forward(self, x):    # 输入的x就是一组Token        B, T, C = x.size()         # B：batch size，一批有多少条样本，T：每条样本有多少Token，C：向量维度        q, k, v  = self.c_attn(x).split(self.n_embd, dim=2)        # nn.Linear只作用在最后一维，所以这一行会把x的最后一位拿出来算QKV，并切成三份        k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)         v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)         # .view在不改变张量数据的前提下改变维度，.transpose(1,2)：交换第1维和第2维        if self.flash:            y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=True)            # attn_mask：自定义的掩码矩阵，is_causal：自动生成上三角负无穷掩码，注意，is_causal为True，attn_mask必须是None            # dropout_p：训练时随机失活，推理时关闭                    else:            # 没有就要手写自注意力            att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))            # QK相乘再除以维度的根号            att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))            # 掩码            att = F.softmax(att, dim=-1)            # 做softmax            att = self.attn_dropout(att)            # 随机失活            y = att @ v             # 相关度乘以向量，得到最终的结果        y = y.transpose(1, 2).contiguous().view(B, T, C)         # transpose(1, 2)只是改变元信息，并非改变张量本身，而.view需要张量也连续，所以需要contiguous        y = self.resid_dropout(self.c_proj(y))        # c_proj：输出层，resid_dropout神经网络随机失活        return yclass MLP(nn.Module):    def __init__(self, config):        super().__init__()        self.c_fc    = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)        self.gelu    = nn.GELU()        self.c_proj  = nn.Linear(4 * config.n_embd, config.n_embd, bias=config.bias)        self.dropout = nn.Dropout(config.dropout)    def forward(self, x):        x = self.c_fc(x)        x = self.gelu(x)        x = self.c_proj(x)        x = self.dropout(x)        return xclass Block(nn.Module):# 一层Transformer    def __init__(self, config):        super().__init__()        self.ln_1 = LayerNorm(config.n_embd, bias=config.bias)        self.attn = CausalSelfAttention(config)        self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)        self.mlp = MLP(config)    def forward(self, x):        x = x + self.attn(self.ln_1(x))        x = x + self.mlp(self.ln_2(x))        # 两次残差连接        return x@dataclassclass GPTConfig:# 一次性配置所有参数，之前用的config就是他的实例    block_size: int = 1024    vocab_size: int = 50304     # 词表大小    n_layer: int = 12    # Transformer Block的层数    n_head: int = 12    n_embd: int = 768    dropout: float = 0.0    # 小模型不容易过拟合    bias: bool = True     # 不带偏置class GPT(nn.Module):    def __init__(self, config):        super().__init__()        assert config.vocab_size is not None        assert config.block_size is not None        # 如果这两个位置是空的，说明肯定有问题，直接终止程序        self.config = config        self.transformer = nn.ModuleDict(dict(        # nn.ModuleDict：PyTorch 专用的字典，专门用来存放神经网络层        # 普通字典Pytorch看不见，但这个Pytorch能识别参数            wte = nn.Embedding(config.vocab_size, config.n_embd),            # WTE：Word Token Embedding 词嵌入            # nn.Embedding本质就是一个查表，其中的参数也是反向传播学习                          wpe = nn.Embedding(config.block_size, config.n_embd),            # WPE：Word Position Embedding 位置嵌入            drop = nn.Dropout(config.dropout),            h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),            # 储存12层Block            ln_f = LayerNorm(config.n_embd, bias=config.bias),        ))        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)        # 语言模型输出头，输出对下一个词概率的打分        self.transformer.wte.weight = self.lm_head.weight        # 二者一个是词映射成向量，一个是向量映射回词的打分，内涵一样，所以共享权重        self.apply(self._init_weights)        # .apply：遍历所有层，每个层传给_init_weights函数执行一遍        for pn, p in self.named_parameters():        # 遍历具体的参数，给某些特定参数单独初始化        # named_parameters()：遍历模型里每一个可训练参数，pn参数的名字，p张量            if pn.endswith('c_proj.weight'):            # 只要参数名字是以c_proj.weight结尾                torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config.n_layer))                # normal_：直接修改张量值，把p变成均值为mean，方差为std的正态分布        print("number of parameters: %.2fM" % (self.get_num_params()/1e6,))        # get_num_params：自己写的函数，统计模型全部可训练参数总个数并打印    def get_num_params(self, non_embedding=True):        # non_embedding：是否减去WPE的参数量        n_params = sum(p.numel() for p in self.parameters())        # p.numel()：number of elements，统计张量里面全部元素个数        if non_embedding:            n_params -= self.transformer.wpe.weight.numel()        return n_params    def _init_weights(self, module):    # 对某个module初始化        if isinstance(module, nn.Linear):        # 判断这个module是不是全连接层            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)            if module.bias is not None:                torch.nn.init.zeros_(module.bias)        elif isinstance(module, nn.Embedding):            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)    def forward(self, idx, targets=None):    # idx：torch.Tensor类的实例对象，储存数据，形状（size），数据所存（device），数据类型（dtype），是否计算梯度（requires_grad）还有步长等等    # targets：训练的时候计算loss，推理时不计算loss        device = idx.device        b, t = idx.size()        # idxshape=[b, t]，批次大小（每批多少样本）x每个样本多少Token，每个位置是Token的编号            assert t &lt;= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"        # 输入文本不能超过block_size        pos = torch.arange(0, t, dtype=torch.long, device=device)         # 生成位置数组          tok_emb = self.transformer.wte(idx)         # 输入Token编号，得到词向量，tok_emb：三维张量[b, t, n_embd]        pos_emb = self.transformer.wpe(pos)         # 输入Token位置，得到位置向量，pos_emb：二维张量[t, n_embd]        x = self.transformer.drop(tok_emb + pos_emb)        # PyTorch有自动广播机制，二维加三维会给二维最前面加个虚拟维度        # x的shape是[b, t, n_embd]，并会随机失活一部分        for block in self.transformer.h:            x = block(x)        # 做完所有层        x = self.transformer.ln_f(x)        # 再次层归一化        if targets is not None:            logits = self.lm_head(x)            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)            # F.cross_entropy：logits（N,C），N：需要预测的Token数量，C：每个Token的预测结果            # target：标准答案，注意这里只有一维，是真实的下一个Token的编号        else:            logits = self.lm_head(x[:, [-1], :])             # 输出[b,1,vocab_size]            loss = None        return logits, loss    def crop_block_size(self, block_size):    # 这个函数能支持把block_size改短        assert block_size &lt;= self.config.block_size        self.config.block_size = block_size        self.transformer.wpe.weight = nn.Parameter(self.transformer.wpe.weight[:block_size])        for block in self.transformer.h:            if hasattr(block.attn, 'bias'):                block.attn.bias = block.attn.bias[:,:,:block_size,:block_size]    @classmethod    def from_pretrained(cls, model_type, override_args=None):    # 把HuggingFace已经训练好的权重数字复制粘贴到nanoGPT模型里面，不用从零训练。        assert model_type in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}        override_args = override_args or {}         assert all(k == 'dropout' for k in override_args)        from transformers import GPT2LMHeadModel        print("loading weights from pretrained gpt: %s" % model_type)        config_args = {            'gpt2':         dict(n_layer=12, n_head=12, n_embd=768),              'gpt2-medium':  dict(n_layer=24, n_head=16, n_embd=1024),             'gpt2-large':   dict(n_layer=36, n_head=20, n_embd=1280),             'gpt2-xl':      dict(n_layer=48, n_head=25, n_embd=1600),         }[model_type]        print("forcing vocab_size=50257, block_size=1024, bias=True")        config_args['vocab_size'] = 50257         config_args['block_size'] = 1024         config_args['bias'] = True         if 'dropout' in override_args:            print(f"overriding dropout rate to {override_args['dropout']}")            config_args['dropout'] = override_args['dropout']        config = GPTConfig(**config_args)        model = GPT(config)        sd = model.state_dict()        sd_keys = sd.keys()        sd_keys = [k for k in sd_keys if not k.endswith('.attn.bias')]                 model_hf = GPT2LMHeadModel.from_pretrained(model_type)        sd_hf = model_hf.state_dict()        sd_keys_hf = sd_hf.keys()        sd_keys_hf = [k for k in sd_keys_hf if not k.endswith('.attn.masked_bias')]         sd_keys_hf = [k for k in sd_keys_hf if not k.endswith('.attn.bias')]         transposed = ['attn.c_attn.weight', 'attn.c_proj.weight', 'mlp.c_fc.weight', 'mlp.c_proj.weight']        assert len(sd_keys_hf) == len(sd_keys), f"mismatched keys: {len(sd_keys_hf)} != {len(sd_keys)}"        for k in sd_keys_hf:            if any(k.endswith(w) for w in transposed):                assert sd_hf[k].shape[::-1] == sd[k].shape                with torch.no_grad():                    sd[k].copy_(sd_hf[k].t())            else:                assert sd_hf[k].shape == sd[k].shape                with torch.no_grad():                    sd[k].copy_(sd_hf[k])        return model    def configure_optimizers(self, weight_decay, learning_rate, betas, device_type):    # 得出优化器    # weight_decay：权重衰减系数 learning_rate：学习率 betas：动量梯度下降 device_type：设备类型        param_dict = {pn: p for pn, p in self.named_parameters()}        param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}        # 只保留需要更新的参数        decay_params = [p for n, p in param_dict.items() if p.dim() &gt;= 2]        nodecay_params = [p for n, p in param_dict.items() if p.dim() &lt; 2]        # 将权重分组，权重矩阵做群众衰减，bias、LayerNorm参数不做权重衰减        optim_groups = [            {'params': decay_params, 'weight_decay': weight_decay},            {'params': nodecay_params, 'weight_decay': 0.0}        ]        # 构建优化器        num_decay_params = sum(p.numel() for p in decay_params)        num_nodecay_params = sum(p.numel() for p in nodecay_params)        # p.numel()：统计张量里面一共有多少个数字（参数总量）        print(f"num decayed parameter tensors: {len(decay_params)}, with {num_decay_params:,} parameters")        print(f"num non-decayed parameter tensors: {len(nodecay_params)}, with {num_nodecay_params:,} parameters")        # 打印日志，看一下两类参数各有多少张量、多少参数，方便调试。        fused_available = 'fused' in inspect.signature(torch.optim.AdamW).parameters        # 判断Pytorch支不支持fused AdamW        use_fused = fused_available and device_type == 'cuda'        # 只有Pytorch支持fused并且模型在GPU才行        extra_args = dict(fused=True) if use_fused else dict()        optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)        print(f"using fused AdamW: {use_fused}")        return optimizer    def estimate_mfu(self, fwdbwd_per_iter, dt):    # 估算算力利用率 MFU=实际算力/GPU最大算力        N = self.get_num_params()        cfg = self.config        L, H, Q, T = cfg.n_layer, cfg.n_head, cfg.n_embd//cfg.n_head, cfg.block_size        flops_per_token = 6*N + 12*L*H*Q*T        flops_per_fwdbwd = flops_per_token * T        flops_per_iter = flops_per_fwdbwd * fwdbwd_per_iter        flops_achieved = flops_per_iter * (1.0/dt)         flops_promised = 312e12        mfu = flops_achieved / flops_promised        return mfu    @torch.no_grad()    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):    # 推理阶段：进行续写，以idx为开头，续写max_new_tokens个Token    # temperature：控制随机性，越大更容易跳出高概率词，更有创造力    # top_k：只在概率最高的k个Token里面选，屏蔽掉冷门离谱候选        for _ in range(max_new_tokens):            idx_cond = idx if idx.size(1) &lt;= self.config.block_size else idx[:, -self.config.block_size:]            # 只看最后block_size个Token            logits, _ = self(idx_cond)            logits = logits[:, -1, :] / temperature            # 取出最后一个位置的预测            if top_k is not None:                v, _ = torch.topk(logits, min(top_k, logits.size(-1)))                logits[logits &lt; v[:, [-1]]] = -float('Inf')            # 拿到分数最高的k个，其他设置为fuwuqiong            probs = F.softmax(logits, dim=-1)            idx_next = torch.multinomial(probs, num_samples=1)            # 挑一个，并不一定是挑概率最大的，而是概率大的抽到的可能大            idx = torch.cat((idx, idx_next), dim=1)            # 把刚生成的拼到末尾                    return idx
+MF-BNRM 的创新点：把这两件事合起来——让四种反馈共享同一套稀疏非负因子表示 θ，但每个反馈类型  拥有自己专属的稀疏贝叶斯解码器 。
+关键就这一句，其余都是围绕它展开的：
 
-微调大模型LLM 大体分为三个步骤：一：预训练，用Transformer架构训练海量文本，训练结束后他可以根据前面的词预测文本。二：SFT，预训练的大模型可以补全文本，但没办法听懂指令，即没办法进行问答，SFT教他听懂人类的指令三：RLHF，SFT训练后模型能回答，但是不一定答的对。所以要RLHF微调
-SFT的架构和预训练的 Transformer 一模一样，只是把输入变成了 prompt + 回答，进行微调
-SFT训练完了以后（就叫A模型）暂且封存，把整个模型的参数复制一遍，得到一个新的Transformer网络，暂且叫B，把B的 LM head 和之后的 softmax 那些全部删掉，改成 RM head，这个 RM head 就是一个单层神经网络 nn.Linear(n_embd, 1)，那到最后一个 Token 的向量作为输入，输出一个分数，就是对本次输入的打分。
-原版的损失函数是这样的：给定同一个 Prompt，让 SFT 输出两个解，人类比较这两个解谁好，注意，人类不打分，只是给出好坏关系，令人类更喜欢的是 ，不喜欢的是 。然后把这两条输入到刚刚得出来的 RM 模型，分别打分为  ，。损失函数为
+“共享”负责共性（同一个语义因子空间），”专属”负责差异（不同反馈对因子的依赖强度不同）。
 
-其中  为 sigmoid 函数， 
+1.2 为什么”光把 BNRM 接进 MAVRL 四个头”不够创新老师的方案里有一段非常清醒的自我定位（这恰恰是很多学生容易忽略的）：
+
+仅仅将 BNRM 的概率表示接入 MAVRL 的四个反馈头，不足以构成很强的 ICML 创新。
+
+因为那样做，BNRM 就只是变成了 MAVRL 的”偏好头”——是把两篇已有工作拼起来，没有新的理论增量。
+真正的增量在于从”隐式共享”升级到”显式的共享 + 任务专属支持集”：
+
+
+
+
+MAVRL
+MF-BNRM
+
+
+
+四类反馈怎么共享
+隐式共享同一个奖励编码器
+显式共享稀疏因子支持集，但允许任务专属支持集
+
+
+有没有理论
+主要是经验/形式化
+明确的多任务统计复杂度、Fisher 信息互补、后验收缩
+
+
+所以这个方向的”主战场”其实是理论，不是模型架构。这是理解整个方案的关键。
+
+2. 三个定理用大白话讲方案里最硬核的部分是三个定理。它们其实对应三个非常朴素的问题，我把每个定理”翻译”成一句话：
+定理一（共享稀疏支持集的多任务复杂度优势）→ “为什么要共享？”大白话：如果四个反馈任务用的大多是同一组少数几个语义因子（支持集重叠），那么”让它们共享这一个支持集、只做一次变量选择”比”每个任务各自做一次变量选择”统计上更省样本。
+
+独立学习：要做  次变量选择，复杂度带一个  的因子重复  次；
+共享学习：只做 1 次公共变量选择，同时估  个系数。
+
+例子：    时，理论复杂度主项从约 120.7 降到 62.2，减少约 44%。注意方案自己强调：这是”理论复杂度主项”，不是”实测误差一定降 44%”。
+定理二（异质反馈的信息互补与后验收缩）→ “为什么要多种反馈？”大白话：每种反馈能”照亮”奖励参数的某些方向，但看不清另一些方向（比如偏好反馈对”奖励整体平移”不敏感）。把多种反馈的 Fisher 信息加起来，能照亮更多方向，后验不确定性就收缩得更快。
+关键命题：多反馈的优势不只是”样本变多了”，更是”不同观测机制提供了互补的信息方向”。 这是最有 ICML 理论价值的一条，也是我最推荐优先攻的方向（方案自己也这么说）。
+定理三（共享与专属稀疏的误差分解）→ “什么时候该共享，什么时候该各自为政？”大白话：现实里四个任务的支持集不完全一样。把解码器写成”共享部分 + 专属部分”，误差就能拆成”表示误差 + 结构复杂度 + 变分误差”三项。这直接回答了一个实用问题：支持集重叠大 → 共享划算；重叠小 → 强行共享会负迁移。
+这三条合起来，就是方案第七节那个”统一结论”：
+
+多反馈统计误差 ≲ 共享支持复杂度 + 任务特有复杂度 + 变分近似误差 + 模型失配误差。
+
+
+3. PyTorch 原型代码在干什么（以及它缺什么）3.1 代码的本质：一个”能跑通”的最小验证我读了一遍 mbnrm_demo.py，它做的事很朴素：
+
+编码器（self.encoder）：一个两层 MLP，输入 （12 维合成特征），输出  个数，经 softplus 变成 Weibull 的形状  和尺度 ，再采样出共享隐变量 。
+四个任务专属字典（self.log_shape / self.log_scale，形状 (tasks=4, 2, k)）：每个任务有”正、负”两个非负分量，相减得到带符号的字典 。
+奖励 r = z · w[t]：共享隐变量  点乘第  个任务的字典。
+四种损失：
+偏好：binary_cross_entropy_with_logits(p1 - p2, label)（即 BT）；
+评分：Gaussian 负对数似然（0.5*((r-rating)/0.4)^2 + log(...)）；
+示范：cross_entropy（softmax 分类）；
+停止：binary_cross_entropy_with_logits(0.15 - s, stop)（一个简化的 Bernoulli 风险）。
+
+
+总损失 = 四项似然相加 + beta * KL（Weibull–Gamma 的 KL 散度），然后 Adam 反向传播。
+
+一句话：这就是 MAVRL 那套”共享编码器 + 多个似然头 + ELBO”的骨架，只是把编码器换成了 Weibull、把奖励表示换成了非负因子、把”奖励头”换成了”稀疏非负字典”。
+3.2 代码缺什么（方案自己都点明了，很重要）方案非常诚实地列出了当前代码没实现的东西，这些恰恰是”从原型到论文”的距离：
+
+连续评分没做有序 Logistic（现在只是 Gaussian 回归，不是真正的”评分”似然）；
+停止反馈没引入基于 Q 的历史风险率（现在只是个简化的逐时刻 Bernoulli）；
+没有显式的共享/任务专属支持集掩码（即方案 2.2 节里的 Bernoulli 掩码  没实现）；
+ELBO 的 KL 项没有正确缩放（代码注释里明说 “not an exactly scaled dataset ELBO”）。
+
+所以：代码证明了”训练链路能跑通、四种反馈能联合训练”，但还没证明任何理论优势。 方案自己说得很清楚——不能据此声称 MF-BNRM 优于 BNRM 或 MAVRL。
+
+4. 我的评估与建议4.1 这个方向最值得做的地方理论（尤其定理二）是这个方向真正的护城河。 原因很简单：模型架构上，MF-BNRM 是 BNRM 和 MAVRL 的自然组合，工程增量有限；但”异质反馈如何通过互补 Fisher 信息提升可辨识性、加速后验收缩”这个问题，之前没有干净的结论。如果把这个定理做扎实，论文就有了不可替代的贡献。
+4.2 需要特别小心的三个坑（方案自己已经点出）
+预算混淆：多反馈带来收益，到底是因为”反馈变多了”还是”稀疏共享”？必须做等标注预算和等计算预算的对照（实验三里强调的）。这是审稿人最爱挑的毛病。
+可辨识性：偏好反馈有”整体平移不变性”，潜因子模型有”尺度/置换对称性”。不讲清楚可辨识条件，定理二的协方差结论站不住。
+负迁移：共享不是万能的。支持集差异大时强行共享会变差。必须把”支持集交叠度”作为自变量来做实验（定理三的意义所在）。
+
+4.3 给你的落地建议按方案第七节的优先级，我的建议顺序是：
+
+先做理论：从”冻结编码器的多任务广义线性模型”出发，把定理一（复杂度界）和定理二（Fisher 互补）证清楚。不要一开始就声称对任意深度网络成立——先从最简单的线性模型下手。
+再补原型：把四个”缺的东西”补上（有序 Logistic、Q 风险率、支持集掩码、正确缩放的 ELBO）。
+最后做对照实验：在 MAVRL 的网格世界上做等预算对照 + 消融（去共享/去稀疏/去贝叶斯）。
+
+
+5. 一句话总结
+MF-BNRM = 让四种反馈共享”稀疏非负贝叶斯表示 θ”，但各自拥有”任务专属的稀疏贝叶斯解码器 Φ_t”，并用三个定理（共享复杂度 / 互补 Fisher 信息 / 共享-专属误差分解）回答”为什么共享有益、为什么多反馈有益、什么时候该共享”。 它的创新重心在理论，不在模型架构；模型架构是 BNRM × MAVRL 的自然组合，理论才是新东西。
+
 ]]></content>
       <categories>
-        <category>学习笔记</category>
+        <category>论文学习</category>
       </categories>
       <tags>
-        <tag>笔记，大模型</tag>
+        <tag>论文</tag>
       </tags>
+  </entry>
+  <entry>
+    <title>我的第一篇博客</title>
+    <url>/2026/04/26/%E6%88%91%E7%9A%84%E7%AC%AC%E4%B8%80%E7%AF%87%E5%8D%9A%E5%AE%A2/</url>
+    <content><![CDATA[开工了！~博客正在搭建.ing
+当然，现在里面还是空荡荡的~~~ 敬请期待喵
+]]></content>
+      <categories>
+        <category>其他</category>
+      </categories>
   </entry>
   <entry>
     <title>大学物理I</title>
@@ -3917,6 +4669,54 @@ MAVRL 和 RLHF 的奖励模型、和 VAE、和 AVRIL 各是什么关系？
       </tags>
   </entry>
   <entry>
+    <title>大模型</title>
+    <url>/2026/09/08/%E5%A4%A7%E6%A8%A1%E5%9E%8B/</url>
+    <content><![CDATA[Transformer基本架构词嵌入与位置编码模型首先将输入文本拆分为一个个 Token，再通过词嵌入矩阵将每个 Token 映射为高维词向量。所谓词嵌入矩阵其实就是Token list，只不过矩阵的参数会不断更新，查表的时候直接 one-hot向量x词嵌入矩阵。词嵌入矩阵可以从零开始训练，也可以直接加载预训练好的权重，通过查表快速完成 Token 到向量的转换词向量能够编码词汇的语义特征，且在向量空间中体现语义关联，比如说希特勒和墨索里尼的差值会跟德国和意大利相似，语义相近的词在空间中距离更近。模型没有办法读懂文字，但他可以通过这些向量展现文字的内容。词向量的维度往往很高，比如GPT-3有12288维。词嵌入本身不包含位置信息，Transformer 会额外引入位置编码，将位置信息与词向量逐元素相加，让模型感知词汇的顺序关系
+自注意力机制词嵌入能提取单个Token的特征，但无法结合上文提取更加符合语境的特征，自注意力的作用是让每个 Token 融合所有相关 Token 的信息，输出符合上下文的向量
+单头自注意力对于每个 Token，用三个独立的投影矩阵，将词向量分别映射为三类向量
+
+查询向量 Q (Query)：代表 “我要检索什么信息”
+键向量 K (Key)：代表 “我包含什么可匹配的特征”
+值向量 V (Value)：代表 “我携带的实际语义内容”
+
+通俗来说，每个Token会向所有Token发问（Query），我们有关系吗，即每一个Token的词嵌入向量乘以矩阵  得到查询向量 。每个词向量乘以键矩阵  得到 K 向量，与 维度相同。如果两个向量相似，就说明两个Token关系匪浅，我们用QK的点积乘来表示相关程度。得到所有Token的QK点积，即我们对Token两两之间的相关程度打了分,将得分除以 （  为键向量维度）做缩放，保证数值稳定性。然后用softmax把得分变成0~1的概率分布，作为两两之间的相关性权重。我们取值矩阵  乘以前面的词向量，得到这个Token携带的实际语义，并用相关性权重对所有Token的V向量加权求和，得到当前 Token 的注意力输出。这一步可以形象的理解成我们将当前Token的词向量移动到了更适合当前语境的地方
+
+同一层自注意力中，所有 Token 共享同一组    投影矩阵，他们并不是能有效预测下一个值，他们只是把某个词向量分别投影成“我想找什么”，“我是什么”，“我携带的信息是什么”。需要注意的是，以上是双向自注意力，可访问所有位置的Token。在现在的主流大模型，如GPT中，模型不能读取未来信息，因此加入因果掩码：将当前Token之后所有位置的QK得分设为 ，softmax后对应权重变为0，实现仅关注历史与当前Token。不过在推理过程中，我们不用先算出所有Token之间的QK值，只用算出当前Token和之前的，就不需要掩码了
+多头注意力多头注意力把原向量拆成很多分，每分独立计算注意力，最后将所有头的输出在维度上拼接，但直接拼接的向量头和头之间没有交流，所以我们再通过输出矩阵  线性投影一次，这样就可以把不同头之间信息共享。这样可以从不同角度提取注意力，得到词语间更多的信息和特征
+MLP经过多头注意力后，每个 Token 得到融合上下文的向量，我们把这个向量做一个简单的激活具体实现为：首先通过一个线性层将向量升维（通常为原维度的 4 倍）并加偏置，经过激活函数引入非线性，再通过第二个线性层将向量降维回原始维度并加偏置
+Transformer 层的完整结构Transformer的每一层，核心是注意力 + MLP，还搭配残差连接与层归一化，这俩是深度网络稳定训练的关键，残差连接可以将模块输入与输出直接相加，缓解梯度消失，层归一化对向量做特征归一化，加速训练收敛当前主流的一层：输入 → LayerNorm → 多头自注意力 → 残差连接 → LayerNorm → MLP → 残差连接 → 输出
+输出与损失函数经过多层Transformer解码器后，每个位置的向量都会先通过LM Head（线性投影层）映射到整个词表的维度，再经过softmax归一化，得到该位置下一个Token的概率分布其中LM Head主要干的事情就是把输入向量的维度变成词表的维度，这样softmax输出之后每个位置上的概率就能直接对应这个词的预测概率在训练阶段，所有位置同时输出概率分布，并行计算损失，推理生成阶段，仅取最后一个位置的概率分布，通过贪心、采样或束搜索等策略选出下一个输出 Token
+损失函数：
+
+: 整条文本一共多少个 Token（词片段）: 当前位置: 前面所有已经读过的 token: 真实的下一个 token : 模型看完上文之后，预测“下一个词刚好等于标准答案”的概率
+这种损失的本质就是标准的多分类交叉熵损失：每个位置都是一个分类任务，真实Token是标签，模型输出词表上的概率分布，计算两者的交叉熵
+RNN 的隐藏状态存在严格的时序依赖，t 时刻的计算必须等待 t-1 时刻完成，因此整条序列只能串行逐步前向传播，损失也只能分步计算。Transformer 的自注意力机制天然支持并行计算，所有位置的 QKV 投影、注意力计算可通过矩阵运算一次性完成
+具体实现需要注意的是，上述基本架构只是思路，实际实现远比这复杂，具体细节写在代码注释中
+以nanoGPT为例：
+1.prepare文件，获取文本，将文本转换为bin文件，其中train.bin为训练数据集，val.bin为测试数据集，meta.pkl记载元信息注意，nanoGPT每一个Token不是单词或者部分单词，而是一个个字母
+import os# 提供操作系统底层接口，让python代码可以跨平台操作文件import pickle# 进行序列化，反序列化# 序列化：把内存的python对象转成二进制存入磁盘# 反序列化：读取磁盘二进制，还原成python对象    import requests# 实现网页请求import numpy as np# 这一块是负责提取文本，将文本写入 input.txtinput_file_path = os.path.join(os.path.dirname(__file__), 'input.txt')# __file__：提供当前文件的路径# os.path.dirname：把文件名取掉，只保留路径# os.path.join：把路径和文件名字拼接到一起# 这行代码的意思就是，找当前文件同一文件夹下有没有input.txt这个文件，如果有就返回路径if not os.path.exists(input_file_path):    # os.path.exists(路径)：判断文件存不存在    data_url = 'https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt'    # 如果不存在，就从data_url这个网址上下载，这个链接指向的是nanoGPT 作者仓库里的原始文本文件，内容是莎士比亚的剧本合集，纯文本格式    with open(input_file_path, 'w') as f:        # with..f：操作系统有个文件钥匙，with表示拿钥匙，起名叫f，打开文件，代码离开with时自动归还钥匙关上文件        # open(input_file_path, 'w')：打开一个本地文件（注意这不是文件名，而是路径），准备写入，如果文件不存在，就新建一个；如果已经存在，就覆盖它        f.write(requests.get(data_url).text)        # 向网址发送一个请求，并提取文本内容# 这一块会把提取出的文本存入 data 变量并输出文本长度with open(input_file_path, 'r') as f:    # 打开文件 "r"表示只读    data = f.read()    # f.read()：一次性读取文件中的所有内容，返回超大字符串。这一步会把硬盘中的文件全部加载进内存print(f"length of dataset in characters: {len(data):,}")# 这一块会统计有多少不同的字符，来制作词表大小chars = sorted(list(set(data)))# set负责去重，转换成list格式再排序vocab_size = len(chars)# 统计词表长度print("all the unique characters:", ''.join(chars))# ''.join 把list拼成字符串输出print(f"vocab size: {vocab_size:,}")# 创建字符与整数的对照表stoi = { ch:i for i,ch in enumerate(chars) }# enumerate，遍历列表同时拿到内容与索引；stoi：string to integer，最终是字母到数字的字典itos = { i:ch for i,ch in enumerate(chars) }def encode(s):    return [stoi[c] for c in s] # encoder: take a string, output a list of integersdef decode(l):    return ''.join([itos[i] for i in l]) # decoder: take a list of integers, output a string# 分别为编码和解码函数，encode会把输入的文本变成整数数组，decode会把整数数组变成文本# 划分训练集和测试集n = len(data)train_data = data[:int(n*0.9)]# 90% 当训练集val_data = data[int(n*0.9):]# 10% 当训练集# 将文本转换为整数listtrain_ids = encode(train_data)val_ids = encode(val_data)print(f"train has {len(train_ids):,} tokens")# :,是python数字格式化语法，给大数添加千位分隔符print(f"val has {len(val_ids):,} tokens")# 导出二进制bin文件train_ids = np.array(train_ids, dtype=np.uint16)# 转换为无符号16位整数的numpy数组val_ids = np.array(val_ids, dtype=np.uint16)train_ids.tofile(os.path.join(os.path.dirname(__file__), 'train.bin'))# tofile：numpy 数组的写法，直接把数组原始二进制数据写入文件，不附带元信息（不保存 shape、dtype）val_ids.tofile(os.path.join(os.path.dirname(__file__), 'val.bin'))# 机器读取bin文件速度极快，并且bin文件体积小，所以把txt转换成bin# bin文件只有纯数字Token，这一步保存信息meta = {    'vocab_size': vocab_size,    'itos': itos,    'stoi': stoi,}with open(os.path.join(os.path.dirname(__file__), 'meta.pkl'), 'wb') as f:    # wb:w=write 写入,b=binary 二进制模式,pickle 必须用二进制模式读写    pickle.dump(meta, f)    # 把python对象直接打包存入文件
+
+输出：
+length of dataset in characters: 1,115,394all the unique characters:  !$&amp;',-.3:;?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzvocab size: 65train has 1,003,854 tokensval has 111,540 tokens
+
+2.model.py，里面是模型本身
+import mathimport inspect# 自省库，可以查看函数的源码，实现灵活传参，版本兼容from dataclasses import dataclass# @dataclass是数据类装饰器，省去手写__init__，__repr__import torchimport torch.nn as nnfrom torch.nn import functional as F# 直接导入nn下面的函数式，F.xx是纯函数，直接计算class LayerNorm(nn.Module):# 在层归一化中，有weight和bias两个参数，但bias参数在Transformer中价值很小，所以我们直接关掉bias# 但nanoGPT写的时候的torch还不支持只关bias不关weight，所以我们自己写    def __init__(self, ndim, bias):    # ndim：输入向量维数，bias：要不要带偏置        super().__init__()        self.weight = nn.Parameter(torch.ones(ndim))        # torch.ones(ndim)：创造一个全部为1，大小为ndim的张量        # nn.Parameter：把这个张量标记为可训练参数，训练时反向传播会自动更新它        self.bias = nn.Parameter(torch.zeros(ndim)) if bias else None    def forward(self, input):    # input：输入张量，一般为（B,T,C），B：批次，T：序列长度，有多少Token，C：维度，每个Token多长        return F.layer_norm(input, self.weight.shape, self.weight, self.bias, 1e-5)        # F.layer_norm(input, normalized_shape, weight=None, bias=None, eps=1e-5)        # normalized_shape：最后哪几个维度需要归一化，需要归一化的维度写上他的大小        # nn.LayerNorm不能单独关闭bias，但是F.layer_norm可以        class CausalSelfAttention(nn.Module):# 自注意力模块    def __init__(self, config):        # config：存放模型所有超参数的配置对象        # config.n_embd：向量维度数        # config.n_head：头数        # config.bias：线性层要不要偏置        # config.dropout：随机失活概率        # config.block_size：模型的最大上下文长度，即单个样本最多能读多少个token        super().__init__()        assert config.n_embd % config.n_head == 0        # 看看维度数能不能整除头数，如果不能直接终止程序        self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=config.bias)        # 一次性算出QKV三个矩阵        self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=config.bias)        # 把所有头的结果拼接后，用投影矩阵映射一遍        self.attn_dropout = nn.Dropout(config.dropout)        self.resid_dropout = nn.Dropout(config.dropout)        # 通过随机失活正则化        self.n_head = config.n_head        self.n_embd = config.n_embd        self.dropout = config.dropout        # config只是__init__传进来的参数，前向传播无法直接使用，所以我们把有用的值保留        self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')        # hasattr(对象, "属性名字符串")：判断这个对象有没有叫这个名字的成员        # 这句话检测当前环境torch版本，看有没有自带的 Flash Attention，如果没有就要自己写        # Flash Attention：原始的注意力机制会直接算出所有Token之间的QK值，但是句子一长就很慢（显存读写慢）        # 于是我们就分块做，每次拿一些Token算出局部QK分数，累加这块对最终输出的贡献，然后直接丢掉这块 QK 结果        # 我们不会单独对这块做softmax，全部块处理完，最后再做全局softmax归一化        # 虽然这样反向传播的时候需要重新计算QK矩阵，但相对于显存读取数据的时间这会快很多        # 至于softmax在没有完整的数据的情况下为什么可以求，豆包给了完整的数学证明，总之是可以求的        if not self.flash:        # 如果没有Flash，就老老实实用慢速版的原始注意力机制            print("WARNING: using slow attention. Flash Attention requires PyTorch &gt;= 2.0")            # 发现版本老旧，提醒用户该升级了            self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size))                                        .view(1, 1, config.block_size, config.block_size))            # torch.ones：生成全1矩阵，torch.tril：取下三角，.view：reshape 维度变成 [1,1,T,T]，适配多头注意力            # self.register_buffer("bias", tensor)：把这个下三角 mask 矩阵，挂靠到模型里面，变成模型自带的一块固定数据            # 他给这个mask起名叫bias，但他并不是偏置，有点挂羊头卖狗肉的感觉    def forward(self, x):    # 输入的x就是一组Token        B, T, C = x.size()         # B：batch size，一批有多少条样本，T：每条样本有多少Token，C：向量维度        q, k, v  = self.c_attn(x).split(self.n_embd, dim=2)        # nn.Linear只作用在最后一维，所以这一行会把x的最后一位拿出来算QKV，并切成三份        k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)         v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)         # .view在不改变张量数据的前提下改变维度，.transpose(1,2)：交换第1维和第2维        if self.flash:            y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=True)            # attn_mask：自定义的掩码矩阵，is_causal：自动生成上三角负无穷掩码，注意，is_causal为True，attn_mask必须是None            # dropout_p：训练时随机失活，推理时关闭                    else:            # 没有就要手写自注意力            att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))            # QK相乘再除以维度的根号            att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))            # 掩码            att = F.softmax(att, dim=-1)            # 做softmax            att = self.attn_dropout(att)            # 随机失活            y = att @ v             # 相关度乘以向量，得到最终的结果        y = y.transpose(1, 2).contiguous().view(B, T, C)         # transpose(1, 2)只是改变元信息，并非改变张量本身，而.view需要张量也连续，所以需要contiguous        y = self.resid_dropout(self.c_proj(y))        # c_proj：输出层，resid_dropout神经网络随机失活        return yclass MLP(nn.Module):    def __init__(self, config):        super().__init__()        self.c_fc    = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)        self.gelu    = nn.GELU()        self.c_proj  = nn.Linear(4 * config.n_embd, config.n_embd, bias=config.bias)        self.dropout = nn.Dropout(config.dropout)    def forward(self, x):        x = self.c_fc(x)        x = self.gelu(x)        x = self.c_proj(x)        x = self.dropout(x)        return xclass Block(nn.Module):# 一层Transformer    def __init__(self, config):        super().__init__()        self.ln_1 = LayerNorm(config.n_embd, bias=config.bias)        self.attn = CausalSelfAttention(config)        self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)        self.mlp = MLP(config)    def forward(self, x):        x = x + self.attn(self.ln_1(x))        x = x + self.mlp(self.ln_2(x))        # 两次残差连接        return x@dataclassclass GPTConfig:# 一次性配置所有参数，之前用的config就是他的实例    block_size: int = 1024    vocab_size: int = 50304     # 词表大小    n_layer: int = 12    # Transformer Block的层数    n_head: int = 12    n_embd: int = 768    dropout: float = 0.0    # 小模型不容易过拟合    bias: bool = True     # 不带偏置class GPT(nn.Module):    def __init__(self, config):        super().__init__()        assert config.vocab_size is not None        assert config.block_size is not None        # 如果这两个位置是空的，说明肯定有问题，直接终止程序        self.config = config        self.transformer = nn.ModuleDict(dict(        # nn.ModuleDict：PyTorch 专用的字典，专门用来存放神经网络层        # 普通字典Pytorch看不见，但这个Pytorch能识别参数            wte = nn.Embedding(config.vocab_size, config.n_embd),            # WTE：Word Token Embedding 词嵌入            # nn.Embedding本质就是一个查表，其中的参数也是反向传播学习                          wpe = nn.Embedding(config.block_size, config.n_embd),            # WPE：Word Position Embedding 位置嵌入            drop = nn.Dropout(config.dropout),            h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),            # 储存12层Block            ln_f = LayerNorm(config.n_embd, bias=config.bias),        ))        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)        # 语言模型输出头，输出对下一个词概率的打分        self.transformer.wte.weight = self.lm_head.weight        # 二者一个是词映射成向量，一个是向量映射回词的打分，内涵一样，所以共享权重        self.apply(self._init_weights)        # .apply：遍历所有层，每个层传给_init_weights函数执行一遍        for pn, p in self.named_parameters():        # 遍历具体的参数，给某些特定参数单独初始化        # named_parameters()：遍历模型里每一个可训练参数，pn参数的名字，p张量            if pn.endswith('c_proj.weight'):            # 只要参数名字是以c_proj.weight结尾                torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config.n_layer))                # normal_：直接修改张量值，把p变成均值为mean，方差为std的正态分布        print("number of parameters: %.2fM" % (self.get_num_params()/1e6,))        # get_num_params：自己写的函数，统计模型全部可训练参数总个数并打印    def get_num_params(self, non_embedding=True):        # non_embedding：是否减去WPE的参数量        n_params = sum(p.numel() for p in self.parameters())        # p.numel()：number of elements，统计张量里面全部元素个数        if non_embedding:            n_params -= self.transformer.wpe.weight.numel()        return n_params    def _init_weights(self, module):    # 对某个module初始化        if isinstance(module, nn.Linear):        # 判断这个module是不是全连接层            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)            if module.bias is not None:                torch.nn.init.zeros_(module.bias)        elif isinstance(module, nn.Embedding):            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)    def forward(self, idx, targets=None):    # idx：torch.Tensor类的实例对象，储存数据，形状（size），数据所存（device），数据类型（dtype），是否计算梯度（requires_grad）还有步长等等    # targets：训练的时候计算loss，推理时不计算loss        device = idx.device        b, t = idx.size()        # idxshape=[b, t]，批次大小（每批多少样本）x每个样本多少Token，每个位置是Token的编号            assert t &lt;= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"        # 输入文本不能超过block_size        pos = torch.arange(0, t, dtype=torch.long, device=device)         # 生成位置数组          tok_emb = self.transformer.wte(idx)         # 输入Token编号，得到词向量，tok_emb：三维张量[b, t, n_embd]        pos_emb = self.transformer.wpe(pos)         # 输入Token位置，得到位置向量，pos_emb：二维张量[t, n_embd]        x = self.transformer.drop(tok_emb + pos_emb)        # PyTorch有自动广播机制，二维加三维会给二维最前面加个虚拟维度        # x的shape是[b, t, n_embd]，并会随机失活一部分        for block in self.transformer.h:            x = block(x)        # 做完所有层        x = self.transformer.ln_f(x)        # 再次层归一化        if targets is not None:            logits = self.lm_head(x)            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)            # F.cross_entropy：logits（N,C），N：需要预测的Token数量，C：每个Token的预测结果            # target：标准答案，注意这里只有一维，是真实的下一个Token的编号        else:            logits = self.lm_head(x[:, [-1], :])             # 输出[b,1,vocab_size]            loss = None        return logits, loss    def crop_block_size(self, block_size):    # 这个函数能支持把block_size改短        assert block_size &lt;= self.config.block_size        self.config.block_size = block_size        self.transformer.wpe.weight = nn.Parameter(self.transformer.wpe.weight[:block_size])        for block in self.transformer.h:            if hasattr(block.attn, 'bias'):                block.attn.bias = block.attn.bias[:,:,:block_size,:block_size]    @classmethod    def from_pretrained(cls, model_type, override_args=None):    # 把HuggingFace已经训练好的权重数字复制粘贴到nanoGPT模型里面，不用从零训练。        assert model_type in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}        override_args = override_args or {}         assert all(k == 'dropout' for k in override_args)        from transformers import GPT2LMHeadModel        print("loading weights from pretrained gpt: %s" % model_type)        config_args = {            'gpt2':         dict(n_layer=12, n_head=12, n_embd=768),              'gpt2-medium':  dict(n_layer=24, n_head=16, n_embd=1024),             'gpt2-large':   dict(n_layer=36, n_head=20, n_embd=1280),             'gpt2-xl':      dict(n_layer=48, n_head=25, n_embd=1600),         }[model_type]        print("forcing vocab_size=50257, block_size=1024, bias=True")        config_args['vocab_size'] = 50257         config_args['block_size'] = 1024         config_args['bias'] = True         if 'dropout' in override_args:            print(f"overriding dropout rate to {override_args['dropout']}")            config_args['dropout'] = override_args['dropout']        config = GPTConfig(**config_args)        model = GPT(config)        sd = model.state_dict()        sd_keys = sd.keys()        sd_keys = [k for k in sd_keys if not k.endswith('.attn.bias')]                 model_hf = GPT2LMHeadModel.from_pretrained(model_type)        sd_hf = model_hf.state_dict()        sd_keys_hf = sd_hf.keys()        sd_keys_hf = [k for k in sd_keys_hf if not k.endswith('.attn.masked_bias')]         sd_keys_hf = [k for k in sd_keys_hf if not k.endswith('.attn.bias')]         transposed = ['attn.c_attn.weight', 'attn.c_proj.weight', 'mlp.c_fc.weight', 'mlp.c_proj.weight']        assert len(sd_keys_hf) == len(sd_keys), f"mismatched keys: {len(sd_keys_hf)} != {len(sd_keys)}"        for k in sd_keys_hf:            if any(k.endswith(w) for w in transposed):                assert sd_hf[k].shape[::-1] == sd[k].shape                with torch.no_grad():                    sd[k].copy_(sd_hf[k].t())            else:                assert sd_hf[k].shape == sd[k].shape                with torch.no_grad():                    sd[k].copy_(sd_hf[k])        return model    def configure_optimizers(self, weight_decay, learning_rate, betas, device_type):    # 得出优化器    # weight_decay：权重衰减系数 learning_rate：学习率 betas：动量梯度下降 device_type：设备类型        param_dict = {pn: p for pn, p in self.named_parameters()}        param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}        # 只保留需要更新的参数        decay_params = [p for n, p in param_dict.items() if p.dim() &gt;= 2]        nodecay_params = [p for n, p in param_dict.items() if p.dim() &lt; 2]        # 将权重分组，权重矩阵做群众衰减，bias、LayerNorm参数不做权重衰减        optim_groups = [            {'params': decay_params, 'weight_decay': weight_decay},            {'params': nodecay_params, 'weight_decay': 0.0}        ]        # 构建优化器        num_decay_params = sum(p.numel() for p in decay_params)        num_nodecay_params = sum(p.numel() for p in nodecay_params)        # p.numel()：统计张量里面一共有多少个数字（参数总量）        print(f"num decayed parameter tensors: {len(decay_params)}, with {num_decay_params:,} parameters")        print(f"num non-decayed parameter tensors: {len(nodecay_params)}, with {num_nodecay_params:,} parameters")        # 打印日志，看一下两类参数各有多少张量、多少参数，方便调试。        fused_available = 'fused' in inspect.signature(torch.optim.AdamW).parameters        # 判断Pytorch支不支持fused AdamW        use_fused = fused_available and device_type == 'cuda'        # 只有Pytorch支持fused并且模型在GPU才行        extra_args = dict(fused=True) if use_fused else dict()        optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)        print(f"using fused AdamW: {use_fused}")        return optimizer    def estimate_mfu(self, fwdbwd_per_iter, dt):    # 估算算力利用率 MFU=实际算力/GPU最大算力        N = self.get_num_params()        cfg = self.config        L, H, Q, T = cfg.n_layer, cfg.n_head, cfg.n_embd//cfg.n_head, cfg.block_size        flops_per_token = 6*N + 12*L*H*Q*T        flops_per_fwdbwd = flops_per_token * T        flops_per_iter = flops_per_fwdbwd * fwdbwd_per_iter        flops_achieved = flops_per_iter * (1.0/dt)         flops_promised = 312e12        mfu = flops_achieved / flops_promised        return mfu    @torch.no_grad()    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):    # 推理阶段：进行续写，以idx为开头，续写max_new_tokens个Token    # temperature：控制随机性，越大更容易跳出高概率词，更有创造力    # top_k：只在概率最高的k个Token里面选，屏蔽掉冷门离谱候选        for _ in range(max_new_tokens):            idx_cond = idx if idx.size(1) &lt;= self.config.block_size else idx[:, -self.config.block_size:]            # 只看最后block_size个Token            logits, _ = self(idx_cond)            logits = logits[:, -1, :] / temperature            # 取出最后一个位置的预测            if top_k is not None:                v, _ = torch.topk(logits, min(top_k, logits.size(-1)))                logits[logits &lt; v[:, [-1]]] = -float('Inf')            # 拿到分数最高的k个，其他设置为fuwuqiong            probs = F.softmax(logits, dim=-1)            idx_next = torch.multinomial(probs, num_samples=1)            # 挑一个，并不一定是挑概率最大的，而是概率大的抽到的可能大            idx = torch.cat((idx, idx_next), dim=1)            # 把刚生成的拼到末尾                    return idx
+
+微调大模型LLM 大体分为三个步骤：一：预训练，用Transformer架构训练海量文本，训练结束后他可以根据前面的词预测文本。二：SFT，预训练的大模型可以补全文本，但没办法听懂指令，即没办法进行问答，SFT教他听懂人类的指令三：RLHF，SFT训练后模型能回答，但是不一定答的对。所以要RLHF微调
+SFT的架构和预训练的 Transformer 一模一样，只是把输入变成了 prompt + 回答，进行微调
+SFT训练完了以后（就叫A模型）暂且封存，把整个模型的参数复制一遍，得到一个新的Transformer网络，暂且叫B，把B的 LM head 和之后的 softmax 那些全部删掉，改成 RM head，这个 RM head 就是一个单层神经网络 nn.Linear(n_embd, 1)，那到最后一个 Token 的向量作为输入，输出一个分数，就是对本次输入的打分。
+原版的损失函数是这样的：给定同一个 Prompt，让 SFT 输出两个解，人类比较这两个解谁好，注意，人类不打分，只是给出好坏关系，令人类更喜欢的是 ，不喜欢的是 。然后把这两条输入到刚刚得出来的 RM 模型，分别打分为  ，。损失函数为
+
+其中  为 sigmoid 函数， 
+]]></content>
+      <categories>
+        <category>学习笔记</category>
+      </categories>
+      <tags>
+        <tag>笔记，大模型</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>曾经，一场梦</title>
     <url>/2026/10/18/%E6%9B%BE%E7%BB%8F%EF%BC%8C%E4%B8%80%E5%9C%BA%E6%A2%A6/</url>
     <content><![CDATA[现在是2026年10月18日晚上10点，我上洛谷看之前的文章。夜深忽梦少年事，真想梦啼妆泪红阑干，但是在图书馆，不行
@@ -3958,253 +4758,24 @@ OI生涯结束了（拢共也就一年半，跟那些学了好几年的大佬相
 ]]></content>
   </entry>
   <entry>
-    <title>我的第一篇博客</title>
-    <url>/2026/04/26/%E6%88%91%E7%9A%84%E7%AC%AC%E4%B8%80%E7%AF%87%E5%8D%9A%E5%AE%A2/</url>
-    <content><![CDATA[开工了！~博客正在搭建.ing
-当然，现在里面还是空荡荡的~~~ 敬请期待喵
-]]></content>
-      <categories>
-        <category>其他</category>
-      </categories>
-  </entry>
-  <entry>
-    <title>机器学习</title>
-    <url>/2026/07/15/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0/</url>
-    <content><![CDATA[线性回归一元线性回归目标对于给定的数据集 x,y 我们希望用方程  来拟合 y 与 x 的关系
-如何用python制表将数据集表示1. plt.plot(x, y) —— 画折线图
-plt.plot(x, y, color='red', linestyle='--', marker='o', linewidth=2, label='曲线1')
-
-linestyle：线条样式（-实线、–虚线、:点线）marker：数据点标记（o圆点、^三角、s方块）linewidth：线条宽度（数字，越大越粗）label：曲线标签，配合 plt.legend() 显示图例2. plt.bar(x, y) —— 画柱状图 ，plt.hist() —— 直方图
-plt.bar(x, y, color='blue', width=0.8, label='柱状图')plt.hist(    x,                # 输入一维数据    bins=20,          # 箱子数量，柱子多少；也可以给区间列表    density=False,    # True：纵坐标变成概率密度；False：统计计数（样本个数）    color="skyblue",)#直方图：把一组连续数值数据切分成若干区间（箱子 bin），统计每个区间里有多少个样本，用柱子高度表示数量。用来看数据的分布
-
-3. plt.scatter(x, y) —— 画散点图
-plt.scatter(x, y, c='blue', marker='o')
-
-4. plt.pie(data) —— 画饼图
-plt.pie(data, labels=labels, autopct='%1.1f%%')
-
-data：饼图的数值数据，自动计算占比labels：每个饼块的分类标签，长度要与data一致autopct：在扇形内部显示百分比，’%1.1f%% → 保留 1 位小数，’%1.0f%%’ → 整数百分比，’%1.2f%%’ → 保留两位小数5. plt.title() —— 设置图表标题
-plt.title('图表标题', fontsize=14, color='black')
-
-fontsize：标题字体大小6. plt.xlabel() plt.ylabel() 设置x,y轴标签
-plt.xlabel('x轴含义', fontsize=12, color='#b03535')plt.ylabel('y轴含义', fontsize=12, color='#b88f8f')
-
-7. plt.legend() —— 显示图例每个图画完后都要写8. plt.grid() —— 显示网格
-plt.grid(True, linestyle='--')
-
-9. plt.show() —— 显示图表最后统一写，只写一次10. plt.figure() —— 新建画布一个程序要画多张单图，每张图前要写一遍11. 增添中文环境在最上方添加
-plt.rcParams["font.family"] = "SimHei"plt.rcParams["axes.unicode_minus"] = False
-
-示例：
-import matplotlib.pyplot as pltplt.rcParams["font.family"] = "SimHei"plt.rcParams["axes.unicode_minus"] = Falsex=[1,10,3,6]y=[12,45,2,67]plt.figure()plt.plot(x,y,color="blue",linestyle='-',marker='^',linewidth=1,label="折线图")plt.title('这是折线图',color="black")plt.xlabel('这是x轴')plt.ylabel('这是y轴')plt.legend()plt.figure()plt.bar(x,y,color="yellow",width=0.61,label="柱状图")plt.legend()plt.figure()plt.scatter(x,y,c="red",marker='s',label="点图")plt.legend()plt.show()
-
-
-成本函数对于每一个 w,b 生成的  我们用成本函数检验拟合函数的优秀程度
-
-分别对 w,b 求导得：
-
-
-梯度下降成本函数要求越小越好，显然，延切线方向更新 w,b 即可
-
-
-即得最优解
-多元线性回归向量化对于每一个样例都有多个维度，每个维度有多个数值，我们可以用向量来表示  以此方便计算
-numpy进行向量计算导入：
-import numpy as np
-
-创建数组：
-# 1. 列表转数组arr = np.array([1,2,3,4])arr2d = np.array([[1,2],[3,4]]) #二维数组# 2. 全0 / 全1np.zeros(n)           # 一维np.zeros((m,n))       # m行n列，必须传元组np.ones((m,n))# 3. 单位矩阵np.eye(n)# 4. 随机数组np.random.rand(m,n)     # [0,1)均匀分布np.random.randn(m,n)    # 标准正态分布 N(0,1)np.random.randint(low, high, size) # 随机整数# [low , high) —— 左闭右开  size：输出数组形状  size=5 → 一维数组长度 5   size=(2,3) → 2 行 3 列二维数组
-
-数学运算：
-a + b, a - b, a * b, a / b   # 逐元素加减乘除a ** 2                       # 逐元素平方np.sqrt(arr)     # 开根号np.exp(arr)      # e^xnp.log(arr)      # ln(x)np.abs(arr)      # 绝对值
-
-聚合函数：
-np.sum(arr)      # 全部元素求和np.sum(arr, axis=0) # 按列求和；axis=1 按行求和np.mean(arr)     # 平均值np.max(arr)      # 最大值np.min(arr)      # 最小值np.argmax(arr)   # 返回最大值下标np.argmin(arr)   # 返回最小值下标
-
-矩阵乘法：
-a @ b          # 矩阵乘法np.dot(a, b)   # 矩阵乘法，等价 @# 计算向量时直接相乘即可，计算矩阵乘法需要转置到正确形式
-
-
-多元梯度下降与一元梯度下降类似
-
-
-
-
-特征缩放对于每个样例，他的不同特征的数值范围可能差别很大，会影响梯度下降的速度，所以我们进行特征缩放，让每个特征的值都大约分布在 -1 和 1 之间
-平均归一化：
-
-z-score归一化：
-
-多项式回归有时候，只靠    不能正确拟合回归曲线，这时候我们就需要通过多项式回归函数
-
-来拟合一些复杂曲线
-scikit-learn拟合线性回归Scikit-learn：Python 最主流的传统机器学习库，简称 sklearn
-注意：对于其中大部分函数，都更倾向于接受 numpy 数组对于一个数据集，应表示成矩阵形式，其中，每一行表示一个具体样例的所有特征，每一列记录某个特征的所有值
-预处理from sklearn.preprocessing import StandardScaler
-
-sklearn：scikit-learn 机器学习库。preprocessing：sklearn 下的数据预处理模块StandardScaler：从该模块导入 StandardScaler 类，它就是实现 Z-score 标准化的工具
-主要使用三个函数：.fit(X)：计算出均值和标准差，储存到对象中，可以分别用 .mean_ .scale_ 获取.transform(X)：执行公式   并返回改过的数组.fit_transform(X)：一次干上面两步
-import numpy as npfrom sklearn.preprocessing import StandardScalernp.set_printoptions(precision=2)#全局设置 NumPy 数组打印浮点数时最多显示 2 位小数，只改变屏幕打印显示，不会修改数组内部真实数值X_train = np.array([[1,23],[2,34],[3,56],[4,77],[5,99]])scaler = StandardScaler()scaler.fit(X_train)print(scaler.mean_,scaler.scale_)ans:[ 3.  57.8] [ 1.41 27.74]result = scaler.transform(X_train)print(result)ans:[[-1.41 -1.25] [-0.71 -0.86] [ 0.   -0.06] [ 0.71  0.69] [ 1.41  1.49]]
-
-直接计算 w,b 利用  直接求解
-import numpy as npfrom sklearn.preprocessing import StandardScalerfrom sklearn.linear_model import LinearRegressionnp.set_printoptions(precision=2)X_train = np.array([[1,23],[2,34],[3,56],[4,77],[5,99]])y_train = np.array([2,4,6,8,10])scaler = StandardScaler()X_norm=scaler.fit_transform(X_train)model = LinearRegression()#直接求 w,bmodel.fit(X_norm, y_train)print("权重 w =", model.coef_)print("截距 b =", model.intercept_)#预测新的X_test = np.array([[6,113],[7,134]])y_pred = model.predict(X_test)print("预测结果：", y_pred)
-
-梯度下降实现线性回归from sklearn.linear_model import SGDRegressorsgd=SGDRegressor(    penalty=,             # 是否开启正则，默认开启，如果关闭等价普通线性回归						  # penalty="l2"：L2 正则（Ridge，默认）						  # penalty="l1"：L1 正则（Lasso）						  # penalty="elasticnet"：L1+L2 混合弹性网    alpha=1.0,            # 正则惩罚强度 等于 正则惩罚系数（λ）/2m    learning_rate=,       # constant：固定学习率，全程使用 eta0   adaptive：损失不再下降时自动降低学习率     invscaling：默认策略，学习率逐步衰减    eta0=,                # 初始学习率α    max_iter=,            # 最大迭代轮数    random_state=         # 固定随机种子，让结果可复现)
-
-sgd.fit(X,y)：计算出 w,b 用 .coef_ .intercept_输出sgd.predict(X_test)：预测新的 y  注意：这里的 X_test 要先标准化 并且标准化时只能 transform 不能 fit
-import numpy as npfrom sklearn.preprocessing import StandardScalerfrom sklearn.linear_model import SGDRegressornp.set_printoptions(precision=2)X_train = np.array([[1,23],[2,34],[3,56],[4,77],[5,99]])y_train = np.array([2,4,6,8,10])scaler = StandardScaler()X_norm=scaler.fit_transform(X_train)sgd=SGDRegressor(max_iter=10000)sgd.fit(X_norm,y_train)#注意：要传 X_norm 不是 X_trainprint("w =", sgd.coef_)print("b =", sgd.intercept_)X_test = np.array([[6,113],[7,134]])X_test_norm = scaler.transform(X_test)y_pred = sgd.predict(X_test_norm)print(y_pred)
-
-逻辑回归应用场景：二元分类具体场景：根据肿瘤大小判断是否恶性显然，这不是一个循序渐进的过程，应该是大于某个数之后我们就认为他恶性
-Sigmoid（logistic）函数用一个 S 型曲线能较好模拟数据，于是取
-
-
-假设以 0.5 为阈值，即等价于    与 0 比较则令曲线     为决策边界
-成本函数如果用线性回归的成本函数，得出来的函数并不是一个凹函数，而是会有多个极小值点，不能用
-我们要求成本函数：当 y=1 时，  算出的值越趋近于 1 越好，当 y=0 时，  的值越趋近于 0 越好
-即当 y=1 时，  y=0 时，    
-即
-
-梯度下降与线性回归的梯度下降类似
-
-
-
-
-完整代码import numpy as npnp.set_printoptions(precision=2)def sigmoid(z):	return 1 / (1 + np.exp(-z))# 计算成本函数def compute_cost(X, y, w, b):	m = X.shape[0]	z = np.dot(X, w) + b	f = sigmoid(z)	total_loss = -np.sum(y * np.log(f) + (1 - y) * np.log(1 - f))	cost = total_loss / m	return cost# 计算 dw dbdef compute_gradient(X, y, w, b):	m = X.shape[0]	z = np.dot(X, w) + b	# np.dot(X,w) 算出的是 m*1 的向量 即 z_i = w*x_i+b	f = sigmoid(z)	# f_i 即 x_i 带入得到的结果	err = f - y	dw = (1 / m) * np.dot(X.T, err)	db = (1 / m) * np.sum(err)	return dw, db# 梯度下降def gradient_descent(X, y, w, b, alpha, max_iters):	cost_history = []	for i in range(max_iters+1):		dw, db = compute_gradient(X, y, w, b)		w = w - alpha * dw		b = b - alpha * db		cost = compute_cost(X, y, w, b)		cost_history.append(cost)		# 每 10000 轮打印一次损失		if i % 10000 == 0:			print(f"迭代{i:4d}次，成本函数值：{cost:.4f}")	return w, b, cost_historydef predict(X, w, b):	z = np.dot(X, w) + b	f = sigmoid(z)	pred = []	for i in f:		if i &gt;= 0.5:			pred.append(1)		else:			pred.append(0)	return predif __name__ == "__main__":	X_train = np.array([[0.5, 1.2],						[1.1, 3.0],						[2.0, 1.5],						[3.2, 4.1],						[1.8, 2.2]])	y_train = np.array([0, 0, 1, 1, 1])	m, n = X_train.shape	w_initial = np.zeros(n)	b_initial = 0.0	learning_rate = 0.01	max_iter = 100000	w, b, loss_record = gradient_descent(X_train, y_train, w_initial, b_initial, learning_rate, max_iter)	print("\n===== 训练完成 =====")	print(f"w = {w}")	print(f"b = {b:.2f}")	print(f"loss_record = {loss_record[-1]:.2f}")	y_pred = predict(X_train, w, b)	print(f"\n真实值：{y_train}")	print(f"预测值：{y_pred}")
-
-scikit-learn拟合逻辑回归与线性回归类似，注意：逻辑回归虽不强制标准化，但特征尺度差异大时会影响收敛速度与正则效果
-import numpy as npnp.set_printoptions(precision=2)from sklearn.linear_model import LogisticRegressionif __name__ == "__main__":	X_train = np.array([[0.5, 1.2],						[1.1, 3.0],						[2.0, 1.5],						[3.2, 4.1],						[1.8, 2.2]])	y_train = np.array([0, 0, 1, 1, 1])	lr_model = LogisticRegression(		penalty="l2", # L2 正则		C=1.0, # 正则强度倒数		max_iter=100000,		random_state=42, # 随机种子，固定的话则每次结果一样		solver="lbfgs", # 四种优化算法	)	lr_model.fit(X_train, y_train)	print("w =", lr_model.coef_)	print("b =", lr_model.intercept_)	# 4. 预测类别（输出0或1）	y_pred = lr_model.predict(np.array([[3.5,3.1]]))	# 5. 预测概率（输出 [类别0概率, 类别1概率]）	y_pred_proba = lr_model.predict_proba(np.array([[3.5,3.1]]))	print(y_pred,y_pred_proba)
-
-正则化过拟合&amp;欠拟合欠拟合显然，如果  过于简单，将拟合不了复杂的曲线，具有高偏差
-过拟合我们可以想到，对于任何一种数据集，只要  够复杂，总能拟合出一条完美的曲线使得成本函数为 0 ，然而，这条曲线并不一定使我们想要的。显然，在绝大部分情况下，只要我们换一种数据集，刚刚拟合的曲线就会失效。因此，在特征很多的时候，我们需要控制拟合的曲线，让他尽可能的去表达一种趋势，而非完全贴合数据
-带正则化的成本函数经过验证，在成本函数后面加上  能有效的防止过拟合
-带正则化的线性回归成本函数
-带正则化的逻辑回归成本函数
-带正则化的梯度下降
-
-
-
-神经网络概念
-需求预测实例：假设我们现在要通过一件商品的价格，材料，成本，颜色等特征来判断他是不是一件畅销品。显然，我们可以构建一个逻辑回归来判断。我们也可以采取另一种方法，我们重新设置特征成本，质量，利润三个特征，先通过价格，材料，成本，颜色等特征预测我们新设置特征成本，质量，利润的值，再通过新特征进行逻辑回归判断。抽象来说，我们先输入一个向量（价格，成本，材料等特征的值），我们把这称之为输入层，然后计算出成本，质量，利润的值，这也是一个向量，我们把这一层称为隐藏层，输出的向量是这一层的激活层，最后是输出层。
-这样做的好处是我们能拟合极其复杂的函数，精准判断样本特性。当然，如果我们不用神经网络，只用简单的线性回归设置及其多的特征也能做到类似的效果，但这样需要的特征太多，参数爆炸。
-在运行中，我们并不需要给定隐藏层的具体特征，我们只需要给出有多少个隐藏层，每个隐藏层有几个特征，剩下的神经网络自己会判断
-一般来说，说神经网络有几层指的是隐藏层加输出层。以第三层举例，第二层的激活值作为输入，第三层有三个特征，每个特征通过一个激活函数，把上一层的激活值作为输入。最终这一层的三个激活函数的结果过程这一层的激活值给到下一层
-训练一个神经网络一般没有确定的层数和特征数，需要通过经验判断
-常见的激活函数有线性函数，sigmoid函数，Relu函数，softmax函数，但最常见的是Relu函数。线性函数不管拟合多少遍，还是线性函数，跟普通的线性回归没区别。sigmoid函数 z 很大时太平缓了。除了最后一层，前面的激活函数没有特殊含义，只是要拟合复杂函数，所以前面的激活函数都是Relu函数。而最后一层则是要根据不同需求选择不同的激活函数
-多类别输出，softmax函数在逻辑回归中，我们的输出只能是 0 或 1 ，如果有多个可能得结果，sigmoid函数就不行了，我们要用softmax函数
-
-
-损失函数：
-
-对应不同类别取值：
-时：
-
-时：
-
-
-原理给定一组 W,b ，给出输入，我们通过前向传播求出损失函数，在通过反向传播更新 W,b
-前向传播运算
-设上一层的激活值为 ，是   的行向量。
- 是   的行向量，权重矩阵构造如下：
-
-矩阵  的尺寸为  ，记作 。
-偏置向量定义：
-
-则
-
-令
-
-则
-
-实现TensorFlow实现（不常用）基础代码：Sequential 建立神经网络：有多少层，每层有几个特征，每层用什么激活函数model.compile 确定成本函数model.fit 训练神经网络model.predict 预测
-import numpy as npimport tensorflow as tffrom tensorflow.keras.models import Sequentialfrom tensorflow.keras.layers import Dense, Normalization  # 归一化from tensorflow.keras.losses import BinaryCrossentropyX_train = np.array([    [175.0, 13.4], [162.0, 14.8], [188.0, 14.1], [170.0, 11.6], [192.0, 13.6],    [245.0, 14.2], [205.0, 13.0], [260.0, 12.0], [215.0, 12.8], [155.0, 12.7],    [228.0, 12.3], [270.0, 13.3], [238.0, 12.1], [165.0, 13.9], [182.0, 12.4],    [230.0, 14.5], [200.0, 12.2], [195.0, 11.4], [210.0, 12.5], [250.0, 11.7]])Y_train = np.array([    [1], [0], [1], [0], [1],    [0], [1], [0], [1], [0],    [1], [0], [1], [0], [1],    [0], [1], [0], [1], [0]])model = Sequential([	Normalization(axis=-1),    Dense(3, activation='sigmoid', name = 'layer1'),    Dense(1, activation='sigmoid', name = 'layer2')])model.layers[0].adapt(X_train)model.compile(loss=BinaryCrossentropy())model.fit(X_train, Y_train, epochs=1000,verbose=0)W1, b1 = model.get_layer("layer1").get_weights()W2, b2 = model.get_layer("layer2").get_weights()print(f"W1{W1.shape}:\n", W1, f"\nb1{b1.shape}:", b1)print(f"W2{W2.shape}:\n", W2, f"\nb2{b2.shape}:", b2)X_test = np.array([[200,13.9],[200,17]])predictions = model.predict(X_test,verbose=0)print("predictions = \n", predictions)
-
-
-torch实现
-在 torch 的语法中，很多损失函数都自带激活函数，nn.CrossEntropyLoss () 自带 softmax，nn.BCEWithLogitsLoss () 自带 sigmoid。如果用这俩做损失函数的话，他们会将前向传播的输出值拿过来，先激活一遍，再计算损失。所以正常情况下的回归问题，二分类问题，多分类问题输出层都不需要写激活函数
-以求二分类举例：
-import numpy as npimport torchimport torch.nn as nn   # 神经网络层包import torch.optim as optim # 优化器包X_train = np.array([    [175.0, 13.4], [162.0, 14.8], [188.0, 14.1], [170.0, 11.6], [192.0, 13.6],    [245.0, 14.2], [205.0, 13.0], [260.0, 12.0], [215.0, 12.8], [155.0, 12.7],    [228.0, 12.3], [270.0, 13.3], [238.0, 12.1], [165.0, 13.9], [182.0, 12.4],    [230.0, 14.5], [200.0, 12.2], [195.0, 11.4], [210.0, 12.5], [250.0, 11.7]])Y_train = np.array([    [1], [0], [1], [0], [1],    [0], [1], [0], [1], [0],    [1], [0], [1], [0], [1],    [0], [1], [0], [1], [0]])class Net(nn.Module):    def __init__(self, input_dim):        super().__init__()        # python自带 nn.Module 类，我们继承父类        self.layer1 = nn.Linear(input_dim, 3)        self.layer2 = nn.Linear(3, 1)    def forward(self, x):        x = torch.relu(self.layer1(x))        out = self.layer2(x)        return outinput_dim=2model = Net(input_dim)loss_func = nn.BCEWithLogitsLoss()# 优化器 model.parameters()储存所有的 W,b 确定优化哪些东西 ，lr=学习率，控制每次参数更新幅度，并且通过 Adam 优化学习率optimizer = optim.Adam(model.parameters(), lr=0.001)# X,Y 要转为torch张量才能算，这里的张量类似于 Pytorch中的numpy数组X_tensor = torch.tensor(X_train, dtype=torch.float32)Y_tensor = torch.tensor(Y_train, dtype=torch.float32)epochs = 10000model.train()# 开启训练模式，model.train()不会开始训练，只是把模型调成训练模式for epoch in range(epochs):    # 清空梯度，注意，这里清空的是梯度，是求导的值，而不是把 W,b 归零了    optimizer.zero_grad()    # 自动调用 forward 函数    pred = model(X_tensor)    # 计算损失    loss = loss_func(pred, Y_tensor)    # 反向传播求梯度    loss.backward()    # 更新权重    optimizer.step()    if (epoch+1)%1000 == 0:        print(f"Epoch {epoch+1}, Loss: {loss.item():.4f}")model.eval()# 开启测评模式X_test = np.array([[200,13.9],[200,17]])X_test_tensor = torch.tensor(X_test, dtype=torch.float32)# 关闭梯度计算，节省内存、加速推理with torch.no_grad():    logits = model(X_test_tensor)   	prob = torch.sigmoid(logits)	y_pred = (prob &gt; 0.5).long()   print(pred)
-
-损失函数：多分类：CrossEntropyLoss二分类：BCEWithLogitsLoss回归：MSELoss
-张量转换：一般情况下，X 默认转换为浮点数（float32）对于 Y：多分类中，每个标签是整数索引，要弄成整数（torch.long）二分类一般是浮点数回归一般是浮点数
-预测预测多分类问题这么写：
-logits = model(X_test_tensor)probs = torch.softmax(logits, dim=1)y_pred = torch.argmax(probs, dim=1)
-
-logits 得到二维数组，其中第 0 维是样本，第 1 维是特征（其实就是一矩阵，每一行是一个样本，每一列是一个特征）torch.softmax(logits, dim=1) 先用softmax函数计算出每个样本他是其中某个类别的概率，再归一化其中 argmax 是寻找最大值所在的下标的函数，torch.argmax(probs, dim=1) 就是对每一条样本，在所有类别概率里找最大概率的位置（下标从 0 开始）
-对于普通回归的预测，直接写 y_pred = model(X_test_tensor) 即可如果想转换成 numpy数组，需要写 y_pred_np = y_pred.cpu().numpy()因为 numpy 库不能直接读取 GPU 上的信息，模型要是在GPU训练就要这么写
-卷积层正常的神经网络中，我们是把上一层的所有输出都传给下一层的每一个特征，但有时候我们可能不会传入所有参数，而是给每一个特征一部分参数，这种我们称为卷积层，即 CNN （卷积神经网络）
-如何构建优秀的模型正交化每一个工具或者调整手段，尽量只解决一个问题，不要一个改动同时修好多个问题，也不要一个改动同时引入多个问题。因为同时改一堆东西，就算效果好了，你也不知道是怎么好的，完全无法复现
-模型评估对于一组数据集，我们可以不把他都拿来训练，而是留下 30% 或者 20% 来作为测试数据，通过测试数据的误差来评判模型好坏但是如果我们有几个模型，要通过  来选择模型，并认为  就是这个模型的偏差，就出问题了。因为数据有限， 的测量会有偏差，我们选了最小的一个，所以算出来的  其实低于真正的误差我们将数据分为三个集合，训练集，交叉验证集，测试集，分别占 60%、20%、20%，通过训练集得出 W,b 后，我们对每个模型计算出交叉验证集的损失  ，用来选模型。然后通过测试集算出  当做这个模型的损失
-在实际训练中可能出现欠拟合和过拟合的情况。如果  （没有正则化）都很大，说明这个曲线太简陋，没办法完美拟合。如果  远大于  显然是过拟合了
-贝叶斯最优误差贝叶斯最优误差指的是理论上能到达的最小误差，比如说识别数字，神仙来了可能都要有 0.01% 的错误率，除了过拟合后的训练集，没有任何模型能在任何训练集上突破这个数字。一般情况下，我们选取人的表现当做贝叶斯误差，因为人在很多领域都很优秀，极其接近完美的表现
-正则化中  的取值我们像模型评估中那样，也把数据集分成三组。取不同的  值，计算出每个  ，最小的既可以认为是最好的   ，并可以用  估算实际损失
-基线性能之前判断我们用的是看  的大小和  与  比较，但什么情况下才算大？这里我们不能看绝对数值，而是要与基线性能比较。比如说语音识别中，人类的识别准确率是 90% ，那模型得出来的结果就是和 90% 比较而非 100%
-解决神经网络中的欠拟合过拟合问题显然，一个复杂的神经网络不太可能出现欠拟合问题，所以如果发现欠拟合就扩大网络即可。如果通过交叉验证发现过拟合，就增加数据，重新训练。一个正确正则化的神经网络模型，哪怕很大，也能很好的拟合而不出现过拟合问题
-错误分析除了让机器自己去调整，我们还可以手搓。比如说提取 100 个交叉验证集中错误的数据，一个个看他们为啥错了再针对性的调整模型
-增加数据增加薄弱方面的数据：通过错误分析，模型对那个方面测试表现不好，就着重增加这方面的数据手搓数据：以识别音频举例，我们可以给所拥有的音频加上噪音，这样就创造出了新的训练集，并且这种噪音训练集是必要的。甚至有时候我们还可以直接创造数据迁移学习：有时候我们的训练数据可能很少，但是同类型的某个任务可能有很多的训练数据。比如说我们想训练一个判断数字是几的模型，但我们数据很少，但是我们有很多判断字母是啥的数据，我们就可以先训练一个判断字母是啥的模型，在用少量的判断数字是几的数据进行微调。迁移学习在同类型但不同任务上是很好用的
-精确率与召回率当正例与负例数量差距过大时，用基线性能判断模型性能并不是好的标准。比如：预测一种罕见病，直接预测没得病准确率就有 99.9% ，于是我们引入精确率与召回率
-精确率
-真正例数量预测为正例的总数
-召回率
-真正例数量真实正例的总数
-我们希望这俩都很高，但他俩呈负相关，所以我们引入 F1_sorce ，认为 F1_sorce 越高，模型越好
-F1_sorce
-
-其中 P,R 分别是精确率和召回率
-决策树概念引入例子：通过动物的某些特征来判断他是猫还是非猫，如：耳朵是扁的还是尖的，连是圆的还是方的……
-我们可以建一颗树来判断
-
-对于某个节点，定义纯度为猫所占的比例，几位  , 不是猫的比例即   定义熵为    当纯度很高或者很低的时候，熵都趋近于 0 而当纯度趋近 0.5 时，熵趋近于 1
-都有神经网络了，为什么还要决策树？根据豆包的解答，我总结如下：1.决策树的每一步都能解释，逻辑很清晰，但神经网络你确定层数和每一层的特征数后，就完完全全交给他去跑，是黑盒2.相对于神经网络，决策树需要的数据量少，训练成本低3.决策树天然适配表格化结构，神经网络更适合非结构化数据
-建树显然，我们希望每个节点的熵越小越好，于是我们可以通过区分后熵的大小来决定用哪种特征进行区分计算时我们常用 信息增益（即熵减小量）来比较
-
-其中 ：信息增益 ：根节点中正类样本的比例 ：左子节点样本占父节点的比例 ：左子节点内部，正类样本的比例 ：右子节点样本占父节点的比例 ：右子节点内部，正类样本的比例
-对于某个可以取很多值的特征，比如说耳朵可以是圆的，椭圆的，尖的……我们采取独热编码，即把一个特征拆解为多个特征：耳朵是不是圆的，耳朵是不是椭圆的，耳朵是不是尖的……这样每个特征就是一个二元特征了对于连续的特征，我们还是把他变成二元特征，比如说体重，大于 x 认为是猫，小于认为是非猫。这里的 x 需要取不同的值，正常情况下有 n 哥样本，就要取 n-1 个值，即每个样本中间取一下，然后计算每一个 x 对应的信息增益，得出最大的信息增益以及对应的 x ，并于其他特征相比较，看要不要把这个特征当成节点的分类标准
-注意：每一次分完进入子节点，此时子节点考虑的数据只是分到他的所有样本，只是根据分到的样本重新对所有特征计算信息增益从而选出最大的
-回归树之前说的决策树可以预测种类，回归树则是通过一些特征来预测具体的值，主题思路大致相同，在叶子节点时，回归树预测的不是特征，而是里面有的样本的平均值
-例子：用特征判断体重
-
-类似于决策树，通过熵减小量来选择特征，回归树选择方差减小量来选择特征
-
- ：方差减小量 ：父节点的样本方差 ：左子节点内部方差 ：右子节点内部方差
-决策树集成如果只用一颗树来判断，那么样本有细微变化就会导致树的巨大改变，不鲁棒，于是我们考虑建很多棵
-随机森林
-建树的方法是完全一样的，每个树的区别只是样本集不同
-我们采用有放回随机抽样的方式构建样本集，每次又放回抽样出与样本集数量相同的样本，容易发现，这些样本去重之后是原来样本集的子集。但仅仅是这样还不够，还是容易建成同一棵树。于是我们对样本个数为 n 的节点不用所有的样本来进行判断，而是取大小为 k 的子集。一般情况下，n很大时，  
-XGBoost
-XGBoost的主要思路就是着重训练上一次出错的数据，然后针对性训练。底层是通过拟合损失函数的负梯度，自然倾向修正预测偏差大的样本。这种算法在工业中很常用
-# 分类任务from xgboost import XGBClassifiermodel = XGBClassifier(    n_estimators=100,  # 最多 100 棵树    max_depth=5,  # 单个决策树最大深度    learning_rate=0.1,  # 学习率，学习率越小，需要更多树，训练更稳定，泛化更好；学习率越大，收敛更快，但容易震荡、过拟合    random_state=42  # 随机种子)model.fit(X_train, y_train,          eval_set=[(X_cv, y_cv)], # X_cv,y_cv：独立验证集          eval_metric="logloss", # 多分类：eval_metric="mlogloss"          early_stopping_rounds=10) # 10次没进步就终止训练，防止过拟合y_pred = model.predict(X_test)# 回归任务from xgboost import XGBRegressormodel = XGBRegressor(	n_estimators=100, # 最多 100 棵树    max_depth=5, # 单个决策树最大深度    learning_rate=0.1, # 学习率，学习率越小，需要更多树，训练更稳定，泛化更好；学习率越大，收敛更快，但容易震荡、过拟合    random_state=42 # 随机种子)model.fit(X_train, y_train, eval_set=[(X_cv, y_cv)], early_stopping_rounds=10)y_pred = model.predict(X_test)
-
-无监督学习聚类算法聚类算法是经典的无监督算法。在之前的逻辑回归中，我们通过给定的 X_train 和 y_train 判断新的 X_test 的类别，但如果不给 y_train 呢，只是给一些点，能不能找出他们的某种关系从而分类？
-K-均值聚类算法
-对于 X_train ，我们要把他们分成 k 类（k是给定的），并且令他们的中心点分别是  刚开始  是随机设置的。把 X_train 的点分给离他最近的中心点，认为他们是一类。随后更新中心点，中心点的值就是这一类所有点的平均值。重复上述过程，直到中心点不改变。如果出现某个中心点没有可以分配的 X_train ，可以重新随机化中心点，但更常见的操作是直接取消这个中心点
-一般情况下，我们都是随机取 k 个 X_train 中的点当做初始中心点
-损失函数：
-
-其中  代表第 j 类所有样本的集合
-重复寻找中心点其实就是不断减小  的值，但是  有很多局部最小值，为了找到更优解，我们通常要做多次 K-均值算法，每次随机设置初始中心点，这样子就能找到很多局部最小值，比较他们的   ，从而选取相对最优解
-import numpy as npimport matplotlib.pyplot as pltfrom sklearn.cluster import KMeansfrom sklearn.datasets import make_blobs# make_blobs：生成多簇高斯分布样本# n_samples=150：一共生成150个样本点# n_features=2：每个样本2个特征（二维坐标，方便画图）# centers=3：预设3个簇中心# random_state=42：随机种子固定，保证每次运行数据完全相同# 返回 (样本矩阵X, 真实标签)；不需要真实标签，用下划线_接收舍弃X, _ = make_blobs(n_samples=150, n_features=2, centers=3, random_state=42)# n_clusters=3：指定聚类数量k=3model = KMeans(n_clusters=3, random_state=42)# fit_predict：两步合一# fit()：执行聚类训练，寻找簇中心# predict()：预测每个样本属于哪一簇# labels 数组：存储每个样本的簇编号 0 / 1 / 2labels = model.fit_predict(X)# 可视化plt.figure(figsize=(8, 6))# c=数组 会给每个元素按照顺序赋上数字（labels里面的数字），cmap是调色盘，会按照数字给出颜色plt.scatter(X[:, 0], X[:, 1], c=labels, cmap="viridis", alpha=0.7)plt.scatter(model.cluster_centers_[:,0], model.cluster_centers_[:,1],            c="red", marker="X", s=200, label="Centroids")plt.legend()plt.title("K-Means Sklearn Version")plt.show()print("聚类中心坐标：")print(model.cluster_centers_)print("每个样本所属簇标签：\n", labels)
-
-异常检测假如说现在手上有一堆正常的数据，我们就可以计算他的分布，一个正常的数据应该是成正态分布的。我们可以通过
-
-
-得到   ，因此我们就得到一个样本值为 x 的概率
-
-这时候要是再来一个数据，我们就可以通过观察 p(x) 的大小判断他是否是异常值，一般的，取  ，如果    ，则认为 x 是异常值
-对于有多个特征的样本集，对于其中每个特征都可以整理为一个单独的正态分布，则令  为：
-
-在实际应用中，我们手上往往有少量异常数据和大量正常数据，我们通过部分正常数据训练样本后，可以用剩下的正常样本和异常样本组成交叉验证集来测试
-在有少量有少量已知异常值时，用无监督学习还是监督学习一方面，取决于样本数量，当异常样本太少，我们往往用无监督学习
-另一方面，要看异常情况是重复的还是会不断有新的异常，如果异常是重复的，我们倾向于用监督学习。如果总是有新的异常，那监督学习可能判断不怎么好，而无监督学习只是看测试样本和正常值的差距，就算是全新的异常也能发现
-
-
-有时候数据分布不那么正态，我们就需要改变数据来让他正态。一般取  
+    <title>生成式深度学习</title>
+    <url>/2026/09/01/%E7%94%9F%E6%88%90%E5%BC%8F%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0/</url>
+    <content><![CDATA[VAE网络视角AE
+普通 AE 主要分为编码器和解码器两部分。其中编码器会把原始数据通过神经网络压缩成向量，叫隐向量 ，解码器会把这个向量再经过网络放回原来的输入数据（个人感觉跟 U‑net有点像）
+用AE生成数据就有点不靠谱，以图片为例，喂给他的图片他能很好的学习，但是你给他丢一串别的 ，他可能无法生成正常图片
+VAE
+只是改编码器的输出头，解码器几乎完全复用 AE 的解码器。编码器主干和 AE 一模一样；但是最后分出两个输出头，不是输出 1 个 z，输出两个向量：。然后生成噪声 ，计算：
+
+这一步只是简单的张量加减乘，神经网络本身不产生随机，噪声是我们手动造的。把算出来的  喂进解码器（和 AE 解码器结构一样），得到重建图片。
+VAE 损失由两部分相加：1.重建损失：和普通 AE 相同，衡量原图和重建图差距；2.KL 损失：作用于，正则约束隐空间。
+训练阶段：完整跑编码器‑重参数‑解码器，更新全部网络权重。生成阶段：丢弃编码器，直接从标准正态分布采样送入解码器，生成全新样本。
 ]]></content>
       <categories>
         <category>学习笔记</category>
       </categories>
       <tags>
         <tag>笔记</tag>
-        <tag>机器学习</tag>
+        <tag>深度学习</tag>
       </tags>
   </entry>
   <entry>
@@ -4499,24 +5070,243 @@ output layer经过很多层的Transformer block，我们会把最终输出的最
       </tags>
   </entry>
   <entry>
-    <title>生成式深度学习</title>
-    <url>/2026/09/01/%E7%94%9F%E6%88%90%E5%BC%8F%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0/</url>
-    <content><![CDATA[VAE网络视角AE
-普通 AE 主要分为编码器和解码器两部分。其中编码器会把原始数据通过神经网络压缩成向量，叫隐向量 ，解码器会把这个向量再经过网络放回原来的输入数据（个人感觉跟 U‑net有点像）
-用AE生成数据就有点不靠谱，以图片为例，喂给他的图片他能很好的学习，但是你给他丢一串别的 ，他可能无法生成正常图片
-VAE
-只是改编码器的输出头，解码器几乎完全复用 AE 的解码器。编码器主干和 AE 一模一样；但是最后分出两个输出头，不是输出 1 个 z，输出两个向量：。然后生成噪声 ，计算：
+    <title>机器学习</title>
+    <url>/2026/07/15/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0/</url>
+    <content><![CDATA[线性回归一元线性回归目标对于给定的数据集 x,y 我们希望用方程  来拟合 y 与 x 的关系
+如何用python制表将数据集表示1. plt.plot(x, y) —— 画折线图
+plt.plot(x, y, color='red', linestyle='--', marker='o', linewidth=2, label='曲线1')
 
-这一步只是简单的张量加减乘，神经网络本身不产生随机，噪声是我们手动造的。把算出来的  喂进解码器（和 AE 解码器结构一样），得到重建图片。
-VAE 损失由两部分相加：1.重建损失：和普通 AE 相同，衡量原图和重建图差距；2.KL 损失：作用于，正则约束隐空间。
-训练阶段：完整跑编码器‑重参数‑解码器，更新全部网络权重。生成阶段：丢弃编码器，直接从标准正态分布采样送入解码器，生成全新样本。
+linestyle：线条样式（-实线、–虚线、:点线）marker：数据点标记（o圆点、^三角、s方块）linewidth：线条宽度（数字，越大越粗）label：曲线标签，配合 plt.legend() 显示图例2. plt.bar(x, y) —— 画柱状图 ，plt.hist() —— 直方图
+plt.bar(x, y, color='blue', width=0.8, label='柱状图')plt.hist(    x,                # 输入一维数据    bins=20,          # 箱子数量，柱子多少；也可以给区间列表    density=False,    # True：纵坐标变成概率密度；False：统计计数（样本个数）    color="skyblue",)#直方图：把一组连续数值数据切分成若干区间（箱子 bin），统计每个区间里有多少个样本，用柱子高度表示数量。用来看数据的分布
+
+3. plt.scatter(x, y) —— 画散点图
+plt.scatter(x, y, c='blue', marker='o')
+
+4. plt.pie(data) —— 画饼图
+plt.pie(data, labels=labels, autopct='%1.1f%%')
+
+data：饼图的数值数据，自动计算占比labels：每个饼块的分类标签，长度要与data一致autopct：在扇形内部显示百分比，’%1.1f%% → 保留 1 位小数，’%1.0f%%’ → 整数百分比，’%1.2f%%’ → 保留两位小数5. plt.title() —— 设置图表标题
+plt.title('图表标题', fontsize=14, color='black')
+
+fontsize：标题字体大小6. plt.xlabel() plt.ylabel() 设置x,y轴标签
+plt.xlabel('x轴含义', fontsize=12, color='#b03535')plt.ylabel('y轴含义', fontsize=12, color='#b88f8f')
+
+7. plt.legend() —— 显示图例每个图画完后都要写8. plt.grid() —— 显示网格
+plt.grid(True, linestyle='--')
+
+9. plt.show() —— 显示图表最后统一写，只写一次10. plt.figure() —— 新建画布一个程序要画多张单图，每张图前要写一遍11. 增添中文环境在最上方添加
+plt.rcParams["font.family"] = "SimHei"plt.rcParams["axes.unicode_minus"] = False
+
+示例：
+import matplotlib.pyplot as pltplt.rcParams["font.family"] = "SimHei"plt.rcParams["axes.unicode_minus"] = Falsex=[1,10,3,6]y=[12,45,2,67]plt.figure()plt.plot(x,y,color="blue",linestyle='-',marker='^',linewidth=1,label="折线图")plt.title('这是折线图',color="black")plt.xlabel('这是x轴')plt.ylabel('这是y轴')plt.legend()plt.figure()plt.bar(x,y,color="yellow",width=0.61,label="柱状图")plt.legend()plt.figure()plt.scatter(x,y,c="red",marker='s',label="点图")plt.legend()plt.show()
+
+
+成本函数对于每一个 w,b 生成的  我们用成本函数检验拟合函数的优秀程度
+
+分别对 w,b 求导得：
+
+
+梯度下降成本函数要求越小越好，显然，延切线方向更新 w,b 即可
+
+
+即得最优解
+多元线性回归向量化对于每一个样例都有多个维度，每个维度有多个数值，我们可以用向量来表示  以此方便计算
+numpy进行向量计算导入：
+import numpy as np
+
+创建数组：
+# 1. 列表转数组arr = np.array([1,2,3,4])arr2d = np.array([[1,2],[3,4]]) #二维数组# 2. 全0 / 全1np.zeros(n)           # 一维np.zeros((m,n))       # m行n列，必须传元组np.ones((m,n))# 3. 单位矩阵np.eye(n)# 4. 随机数组np.random.rand(m,n)     # [0,1)均匀分布np.random.randn(m,n)    # 标准正态分布 N(0,1)np.random.randint(low, high, size) # 随机整数# [low , high) —— 左闭右开  size：输出数组形状  size=5 → 一维数组长度 5   size=(2,3) → 2 行 3 列二维数组
+
+数学运算：
+a + b, a - b, a * b, a / b   # 逐元素加减乘除a ** 2                       # 逐元素平方np.sqrt(arr)     # 开根号np.exp(arr)      # e^xnp.log(arr)      # ln(x)np.abs(arr)      # 绝对值
+
+聚合函数：
+np.sum(arr)      # 全部元素求和np.sum(arr, axis=0) # 按列求和；axis=1 按行求和np.mean(arr)     # 平均值np.max(arr)      # 最大值np.min(arr)      # 最小值np.argmax(arr)   # 返回最大值下标np.argmin(arr)   # 返回最小值下标
+
+矩阵乘法：
+a @ b          # 矩阵乘法np.dot(a, b)   # 矩阵乘法，等价 @# 计算向量时直接相乘即可，计算矩阵乘法需要转置到正确形式
+
+
+多元梯度下降与一元梯度下降类似
+
+
+
+
+特征缩放对于每个样例，他的不同特征的数值范围可能差别很大，会影响梯度下降的速度，所以我们进行特征缩放，让每个特征的值都大约分布在 -1 和 1 之间
+平均归一化：
+
+z-score归一化：
+
+多项式回归有时候，只靠    不能正确拟合回归曲线，这时候我们就需要通过多项式回归函数
+
+来拟合一些复杂曲线
+scikit-learn拟合线性回归Scikit-learn：Python 最主流的传统机器学习库，简称 sklearn
+注意：对于其中大部分函数，都更倾向于接受 numpy 数组对于一个数据集，应表示成矩阵形式，其中，每一行表示一个具体样例的所有特征，每一列记录某个特征的所有值
+预处理from sklearn.preprocessing import StandardScaler
+
+sklearn：scikit-learn 机器学习库。preprocessing：sklearn 下的数据预处理模块StandardScaler：从该模块导入 StandardScaler 类，它就是实现 Z-score 标准化的工具
+主要使用三个函数：.fit(X)：计算出均值和标准差，储存到对象中，可以分别用 .mean_ .scale_ 获取.transform(X)：执行公式   并返回改过的数组.fit_transform(X)：一次干上面两步
+import numpy as npfrom sklearn.preprocessing import StandardScalernp.set_printoptions(precision=2)#全局设置 NumPy 数组打印浮点数时最多显示 2 位小数，只改变屏幕打印显示，不会修改数组内部真实数值X_train = np.array([[1,23],[2,34],[3,56],[4,77],[5,99]])scaler = StandardScaler()scaler.fit(X_train)print(scaler.mean_,scaler.scale_)ans:[ 3.  57.8] [ 1.41 27.74]result = scaler.transform(X_train)print(result)ans:[[-1.41 -1.25] [-0.71 -0.86] [ 0.   -0.06] [ 0.71  0.69] [ 1.41  1.49]]
+
+直接计算 w,b 利用  直接求解
+import numpy as npfrom sklearn.preprocessing import StandardScalerfrom sklearn.linear_model import LinearRegressionnp.set_printoptions(precision=2)X_train = np.array([[1,23],[2,34],[3,56],[4,77],[5,99]])y_train = np.array([2,4,6,8,10])scaler = StandardScaler()X_norm=scaler.fit_transform(X_train)model = LinearRegression()#直接求 w,bmodel.fit(X_norm, y_train)print("权重 w =", model.coef_)print("截距 b =", model.intercept_)#预测新的X_test = np.array([[6,113],[7,134]])y_pred = model.predict(X_test)print("预测结果：", y_pred)
+
+梯度下降实现线性回归from sklearn.linear_model import SGDRegressorsgd=SGDRegressor(    penalty=,             # 是否开启正则，默认开启，如果关闭等价普通线性回归						  # penalty="l2"：L2 正则（Ridge，默认）						  # penalty="l1"：L1 正则（Lasso）						  # penalty="elasticnet"：L1+L2 混合弹性网    alpha=1.0,            # 正则惩罚强度 等于 正则惩罚系数（λ）/2m    learning_rate=,       # constant：固定学习率，全程使用 eta0   adaptive：损失不再下降时自动降低学习率     invscaling：默认策略，学习率逐步衰减    eta0=,                # 初始学习率α    max_iter=,            # 最大迭代轮数    random_state=         # 固定随机种子，让结果可复现)
+
+sgd.fit(X,y)：计算出 w,b 用 .coef_ .intercept_输出sgd.predict(X_test)：预测新的 y  注意：这里的 X_test 要先标准化 并且标准化时只能 transform 不能 fit
+import numpy as npfrom sklearn.preprocessing import StandardScalerfrom sklearn.linear_model import SGDRegressornp.set_printoptions(precision=2)X_train = np.array([[1,23],[2,34],[3,56],[4,77],[5,99]])y_train = np.array([2,4,6,8,10])scaler = StandardScaler()X_norm=scaler.fit_transform(X_train)sgd=SGDRegressor(max_iter=10000)sgd.fit(X_norm,y_train)#注意：要传 X_norm 不是 X_trainprint("w =", sgd.coef_)print("b =", sgd.intercept_)X_test = np.array([[6,113],[7,134]])X_test_norm = scaler.transform(X_test)y_pred = sgd.predict(X_test_norm)print(y_pred)
+
+逻辑回归应用场景：二元分类具体场景：根据肿瘤大小判断是否恶性显然，这不是一个循序渐进的过程，应该是大于某个数之后我们就认为他恶性
+Sigmoid（logistic）函数用一个 S 型曲线能较好模拟数据，于是取
+
+
+假设以 0.5 为阈值，即等价于    与 0 比较则令曲线     为决策边界
+成本函数如果用线性回归的成本函数，得出来的函数并不是一个凹函数，而是会有多个极小值点，不能用
+我们要求成本函数：当 y=1 时，  算出的值越趋近于 1 越好，当 y=0 时，  的值越趋近于 0 越好
+即当 y=1 时，  y=0 时，    
+即
+
+梯度下降与线性回归的梯度下降类似
+
+
+
+
+完整代码import numpy as npnp.set_printoptions(precision=2)def sigmoid(z):	return 1 / (1 + np.exp(-z))# 计算成本函数def compute_cost(X, y, w, b):	m = X.shape[0]	z = np.dot(X, w) + b	f = sigmoid(z)	total_loss = -np.sum(y * np.log(f) + (1 - y) * np.log(1 - f))	cost = total_loss / m	return cost# 计算 dw dbdef compute_gradient(X, y, w, b):	m = X.shape[0]	z = np.dot(X, w) + b	# np.dot(X,w) 算出的是 m*1 的向量 即 z_i = w*x_i+b	f = sigmoid(z)	# f_i 即 x_i 带入得到的结果	err = f - y	dw = (1 / m) * np.dot(X.T, err)	db = (1 / m) * np.sum(err)	return dw, db# 梯度下降def gradient_descent(X, y, w, b, alpha, max_iters):	cost_history = []	for i in range(max_iters+1):		dw, db = compute_gradient(X, y, w, b)		w = w - alpha * dw		b = b - alpha * db		cost = compute_cost(X, y, w, b)		cost_history.append(cost)		# 每 10000 轮打印一次损失		if i % 10000 == 0:			print(f"迭代{i:4d}次，成本函数值：{cost:.4f}")	return w, b, cost_historydef predict(X, w, b):	z = np.dot(X, w) + b	f = sigmoid(z)	pred = []	for i in f:		if i &gt;= 0.5:			pred.append(1)		else:			pred.append(0)	return predif __name__ == "__main__":	X_train = np.array([[0.5, 1.2],						[1.1, 3.0],						[2.0, 1.5],						[3.2, 4.1],						[1.8, 2.2]])	y_train = np.array([0, 0, 1, 1, 1])	m, n = X_train.shape	w_initial = np.zeros(n)	b_initial = 0.0	learning_rate = 0.01	max_iter = 100000	w, b, loss_record = gradient_descent(X_train, y_train, w_initial, b_initial, learning_rate, max_iter)	print("\n===== 训练完成 =====")	print(f"w = {w}")	print(f"b = {b:.2f}")	print(f"loss_record = {loss_record[-1]:.2f}")	y_pred = predict(X_train, w, b)	print(f"\n真实值：{y_train}")	print(f"预测值：{y_pred}")
+
+scikit-learn拟合逻辑回归与线性回归类似，注意：逻辑回归虽不强制标准化，但特征尺度差异大时会影响收敛速度与正则效果
+import numpy as npnp.set_printoptions(precision=2)from sklearn.linear_model import LogisticRegressionif __name__ == "__main__":	X_train = np.array([[0.5, 1.2],						[1.1, 3.0],						[2.0, 1.5],						[3.2, 4.1],						[1.8, 2.2]])	y_train = np.array([0, 0, 1, 1, 1])	lr_model = LogisticRegression(		penalty="l2", # L2 正则		C=1.0, # 正则强度倒数		max_iter=100000,		random_state=42, # 随机种子，固定的话则每次结果一样		solver="lbfgs", # 四种优化算法	)	lr_model.fit(X_train, y_train)	print("w =", lr_model.coef_)	print("b =", lr_model.intercept_)	# 4. 预测类别（输出0或1）	y_pred = lr_model.predict(np.array([[3.5,3.1]]))	# 5. 预测概率（输出 [类别0概率, 类别1概率]）	y_pred_proba = lr_model.predict_proba(np.array([[3.5,3.1]]))	print(y_pred,y_pred_proba)
+
+正则化过拟合&amp;欠拟合欠拟合显然，如果  过于简单，将拟合不了复杂的曲线，具有高偏差
+过拟合我们可以想到，对于任何一种数据集，只要  够复杂，总能拟合出一条完美的曲线使得成本函数为 0 ，然而，这条曲线并不一定使我们想要的。显然，在绝大部分情况下，只要我们换一种数据集，刚刚拟合的曲线就会失效。因此，在特征很多的时候，我们需要控制拟合的曲线，让他尽可能的去表达一种趋势，而非完全贴合数据
+带正则化的成本函数经过验证，在成本函数后面加上  能有效的防止过拟合
+带正则化的线性回归成本函数
+带正则化的逻辑回归成本函数
+带正则化的梯度下降
+
+
+
+神经网络概念
+需求预测实例：假设我们现在要通过一件商品的价格，材料，成本，颜色等特征来判断他是不是一件畅销品。显然，我们可以构建一个逻辑回归来判断。我们也可以采取另一种方法，我们重新设置特征成本，质量，利润三个特征，先通过价格，材料，成本，颜色等特征预测我们新设置特征成本，质量，利润的值，再通过新特征进行逻辑回归判断。抽象来说，我们先输入一个向量（价格，成本，材料等特征的值），我们把这称之为输入层，然后计算出成本，质量，利润的值，这也是一个向量，我们把这一层称为隐藏层，输出的向量是这一层的激活层，最后是输出层。
+这样做的好处是我们能拟合极其复杂的函数，精准判断样本特性。当然，如果我们不用神经网络，只用简单的线性回归设置及其多的特征也能做到类似的效果，但这样需要的特征太多，参数爆炸。
+在运行中，我们并不需要给定隐藏层的具体特征，我们只需要给出有多少个隐藏层，每个隐藏层有几个特征，剩下的神经网络自己会判断
+一般来说，说神经网络有几层指的是隐藏层加输出层。以第三层举例，第二层的激活值作为输入，第三层有三个特征，每个特征通过一个激活函数，把上一层的激活值作为输入。最终这一层的三个激活函数的结果过程这一层的激活值给到下一层
+训练一个神经网络一般没有确定的层数和特征数，需要通过经验判断
+常见的激活函数有线性函数，sigmoid函数，Relu函数，softmax函数，但最常见的是Relu函数。线性函数不管拟合多少遍，还是线性函数，跟普通的线性回归没区别。sigmoid函数 z 很大时太平缓了。除了最后一层，前面的激活函数没有特殊含义，只是要拟合复杂函数，所以前面的激活函数都是Relu函数。而最后一层则是要根据不同需求选择不同的激活函数
+多类别输出，softmax函数在逻辑回归中，我们的输出只能是 0 或 1 ，如果有多个可能得结果，sigmoid函数就不行了，我们要用softmax函数
+
+
+损失函数：
+
+对应不同类别取值：
+时：
+
+时：
+
+
+原理给定一组 W,b ，给出输入，我们通过前向传播求出损失函数，在通过反向传播更新 W,b
+前向传播运算
+设上一层的激活值为 ，是   的行向量。
+ 是   的行向量，权重矩阵构造如下：
+
+矩阵  的尺寸为  ，记作 。
+偏置向量定义：
+
+则
+
+令
+
+则
+
+实现TensorFlow实现（不常用）基础代码：Sequential 建立神经网络：有多少层，每层有几个特征，每层用什么激活函数model.compile 确定成本函数model.fit 训练神经网络model.predict 预测
+import numpy as npimport tensorflow as tffrom tensorflow.keras.models import Sequentialfrom tensorflow.keras.layers import Dense, Normalization  # 归一化from tensorflow.keras.losses import BinaryCrossentropyX_train = np.array([    [175.0, 13.4], [162.0, 14.8], [188.0, 14.1], [170.0, 11.6], [192.0, 13.6],    [245.0, 14.2], [205.0, 13.0], [260.0, 12.0], [215.0, 12.8], [155.0, 12.7],    [228.0, 12.3], [270.0, 13.3], [238.0, 12.1], [165.0, 13.9], [182.0, 12.4],    [230.0, 14.5], [200.0, 12.2], [195.0, 11.4], [210.0, 12.5], [250.0, 11.7]])Y_train = np.array([    [1], [0], [1], [0], [1],    [0], [1], [0], [1], [0],    [1], [0], [1], [0], [1],    [0], [1], [0], [1], [0]])model = Sequential([	Normalization(axis=-1),    Dense(3, activation='sigmoid', name = 'layer1'),    Dense(1, activation='sigmoid', name = 'layer2')])model.layers[0].adapt(X_train)model.compile(loss=BinaryCrossentropy())model.fit(X_train, Y_train, epochs=1000,verbose=0)W1, b1 = model.get_layer("layer1").get_weights()W2, b2 = model.get_layer("layer2").get_weights()print(f"W1{W1.shape}:\n", W1, f"\nb1{b1.shape}:", b1)print(f"W2{W2.shape}:\n", W2, f"\nb2{b2.shape}:", b2)X_test = np.array([[200,13.9],[200,17]])predictions = model.predict(X_test,verbose=0)print("predictions = \n", predictions)
+
+
+torch实现
+在 torch 的语法中，很多损失函数都自带激活函数，nn.CrossEntropyLoss () 自带 softmax，nn.BCEWithLogitsLoss () 自带 sigmoid。如果用这俩做损失函数的话，他们会将前向传播的输出值拿过来，先激活一遍，再计算损失。所以正常情况下的回归问题，二分类问题，多分类问题输出层都不需要写激活函数
+以求二分类举例：
+import numpy as npimport torchimport torch.nn as nn   # 神经网络层包import torch.optim as optim # 优化器包X_train = np.array([    [175.0, 13.4], [162.0, 14.8], [188.0, 14.1], [170.0, 11.6], [192.0, 13.6],    [245.0, 14.2], [205.0, 13.0], [260.0, 12.0], [215.0, 12.8], [155.0, 12.7],    [228.0, 12.3], [270.0, 13.3], [238.0, 12.1], [165.0, 13.9], [182.0, 12.4],    [230.0, 14.5], [200.0, 12.2], [195.0, 11.4], [210.0, 12.5], [250.0, 11.7]])Y_train = np.array([    [1], [0], [1], [0], [1],    [0], [1], [0], [1], [0],    [1], [0], [1], [0], [1],    [0], [1], [0], [1], [0]])class Net(nn.Module):    def __init__(self, input_dim):        super().__init__()        # python自带 nn.Module 类，我们继承父类        self.layer1 = nn.Linear(input_dim, 3)        self.layer2 = nn.Linear(3, 1)    def forward(self, x):        x = torch.relu(self.layer1(x))        out = self.layer2(x)        return outinput_dim=2model = Net(input_dim)loss_func = nn.BCEWithLogitsLoss()# 优化器 model.parameters()储存所有的 W,b 确定优化哪些东西 ，lr=学习率，控制每次参数更新幅度，并且通过 Adam 优化学习率optimizer = optim.Adam(model.parameters(), lr=0.001)# X,Y 要转为torch张量才能算，这里的张量类似于 Pytorch中的numpy数组X_tensor = torch.tensor(X_train, dtype=torch.float32)Y_tensor = torch.tensor(Y_train, dtype=torch.float32)epochs = 10000model.train()# 开启训练模式，model.train()不会开始训练，只是把模型调成训练模式for epoch in range(epochs):    # 清空梯度，注意，这里清空的是梯度，是求导的值，而不是把 W,b 归零了    optimizer.zero_grad()    # 自动调用 forward 函数    pred = model(X_tensor)    # 计算损失    loss = loss_func(pred, Y_tensor)    # 反向传播求梯度    loss.backward()    # 更新权重    optimizer.step()    if (epoch+1)%1000 == 0:        print(f"Epoch {epoch+1}, Loss: {loss.item():.4f}")model.eval()# 开启测评模式X_test = np.array([[200,13.9],[200,17]])X_test_tensor = torch.tensor(X_test, dtype=torch.float32)# 关闭梯度计算，节省内存、加速推理with torch.no_grad():    logits = model(X_test_tensor)   	prob = torch.sigmoid(logits)	y_pred = (prob &gt; 0.5).long()   print(pred)
+
+损失函数：多分类：CrossEntropyLoss二分类：BCEWithLogitsLoss回归：MSELoss
+张量转换：一般情况下，X 默认转换为浮点数（float32）对于 Y：多分类中，每个标签是整数索引，要弄成整数（torch.long）二分类一般是浮点数回归一般是浮点数
+预测预测多分类问题这么写：
+logits = model(X_test_tensor)probs = torch.softmax(logits, dim=1)y_pred = torch.argmax(probs, dim=1)
+
+logits 得到二维数组，其中第 0 维是样本，第 1 维是特征（其实就是一矩阵，每一行是一个样本，每一列是一个特征）torch.softmax(logits, dim=1) 先用softmax函数计算出每个样本他是其中某个类别的概率，再归一化其中 argmax 是寻找最大值所在的下标的函数，torch.argmax(probs, dim=1) 就是对每一条样本，在所有类别概率里找最大概率的位置（下标从 0 开始）
+对于普通回归的预测，直接写 y_pred = model(X_test_tensor) 即可如果想转换成 numpy数组，需要写 y_pred_np = y_pred.cpu().numpy()因为 numpy 库不能直接读取 GPU 上的信息，模型要是在GPU训练就要这么写
+卷积层正常的神经网络中，我们是把上一层的所有输出都传给下一层的每一个特征，但有时候我们可能不会传入所有参数，而是给每一个特征一部分参数，这种我们称为卷积层，即 CNN （卷积神经网络）
+如何构建优秀的模型正交化每一个工具或者调整手段，尽量只解决一个问题，不要一个改动同时修好多个问题，也不要一个改动同时引入多个问题。因为同时改一堆东西，就算效果好了，你也不知道是怎么好的，完全无法复现
+模型评估对于一组数据集，我们可以不把他都拿来训练，而是留下 30% 或者 20% 来作为测试数据，通过测试数据的误差来评判模型好坏但是如果我们有几个模型，要通过  来选择模型，并认为  就是这个模型的偏差，就出问题了。因为数据有限， 的测量会有偏差，我们选了最小的一个，所以算出来的  其实低于真正的误差我们将数据分为三个集合，训练集，交叉验证集，测试集，分别占 60%、20%、20%，通过训练集得出 W,b 后，我们对每个模型计算出交叉验证集的损失  ，用来选模型。然后通过测试集算出  当做这个模型的损失
+在实际训练中可能出现欠拟合和过拟合的情况。如果  （没有正则化）都很大，说明这个曲线太简陋，没办法完美拟合。如果  远大于  显然是过拟合了
+贝叶斯最优误差贝叶斯最优误差指的是理论上能到达的最小误差，比如说识别数字，神仙来了可能都要有 0.01% 的错误率，除了过拟合后的训练集，没有任何模型能在任何训练集上突破这个数字。一般情况下，我们选取人的表现当做贝叶斯误差，因为人在很多领域都很优秀，极其接近完美的表现
+正则化中  的取值我们像模型评估中那样，也把数据集分成三组。取不同的  值，计算出每个  ，最小的既可以认为是最好的   ，并可以用  估算实际损失
+基线性能之前判断我们用的是看  的大小和  与  比较，但什么情况下才算大？这里我们不能看绝对数值，而是要与基线性能比较。比如说语音识别中，人类的识别准确率是 90% ，那模型得出来的结果就是和 90% 比较而非 100%
+解决神经网络中的欠拟合过拟合问题显然，一个复杂的神经网络不太可能出现欠拟合问题，所以如果发现欠拟合就扩大网络即可。如果通过交叉验证发现过拟合，就增加数据，重新训练。一个正确正则化的神经网络模型，哪怕很大，也能很好的拟合而不出现过拟合问题
+错误分析除了让机器自己去调整，我们还可以手搓。比如说提取 100 个交叉验证集中错误的数据，一个个看他们为啥错了再针对性的调整模型
+增加数据增加薄弱方面的数据：通过错误分析，模型对那个方面测试表现不好，就着重增加这方面的数据手搓数据：以识别音频举例，我们可以给所拥有的音频加上噪音，这样就创造出了新的训练集，并且这种噪音训练集是必要的。甚至有时候我们还可以直接创造数据迁移学习：有时候我们的训练数据可能很少，但是同类型的某个任务可能有很多的训练数据。比如说我们想训练一个判断数字是几的模型，但我们数据很少，但是我们有很多判断字母是啥的数据，我们就可以先训练一个判断字母是啥的模型，在用少量的判断数字是几的数据进行微调。迁移学习在同类型但不同任务上是很好用的
+精确率与召回率当正例与负例数量差距过大时，用基线性能判断模型性能并不是好的标准。比如：预测一种罕见病，直接预测没得病准确率就有 99.9% ，于是我们引入精确率与召回率
+精确率
+真正例数量预测为正例的总数
+召回率
+真正例数量真实正例的总数
+我们希望这俩都很高，但他俩呈负相关，所以我们引入 F1_sorce ，认为 F1_sorce 越高，模型越好
+F1_sorce
+
+其中 P,R 分别是精确率和召回率
+决策树概念引入例子：通过动物的某些特征来判断他是猫还是非猫，如：耳朵是扁的还是尖的，连是圆的还是方的……
+我们可以建一颗树来判断
+
+对于某个节点，定义纯度为猫所占的比例，几位  , 不是猫的比例即   定义熵为    当纯度很高或者很低的时候，熵都趋近于 0 而当纯度趋近 0.5 时，熵趋近于 1
+都有神经网络了，为什么还要决策树？根据豆包的解答，我总结如下：1.决策树的每一步都能解释，逻辑很清晰，但神经网络你确定层数和每一层的特征数后，就完完全全交给他去跑，是黑盒2.相对于神经网络，决策树需要的数据量少，训练成本低3.决策树天然适配表格化结构，神经网络更适合非结构化数据
+建树显然，我们希望每个节点的熵越小越好，于是我们可以通过区分后熵的大小来决定用哪种特征进行区分计算时我们常用 信息增益（即熵减小量）来比较
+
+其中 ：信息增益 ：根节点中正类样本的比例 ：左子节点样本占父节点的比例 ：左子节点内部，正类样本的比例 ：右子节点样本占父节点的比例 ：右子节点内部，正类样本的比例
+对于某个可以取很多值的特征，比如说耳朵可以是圆的，椭圆的，尖的……我们采取独热编码，即把一个特征拆解为多个特征：耳朵是不是圆的，耳朵是不是椭圆的，耳朵是不是尖的……这样每个特征就是一个二元特征了对于连续的特征，我们还是把他变成二元特征，比如说体重，大于 x 认为是猫，小于认为是非猫。这里的 x 需要取不同的值，正常情况下有 n 哥样本，就要取 n-1 个值，即每个样本中间取一下，然后计算每一个 x 对应的信息增益，得出最大的信息增益以及对应的 x ，并于其他特征相比较，看要不要把这个特征当成节点的分类标准
+注意：每一次分完进入子节点，此时子节点考虑的数据只是分到他的所有样本，只是根据分到的样本重新对所有特征计算信息增益从而选出最大的
+回归树之前说的决策树可以预测种类，回归树则是通过一些特征来预测具体的值，主题思路大致相同，在叶子节点时，回归树预测的不是特征，而是里面有的样本的平均值
+例子：用特征判断体重
+
+类似于决策树，通过熵减小量来选择特征，回归树选择方差减小量来选择特征
+
+ ：方差减小量 ：父节点的样本方差 ：左子节点内部方差 ：右子节点内部方差
+决策树集成如果只用一颗树来判断，那么样本有细微变化就会导致树的巨大改变，不鲁棒，于是我们考虑建很多棵
+随机森林
+建树的方法是完全一样的，每个树的区别只是样本集不同
+我们采用有放回随机抽样的方式构建样本集，每次又放回抽样出与样本集数量相同的样本，容易发现，这些样本去重之后是原来样本集的子集。但仅仅是这样还不够，还是容易建成同一棵树。于是我们对样本个数为 n 的节点不用所有的样本来进行判断，而是取大小为 k 的子集。一般情况下，n很大时，  
+XGBoost
+XGBoost的主要思路就是着重训练上一次出错的数据，然后针对性训练。底层是通过拟合损失函数的负梯度，自然倾向修正预测偏差大的样本。这种算法在工业中很常用
+# 分类任务from xgboost import XGBClassifiermodel = XGBClassifier(    n_estimators=100,  # 最多 100 棵树    max_depth=5,  # 单个决策树最大深度    learning_rate=0.1,  # 学习率，学习率越小，需要更多树，训练更稳定，泛化更好；学习率越大，收敛更快，但容易震荡、过拟合    random_state=42  # 随机种子)model.fit(X_train, y_train,          eval_set=[(X_cv, y_cv)], # X_cv,y_cv：独立验证集          eval_metric="logloss", # 多分类：eval_metric="mlogloss"          early_stopping_rounds=10) # 10次没进步就终止训练，防止过拟合y_pred = model.predict(X_test)# 回归任务from xgboost import XGBRegressormodel = XGBRegressor(	n_estimators=100, # 最多 100 棵树    max_depth=5, # 单个决策树最大深度    learning_rate=0.1, # 学习率，学习率越小，需要更多树，训练更稳定，泛化更好；学习率越大，收敛更快，但容易震荡、过拟合    random_state=42 # 随机种子)model.fit(X_train, y_train, eval_set=[(X_cv, y_cv)], early_stopping_rounds=10)y_pred = model.predict(X_test)
+
+无监督学习聚类算法聚类算法是经典的无监督算法。在之前的逻辑回归中，我们通过给定的 X_train 和 y_train 判断新的 X_test 的类别，但如果不给 y_train 呢，只是给一些点，能不能找出他们的某种关系从而分类？
+K-均值聚类算法
+对于 X_train ，我们要把他们分成 k 类（k是给定的），并且令他们的中心点分别是  刚开始  是随机设置的。把 X_train 的点分给离他最近的中心点，认为他们是一类。随后更新中心点，中心点的值就是这一类所有点的平均值。重复上述过程，直到中心点不改变。如果出现某个中心点没有可以分配的 X_train ，可以重新随机化中心点，但更常见的操作是直接取消这个中心点
+一般情况下，我们都是随机取 k 个 X_train 中的点当做初始中心点
+损失函数：
+
+其中  代表第 j 类所有样本的集合
+重复寻找中心点其实就是不断减小  的值，但是  有很多局部最小值，为了找到更优解，我们通常要做多次 K-均值算法，每次随机设置初始中心点，这样子就能找到很多局部最小值，比较他们的   ，从而选取相对最优解
+import numpy as npimport matplotlib.pyplot as pltfrom sklearn.cluster import KMeansfrom sklearn.datasets import make_blobs# make_blobs：生成多簇高斯分布样本# n_samples=150：一共生成150个样本点# n_features=2：每个样本2个特征（二维坐标，方便画图）# centers=3：预设3个簇中心# random_state=42：随机种子固定，保证每次运行数据完全相同# 返回 (样本矩阵X, 真实标签)；不需要真实标签，用下划线_接收舍弃X, _ = make_blobs(n_samples=150, n_features=2, centers=3, random_state=42)# n_clusters=3：指定聚类数量k=3model = KMeans(n_clusters=3, random_state=42)# fit_predict：两步合一# fit()：执行聚类训练，寻找簇中心# predict()：预测每个样本属于哪一簇# labels 数组：存储每个样本的簇编号 0 / 1 / 2labels = model.fit_predict(X)# 可视化plt.figure(figsize=(8, 6))# c=数组 会给每个元素按照顺序赋上数字（labels里面的数字），cmap是调色盘，会按照数字给出颜色plt.scatter(X[:, 0], X[:, 1], c=labels, cmap="viridis", alpha=0.7)plt.scatter(model.cluster_centers_[:,0], model.cluster_centers_[:,1],            c="red", marker="X", s=200, label="Centroids")plt.legend()plt.title("K-Means Sklearn Version")plt.show()print("聚类中心坐标：")print(model.cluster_centers_)print("每个样本所属簇标签：\n", labels)
+
+异常检测假如说现在手上有一堆正常的数据，我们就可以计算他的分布，一个正常的数据应该是成正态分布的。我们可以通过
+
+
+得到   ，因此我们就得到一个样本值为 x 的概率
+
+这时候要是再来一个数据，我们就可以通过观察 p(x) 的大小判断他是否是异常值，一般的，取  ，如果    ，则认为 x 是异常值
+对于有多个特征的样本集，对于其中每个特征都可以整理为一个单独的正态分布，则令  为：
+
+在实际应用中，我们手上往往有少量异常数据和大量正常数据，我们通过部分正常数据训练样本后，可以用剩下的正常样本和异常样本组成交叉验证集来测试
+在有少量有少量已知异常值时，用无监督学习还是监督学习一方面，取决于样本数量，当异常样本太少，我们往往用无监督学习
+另一方面，要看异常情况是重复的还是会不断有新的异常，如果异常是重复的，我们倾向于用监督学习。如果总是有新的异常，那监督学习可能判断不怎么好，而无监督学习只是看测试样本和正常值的差距，就算是全新的异常也能发现
+
+
+有时候数据分布不那么正态，我们就需要改变数据来让他正态。一般取  
 ]]></content>
       <categories>
         <category>学习笔记</category>
       </categories>
       <tags>
         <tag>笔记</tag>
-        <tag>深度学习</tag>
+        <tag>机器学习</tag>
       </tags>
   </entry>
   <entry>
