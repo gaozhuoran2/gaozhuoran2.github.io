@@ -1,0 +1,622 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>新服务器环境配置与DPO-IPO运行指南（RTX 3090×2） | gzr的小窝</title><meta name="author" content="擎天—射日"><meta name="copyright" content="擎天—射日"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="新服务器（自己的 Dell Precision 7920，RTX 3090×2）从零到跑通 DPO&#x2F;IPO 的完整操作手册：建目录、conda 环境 rl、国内镜像、下载模型、两个完整训练脚本、冒烟测试、双卡并行——照着 1→9 步从上到下跑即可出结果，附显存计算与三个坑。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）">
+<meta property="og:url" content="https://gaozhuoran2.github.io/2026/11/12/%E6%96%B0%E6%9C%8D%E5%8A%A1%E5%99%A8%E7%8E%AF%E5%A2%83%E9%85%8D%E7%BD%AE%E4%B8%8EDPO-IPO%E8%BF%90%E8%A1%8C%E6%8C%87%E5%8D%97/index.html">
+<meta property="og:site_name" content="gzr的小窝">
+<meta property="og:description" content="新服务器（自己的 Dell Precision 7920，RTX 3090×2）从零到跑通 DPO&#x2F;IPO 的完整操作手册：建目录、conda 环境 rl、国内镜像、下载模型、两个完整训练脚本、冒烟测试、双卡并行——照着 1→9 步从上到下跑即可出结果，附显存计算与三个坑。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://gaozhuoran2.github.io/img/cover/8.jpeg">
+<meta property="article:published_time" content="2026-11-12T07:30:00.000Z">
+<meta property="article:modified_time" content="2026-11-11T12:29:46.577Z">
+<meta property="article:author" content="擎天—射日">
+<meta property="article:tag" content="DPO">
+<meta property="article:tag" content="服务器">
+<meta property="article:tag" content="论文">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://gaozhuoran2.github.io/img/cover/8.jpeg"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）",
+  "url": "https://gaozhuoran2.github.io/2026/11/12/%E6%96%B0%E6%9C%8D%E5%8A%A1%E5%99%A8%E7%8E%AF%E5%A2%83%E9%85%8D%E7%BD%AE%E4%B8%8EDPO-IPO%E8%BF%90%E8%A1%8C%E6%8C%87%E5%8D%97/",
+  "image": "https://gaozhuoran2.github.io/img/cover/8.jpeg",
+  "datePublished": "2026-11-12T07:30:00.000Z",
+  "dateModified": "2026-11-11T12:29:46.577Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "擎天—射日",
+      "url": "https://gaozhuoran2.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/favicon.ico"><link rel="canonical" href="https://gaozhuoran2.github.io/2026/11/12/%E6%96%B0%E6%9C%8D%E5%8A%A1%E5%99%A8%E7%8E%AF%E5%A2%83%E9%85%8D%E7%BD%AE%E4%B8%8EDPO-IPO%E8%BF%90%E8%A1%8C%E6%8C%87%E5%8D%97/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css?v=5.5.4"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.1.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: {"path":"/search.xml","preload":false,"top_n_per_article":1,"unescape":false,"pagination":{"enable":false,"hitsPerPage":8},"languages":{"hits_empty":"未找到符合您查询的内容：${query}","hits_stats":"共找到 ${hits} 篇文章"}},
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":false},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: '新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><link rel="stylesheet" href="/css/custom.css"><link rel="stylesheet" href="/css/pet.css?v=2"><meta name="generator" content="Hexo 8.1.1"><style>mjx-container[jax="SVG"] {
+  direction: ltr;
+}
+
+mjx-container[jax="SVG"] > svg {
+  overflow: visible;
+}
+
+mjx-container[jax="SVG"][display="true"] {
+  display: block;
+  text-align: center;
+  margin: 1em 0;
+}
+
+mjx-container[jax="SVG"][justify="left"] {
+  text-align: left;
+}
+
+mjx-container[jax="SVG"][justify="right"] {
+  text-align: right;
+}
+
+g[data-mml-node="merror"] > g {
+  fill: red;
+  stroke: red;
+}
+
+g[data-mml-node="merror"] > rect[data-background] {
+  fill: yellow;
+  stroke: none;
+}
+
+g[data-mml-node="mtable"] > line[data-line] {
+  stroke-width: 70px;
+  fill: none;
+}
+
+g[data-mml-node="mtable"] > rect[data-frame] {
+  stroke-width: 70px;
+  fill: none;
+}
+
+g[data-mml-node="mtable"] > .mjx-dashed {
+  stroke-dasharray: 140;
+}
+
+g[data-mml-node="mtable"] > .mjx-dotted {
+  stroke-linecap: round;
+  stroke-dasharray: 0,140;
+}
+
+g[data-mml-node="mtable"] > svg {
+  overflow: visible;
+}
+
+[jax="SVG"] mjx-tool {
+  display: inline-block;
+  position: relative;
+  width: 0;
+  height: 0;
+}
+
+[jax="SVG"] mjx-tool > mjx-tip {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+mjx-tool > mjx-tip {
+  display: inline-block;
+  padding: .2em;
+  border: 1px solid #888;
+  font-size: 70%;
+  background-color: #F8F8F8;
+  color: black;
+  box-shadow: 2px 2px 5px #AAAAAA;
+}
+
+g[data-mml-node="maction"][data-toggle] {
+  cursor: pointer;
+}
+
+mjx-status {
+  display: block;
+  position: fixed;
+  left: 1em;
+  bottom: 1em;
+  min-width: 25%;
+  padding: .2em .4em;
+  border: 1px solid #888;
+  font-size: 90%;
+  background-color: #F8F8F8;
+  color: black;
+}
+
+foreignObject[data-mjx-xml] {
+  font-family: initial;
+  line-height: normal;
+  overflow: visible;
+}
+
+.MathJax path {
+  stroke-width: 3;
+}
+
+mjx-container[display="true"] {
+  overflow: auto hidden;
+}
+
+mjx-container[display="true"] + br {
+  display: none;
+}
+</style></head><body><div class="bg-animation" id="web_bg" style="background-image: url(/img/bj.jpg);"></div><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">37</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">14</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">6</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 主页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 时间线</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/diary/"><i class="fa-fw fas fa-book"></i><span> 日记</span></a></div><div class="menus_item"><a class="site-page" href="/papers/"><i class="fa-fw fas fa-seedling"></i><span> 论文树</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/bj.jpg);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">gzr的小窝</span></a><a class="nav-page-title" href="/"><span class="site-name">新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div id="search-button"><span class="site-page social-icon search"><i class="fas fa-search fa-fw"></i><span> 搜索</span></span></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 主页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 时间线</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/diary/"><i class="fa-fw fas fa-book"></i><span> 日记</span></a></div><div class="menus_item"><a class="site-page" href="/papers/"><i class="fa-fw fas fa-seedling"></i><span> 论文树</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-11-12T07:30:00.000Z" title="发表于 2026-11-12 15:30:00">2026-11-12</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-11-11T12:29:46.577Z" title="更新于 2026-11-11 20:29:46">2026-11-11</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/%E8%AE%BA%E6%96%87%E5%AD%A6%E4%B9%A0/">论文学习</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-wordcount"><i class="far fa-file-word fa-fw post-meta-icon"></i><span class="post-meta-label">总字数:</span><span class="word-count">4.4k</span><span class="post-meta-separator">|</span><i class="far fa-clock fa-fw post-meta-icon"></i><span class="post-meta-label">阅读时长:</span><span>16分钟</span></span><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><blockquote>
+<p><strong>任务背景</strong>：延续《<a href="/2026/11/07/DPO%E5%9F%BA%E7%BA%BF%E5%A4%8D%E7%8E%B0%E6%8A%A5%E5%91%8A%EF%BC%9A%E4%BB%BB%E5%8A%A1%E8%A7%A3%E8%AF%BB%E3%80%81%E8%BF%90%E8%A1%8C%E6%AD%A5%E9%AA%A4%E4%B8%8E%E7%BB%93%E6%9E%9C%E5%88%86%E6%9E%90/">DPO基线复现报告</a>》，在自己的机器（Dell Precision 7920，RTX 3090×2 各 24GB，驱动 550.135 / CUDA 12.4，root 用户）上跑 DPO / IPO 对照实验。</p>
+<p><strong>本文用法</strong>：<strong>照着 1→9 步从上往下跑，每一步都是可以直接复制的命令</strong>，跑完第 8 步就有两份训练日志。第 5 步（下载模型）已嵌入总流程。环境实测：系统 Python 3.8.10，anaconda 自带 3.13.9；GPU 0 挂桌面（占用约 1GB），GPU 1 空闲。</p>
+</blockquote>
+<hr>
+<h1 id="0-全流程总览（9-步）"><a href="#0-全流程总览（9-步）" class="headerlink" title="0. 全流程总览（9 步）"></a>0. 全流程总览（9 步）</h1><table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>干什么</th>
+<th>预计耗时</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>建目录 <code>~/rl/ipo</code>、<code>~/rl/models</code></td>
+<td>10 秒</td>
+</tr>
+<tr>
+<td>2</td>
+<td>建 conda 环境 <code>rl</code>（python 3.10）+ 装依赖</td>
+<td>5–10 分钟</td>
+</tr>
+<tr>
+<td>3</td>
+<td>验证 CUDA</td>
+<td>10 秒</td>
+</tr>
+<tr>
+<td>4</td>
+<td>配置国内镜像（HF 下载加速）</td>
+<td>10 秒</td>
+</tr>
+<tr>
+<td>5</td>
+<td><strong>下载模型 Qwen3-0.6B 到本地</strong></td>
+<td>1–5 分钟</td>
+</tr>
+<tr>
+<td>6</td>
+<td>写好两个训练脚本（DPO + IPO）</td>
+<td>5 分钟</td>
+</tr>
+<tr>
+<td>7</td>
+<td>冒烟测试（5 步，顺带下载数据集）</td>
+<td>2 分钟</td>
+</tr>
+<tr>
+<td>8</td>
+<td>双卡并行正式跑 DPO + IPO</td>
+<td>5 分钟（1000 条）/ 5.4 小时（全量）</td>
+</tr>
+<tr>
+<td>9</td>
+<td>看日志、整理交付物</td>
+<td>10 分钟</td>
+</tr>
+</tbody></table>
+<h1 id="第-1-步：建目录"><a href="#第-1-步：建目录" class="headerlink" title="第 1 步：建目录"></a>第 1 步：建目录</h1><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">mkdir</span> -p ~/rl/ipo ~/rl/models</span><br><span class="line"><span class="built_in">cd</span> ~/rl/ipo</span><br></pre></td></tr></table></figure>
+
+<p>（<code>~/rl/models</code> 存模型，两个实验共用；<code>~/rl/ipo</code> 存本次实验全部文件。你是 root 用户，<code>~</code> = <code>/root</code>。）</p>
+<h1 id="第-2-步：建环境-装依赖"><a href="#第-2-步：建环境-装依赖" class="headerlink" title="第 2 步：建环境 + 装依赖"></a>第 2 步：建环境 + 装依赖</h1><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">conda create -n rl python=3.10 -y</span><br><span class="line">conda activate rl</span><br><span class="line"></span><br><span class="line">pip install torch --index-url https://download.pytorch.org/whl/cu124</span><br><span class="line">pip install -U transformers datasets accelerate trl modelscope</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>说明：系统 Python 3.8 太老（新版 torch/TRL 要 3.9+）、conda 自带 3.13 太新，所以自建 3.10（上次验证过的配方）；<code>modelscope</code> 是第 5 步下载模型用。若 cu124 轮子异常，退回 <code>https://download.pytorch.org/whl/cu121</code>。</p>
+</blockquote>
+<h1 id="第-3-步：验证-CUDA"><a href="#第-3-步：验证-CUDA" class="headerlink" title="第 3 步：验证 CUDA"></a>第 3 步：验证 CUDA</h1><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">python -c <span class="string">"import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_device_name(0))"</span></span><br></pre></td></tr></table></figure>
+
+<p><strong>必须打印 <code>True</code> 且设备名是 NVIDIA GeForce RTX 3090</strong>。若 False = 装成 CPU 版 torch，回第 2 步重装。</p>
+<h1 id="第-4-步：配置国内镜像（以后所有-HF-下载都加速）"><a href="#第-4-步：配置国内镜像（以后所有-HF-下载都加速）" class="headerlink" title="第 4 步：配置国内镜像（以后所有 HF 下载都加速）"></a>第 4 步：配置国内镜像（以后所有 HF 下载都加速）</h1><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">echo</span> <span class="string">'export HF_ENDPOINT=https://hf-mirror.com'</span> &gt;&gt; ~/.bashrc</span><br><span class="line"><span class="built_in">source</span> ~/.bashrc</span><br></pre></td></tr></table></figure>
+
+<h1 id="第-5-步：下载模型-Qwen3-0-6B（一次，两实验共用）"><a href="#第-5-步：下载模型-Qwen3-0-6B（一次，两实验共用）" class="headerlink" title="第 5 步：下载模型 Qwen3-0.6B（一次，两实验共用）"></a>第 5 步：下载模型 Qwen3-0.6B（一次，两实验共用）</h1><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 首选：ModelScope（Qwen 自家，国内极快）</span></span><br><span class="line">modelscope download --model Qwen/Qwen3-0.6B --local_dir ~/rl/models/Qwen3-0.6B</span><br><span class="line"></span><br><span class="line"><span class="comment"># 验证：目录里应有 config.json、tokenizer 文件、model.safetensors（约 1.2GB）</span></span><br><span class="line"><span class="built_in">ls</span> -lh ~/rl/models/Qwen3-0.6B</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>备选方案：① 镜像下载 <code>huggingface-cli download Qwen/Qwen3-0.6B --local-dir ~/rl/models/Qwen3-0.6B</code>（第 4 步的镜像已生效）；② 旧服务器直拷 <code>scp -r 旧服务器:~/.cache/huggingface/hub/models--Qwen--Qwen3-0.6B ~/.cache/huggingface/hub/</code>。<br>模型只有 0.6B（bf16 权重约 1.2GB），任何方式都很快。</p>
+</blockquote>
+<h1 id="第-6-步：写两个训练脚本（完整代码，直接复制）"><a href="#第-6-步：写两个训练脚本（完整代码，直接复制）" class="headerlink" title="第 6 步：写两个训练脚本（完整代码，直接复制）"></a>第 6 步：写两个训练脚本（完整代码，直接复制）</h1><p><strong><code>~/rl/ipo/train_dpo.py</code></strong>（DPO 基线）：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># train_dpo.py —— DPO 基线，新服务器（RTX 3090×2）</span></span><br><span class="line"><span class="keyword">from</span> datasets <span class="keyword">import</span> load_dataset</span><br><span class="line"><span class="keyword">from</span> trl <span class="keyword">import</span> DPOTrainer, DPOConfig</span><br><span class="line"></span><br><span class="line">MODEL_PATH = <span class="string">"/root/rl/models/Qwen3-0.6B"</span>   <span class="comment"># 非 root 用户改成 /home/&lt;用户名&gt;/...</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 1) 数据：先取 1000 条跑通；之后可改 train[:10000] 或去掉切片跑全量</span></span><br><span class="line">dataset = load_dataset(<span class="string">"trl-lib/ultrafeedback_binarized"</span>, split=<span class="string">"train[:1000]"</span>)</span><br><span class="line">split = dataset.train_test_split(test_size=<span class="number">0.2</span>, seed=<span class="number">42</span>)   <span class="comment"># 800 训练 / 200 验证</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 2) 训练配置</span></span><br><span class="line">config = DPOConfig(</span><br><span class="line">    output_dir=<span class="string">"./dpo_output"</span>,</span><br><span class="line">    beta=<span class="number">0.1</span>,</span><br><span class="line">    learning_rate=<span class="number">1e-6</span>,</span><br><span class="line">    per_device_train_batch_size=<span class="number">1</span>,</span><br><span class="line">    gradient_accumulation_steps=<span class="number">8</span>,       <span class="comment"># 有效 batch = 8</span></span><br><span class="line">    per_device_eval_batch_size=<span class="number">1</span>,        <span class="comment"># 实测必加：eval 默认 batch 较大，24GB 卡会在 eval 阶段 OOM</span></span><br><span class="line">    max_length=<span class="number">512</span>,</span><br><span class="line">    num_train_epochs=<span class="number">1</span>,</span><br><span class="line">    logging_steps=<span class="number">5</span>,                     <span class="comment"># 每 5 步打印指标</span></span><br><span class="line">    save_strategy=<span class="string">"steps"</span>,</span><br><span class="line">    save_steps=<span class="number">50</span>,</span><br><span class="line">    eval_strategy=<span class="string">"steps"</span>,</span><br><span class="line">    eval_steps=<span class="number">50</span>,</span><br><span class="line">    bf16=<span class="literal">True</span>,                           <span class="comment"># 3090 支持 bf16</span></span><br><span class="line">    gradient_checkpointing=<span class="literal">True</span>,</span><br><span class="line">    remove_unused_columns=<span class="literal">False</span>,</span><br><span class="line">    report_to=<span class="string">"none"</span>,</span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="comment"># 3) 训练（模型用本地路径，tokenizer 自动从该目录加载）</span></span><br><span class="line">trainer = DPOTrainer(</span><br><span class="line">    model=MODEL_PATH,</span><br><span class="line">    args=config,</span><br><span class="line">    train_dataset=split[<span class="string">"train"</span>],</span><br><span class="line">    eval_dataset=split[<span class="string">"test"</span>],</span><br><span class="line">)</span><br><span class="line">trainer.train()</span><br><span class="line">trainer.save_model(<span class="string">"./dpo_output/final"</span>)</span><br></pre></td></tr></table></figure>
+
+<p><strong><code>~/rl/ipo/train_ipo.py</code></strong>（IPO 对照）：与上面<strong>完全一样</strong>，只改两处——<code>output_dir="./ipo_output"</code>、<code>DPOConfig</code> 里加一行 <code>loss_type="ipo"</code>。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">cd</span> ~/rl/ipo</span><br><span class="line">sed <span class="string">'s/output_dir=".\/dpo_output"/output_dir=".\/ipo_output"/; s/beta=0.1,/beta=0.1,\n    loss_type="ipo",/'</span> train_dpo.py &gt; train_ipo.py</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>或手动复制改两行，更直观。</p>
+</blockquote>
+<h1 id="第-7-步：冒烟测试（5-步，顺带下载数据集）"><a href="#第-7-步：冒烟测试（5-步，顺带下载数据集）" class="headerlink" title="第 7 步：冒烟测试（5 步，顺带下载数据集）"></a>第 7 步：冒烟测试（5 步，顺带下载数据集）</h1><p>先把两个脚本临时改成小规模：<code>split="train[:1000]"</code> → <code>split="train[:20]"</code>，<code>DPOConfig</code> 里加 <code>max_steps=5</code>。然后：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">cd</span> ~/rl/ipo</span><br><span class="line"><span class="built_in">export</span> CUDA_VISIBLE_DEVICES=1</span><br><span class="line">accelerate launch --num_processes=1 --mixed_precision=bf16 train_dpo.py</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li><strong>第一次跑会自动下载数据集</strong> <code>trl-lib/ultrafeedback_binarized</code>（第 4 步镜像已生效，很快）并缓存到 <code>~/.cache/huggingface/</code>；</li>
+<li><strong>通过标准</strong>：loss 从 0.693（log 2 基线）下降、<code>rewards/margins</code> 由 0 转正、<code>rewards/accuracies</code> 超过 50%，无 CUDA OOM；</li>
+<li>通过后把 <code>train[:20]</code> 和 <code>max_steps=5</code> 改回来（两个脚本都改）。</li>
+</ul>
+<h1 id="第-8-步：正式跑（双卡并行：DPO-卡-0-IPO-卡-1）"><a href="#第-8-步：正式跑（双卡并行：DPO-卡-0-IPO-卡-1）" class="headerlink" title="第 8 步：正式跑（双卡并行：DPO 卡 0 + IPO 卡 1）"></a>第 8 步：正式跑（双卡并行：DPO 卡 0 + IPO 卡 1）</h1><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">cd</span> ~/rl/ipo</span><br><span class="line"><span class="built_in">export</span> PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True   <span class="comment"># 防显存碎片（实测需要）</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 终端 A（DPO → GPU 0）</span></span><br><span class="line"><span class="built_in">export</span> CUDA_VISIBLE_DEVICES=0</span><br><span class="line"><span class="built_in">nohup</span> accelerate launch --num_processes=1 --mixed_precision=bf16 train_dpo.py &gt; dpo.log 2&gt;&amp;1 &amp;</span><br><span class="line"></span><br><span class="line"><span class="comment"># 终端 B（IPO → GPU 1）</span></span><br><span class="line"><span class="built_in">export</span> CUDA_VISIBLE_DEVICES=1</span><br><span class="line"><span class="built_in">nohup</span> accelerate launch --num_processes=1 --mixed_precision=bf16 train_ipo.py &gt; ipo.log 2&gt;&amp;1 &amp;</span><br><span class="line"></span><br><span class="line"><span class="comment"># 看日志（Ctrl+C 只退出查看，不中断训练）</span></span><br><span class="line"><span class="built_in">tail</span> -f dpo.log</span><br><span class="line"><span class="built_in">tail</span> -f ipo.log</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>1000 条 / 有效 batch 8 = 94 步，约 4 分钟（上次实测 238 秒），两个实验并行几分钟出结果；</li>
+<li>单卡保底跑法：只跑一个实验，把对应终端那两行执行即可；GPU 0 挂桌面但只占约 1GB，训练也放得下。</li>
+</ul>
+<h1 id="第-9-步：看日志、整理交付物"><a href="#第-9-步：看日志、整理交付物" class="headerlink" title="第 9 步：看日志、整理交付物"></a>第 9 步：看日志、整理交付物</h1><p><strong>交付清单</strong>：</p>
+<ol>
+<li>DPO 与 IPO 两张指标表：loss / rewards(margins, accuracies) / logps(chosen, rejected) / kl；</li>
+<li>训练时长、GPU 型号、checkpoint 路径（<code>./dpo_output/final</code>、<code>./ipo_output/final</code>）；</li>
+<li>完整 <code>dpo.log</code> 与 <code>ipo.log</code>。</li>
+</ol>
+<p><strong>读日志的提醒（别踩量纲坑）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>DPO</th>
+<th>IPO</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>loss 起点</td>
+<td>0.693（log 2）</td>
+<td><strong>25</strong>（<mjx-container class="MathJax" jax="SVG" overflow="overflow"><svg style="vertical-align: -0.566ex;" xmlns="http://www.w3.org/2000/svg" width="2.011ex" height="2.262ex" role="img" focusable="false" viewBox="0 -750 889 1000"><g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)"><g data-mml-node="math" data-latex="(0-\frac{1}{2\times0.1})^2"><g data-mml-node="mo" data-latex="("><path data-c="28" d="M318-248C327-248 332-243 332-234C332-231 330-227 327-223C275-183 233-117 202-26C175 53 161 131 161 208L161 292C161 369 175 447 202 526C233 617 275 683 327 723C330 726 332 730 332 734C332 743 327 748 318 748C317 748 314 747 311 745C251 699 201 631 160 540C121 453 101 371 101 292L101 208C101 129 121 47 160-40C201-131 251-199 311-245C314-247 317-248 318-248Z"></path></g><g data-mml-node="mn" data-latex="0" transform="translate(389,0)"><path data-c="30" d="M249-22C390-22 460 92 460 320C460 473 428 575 365 625C330 652 291 666 250 666C109 666 39 551 39 320C39 136 88-22 249-22M361 524C368 489 371 425 371 332C371 240 367 172 360 128C347 48 310 8 249 8C226 8 203 17 182 34C155 57 139 104 132 176C129 201 128 253 128 332C128 419 131 480 136 513C145 568 163 603 191 618C213 630 232 636 249 636C314 636 350 583 361 524Z"></path></g></g></g></svg><mjx-break size="3"> </mjx-break><svg style="vertical-align: -0.816ex;" xmlns="http://www.w3.org/2000/svg" width="9.215ex" height="2.773ex" role="img" focusable="false" viewBox="0 -864.9 4073.1 1225.5"><g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)"><g data-mml-node="math" data-latex="(0-\frac{1}{2\times0.1})^2"><g data-mml-node="mo" data-latex="-"><path data-c="2212" d="M698 270L80 270C64 270 56 263 56 250C56 237 64 230 80 230L698 230C714 230 722 237 722 250C722 262 710 270 698 270Z"></path></g><g data-mml-node="mfrac" data-latex="\frac{1}{2\times0.1}" transform="translate(1000.2,0)"><g data-mml-node="mn" transform="translate(946.9,394) scale(0.707)" data-latex="1"><path data-c="31" d="M269 666C228 624 168 603 89 603L89 564C141 564 184 572 217 588L217 82C217 64 213 52 204 47C195 42 170 39 130 39L95 39L95 0C120 2 174 3 257 3C340 3 394 2 419 0L419 39L384 39C343 39 318 42 310 47C302 52 297 64 297 82L297 636C297 660 295 666 269 666Z"></path></g><g data-mml-node="mrow" transform="translate(220,-345) scale(0.707)" data-latex="2\times0.1"><g data-mml-node="mn" data-latex="2"><path data-c="32" d="M237 666C186 666 143 648 106 612C69 576 50 534 50 483C50 449 75 424 106 424C136 424 161 450 161 480C161 513 137 536 105 536C102 536 100 536 98 535C117 584 161 627 224 627C306 627 352 556 352 470C352 403 318 331 250 255L62 43C49 28 50 29 50 0L421 0L450 180L417 180C409 129 402 100 396 91C391 86 361 84 306 84L139 84L236 179C304 243 390 312 419 365C439 400 449 435 449 470C449 588 357 666 237 666Z"></path></g><g data-mml-node="mo" data-latex="\times" transform="translate(500,0)"><path data-c="D7" d="M630 32C630 39 628 44 623 49L422 250L623 451C628 456 630 461 630 468C630 481 620 491 607 491C600 491 595 489 590 484L389 283L188 484C183 489 178 491 171 491C158 491 148 481 148 468C148 461 150 456 155 451L356 250L155 49C150 44 148 39 148 32C148 19 158 9 171 9C178 9 183 11 188 16L389 217L590 16C595 11 600 9 607 9C620 9 630 19 630 32Z"></path></g><g data-mml-node="mn" data-latex="0.1" transform="translate(1278,0)"><path data-c="30" d="M249-22C390-22 460 92 460 320C460 473 428 575 365 625C330 652 291 666 250 666C109 666 39 551 39 320C39 136 88-22 249-22M361 524C368 489 371 425 371 332C371 240 367 172 360 128C347 48 310 8 249 8C226 8 203 17 182 34C155 57 139 104 132 176C129 201 128 253 128 332C128 419 131 480 136 513C145 568 163 603 191 618C213 630 232 636 249 636C314 636 350 583 361 524Z"></path><path data-c="2E" d="M192 53C192 82 168 106 139 106C110 106 86 82 86 53C86 24 110 0 139 0C168 0 192 24 192 53Z" transform="translate(500,0)"></path><path data-c="31" d="M269 666C228 624 168 603 89 603L89 564C141 564 184 572 217 588L217 82C217 64 213 52 204 47C195 42 170 39 130 39L95 39L95 0C120 2 174 3 257 3C340 3 394 2 419 0L419 39L384 39C343 39 318 42 310 47C302 52 297 64 297 82L297 636C297 660 295 666 269 666Z" transform="translate(778,0)"></path></g></g><rect width="2007.4" height="60" x="120" y="220"></rect></g><g data-mml-node="msup" data-latex=")^2" transform="translate(3247.6,0)"><g data-mml-node="mo" data-latex=")"><path data-c="29" d="M78-245C138-199 188-131 229-40C268 47 288 129 288 208L288 292C288 371 268 453 229 540C188 631 138 699 78 745C75 747 72 748 71 748C62 748 57 743 57 734C57 730 59 726 62 723C114 683 156 617 187 526C214 447 228 369 228 292L228 208C228 131 214 53 187-26C156-117 114-183 62-223C59-227 57-231 57-234C57-243 62-248 71-248C72-248 75-247 78-245Z"></path></g><g data-mml-node="mn" transform="translate(422,363) scale(0.707)" data-latex="2"><path data-c="32" d="M237 666C186 666 143 648 106 612C69 576 50 534 50 483C50 449 75 424 106 424C136 424 161 450 161 480C161 513 137 536 105 536C102 536 100 536 98 535C117 584 161 627 224 627C306 627 352 556 352 470C352 403 318 331 250 255L62 43C49 28 50 29 50 0L421 0L450 180L417 180C409 129 402 100 396 91C391 86 361 84 306 84L139 84L236 179C304 243 390 312 419 365C439 400 449 435 449 470C449 588 357 666 237 666Z"></path></g></g></g></g></svg></mjx-container>），是正常的</td>
+</tr>
+<tr>
+<td>loss 能不能跨方法比</td>
+<td>不能（量纲不同）</td>
+<td>不能</td>
+</tr>
+<tr>
+<td>跨方法只比</td>
+<td>margins / accuracies</td>
+<td>margins / accuracies</td>
+</tr>
+<tr>
+<td>IPO 的 margin 目标</td>
+<td>—</td>
+<td>朝 <mjx-container class="MathJax" jax="SVG" overflow="overflow"><svg style="vertical-align: -0.8ex;" xmlns="http://www.w3.org/2000/svg" width="2.613ex" height="2.757ex" role="img" focusable="false" viewBox="0 -864.9 1154.9 1218.4"><g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)"><g data-mml-node="math" data-latex="\frac{1}{2\tau}=5"><g data-mml-node="mfrac" data-latex="\frac{1}{2\tau}"><g data-mml-node="mn" transform="translate(400.7,394) scale(0.707)" data-latex="1"><path data-c="31" d="M269 666C228 624 168 603 89 603L89 564C141 564 184 572 217 588L217 82C217 64 213 52 204 47C195 42 170 39 130 39L95 39L95 0C120 2 174 3 257 3C340 3 394 2 419 0L419 39L384 39C343 39 318 42 310 47C302 52 297 64 297 82L297 636C297 660 295 666 269 666Z"></path></g><g data-mml-node="mrow" transform="translate(220,-345) scale(0.707)" data-latex="2\tau"><g data-mml-node="mn" data-latex="2"><path data-c="32" d="M237 666C186 666 143 648 106 612C69 576 50 534 50 483C50 449 75 424 106 424C136 424 161 450 161 480C161 513 137 536 105 536C102 536 100 536 98 535C117 584 161 627 224 627C306 627 352 556 352 470C352 403 318 331 250 255L62 43C49 28 50 29 50 0L421 0L450 180L417 180C409 129 402 100 396 91C391 86 361 84 306 84L139 84L236 179C304 243 390 312 419 365C439 400 449 435 449 470C449 588 357 666 237 666Z"></path></g><g data-mml-node="mi" data-latex="\tau" transform="translate(500,0)"><path data-c="1D70F" d="M468 431L192 431C139 431 91 397 47 330C34 310 27 297 27 292C30 284 31 279 43 279C50 279 56 283 62 292C94 341 134 366 183 366L260 366L165 56C158 34 155 21 155 18C155-2 166-12 187-12C198-12 208-9 214-3C227 9 228 12 232 33L297 366L459 366C494 366 511 378 511 403C511 426 493 431 468 431Z"></path></g></g><rect width="914.9" height="60" x="120" y="220"></rect></g></g></g></svg><mjx-break size="4"> </mjx-break><svg style="vertical-align: -0.566ex;" xmlns="http://www.w3.org/2000/svg" width="3.52ex" height="2.262ex" role="img" focusable="false" viewBox="0 -750 1555.8 1000"><g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)"><g data-mml-node="math" data-latex="\frac{1}{2\tau}=5"><g data-mml-node="mo" data-latex="="><path data-c="3D" d="M698 367L80 367C64 367 56 359 56 344C56 329 64 321 80 321L698 321C714 321 722 329 722 344C722 356 711 367 698 367M698 179L80 179C64 179 56 171 56 156C56 141 64 133 80 133L698 133C714 133 722 141 722 156C722 169 711 179 698 179Z"></path></g><g data-mml-node="mn" data-latex="5" transform="translate(1055.8,0)"><path data-c="35" d="M118 315C123 315 129 319 134 326C164 371 205 393 257 393C292 393 319 373 337 332C348 305 354 264 354 209C354 146 346 102 331 76C306 35 272 14 229 14C162 14 109 62 91 114C94 113 96 114 100 114C130 114 155 137 155 167C155 198 130 219 100 219C65 219 50 200 50 163C50 63 131-22 231-22C292-22 344 0 386 44C428 88 449 141 449 202C449 260 432 310 398 353C361 400 315 423 259 423C212 423 171 408 138 378L138 556C165 548 191 544 218 544C264 544 304 555 338 578C369 597 390 616 402 634C408 642 411 648 411 651C411 661 406 666 396 666C341 645 294 634 256 634C211 634 168 643 127 662C122 664 118 665 114 665C105 665 100 656 100 637L100 345C100 324 100 315 118 315Z"></path></g></g></g></svg></mjx-container> 收敛（τ=0.1），到 5 附近即”刹车”生效</td>
+</tr>
+</tbody></table>
+<p>详细解读见《<a href="/2026/11/12/agent%E5%AF%B9IPO%E8%AE%BA%E6%96%87%E7%9A%84%E7%90%86%E8%A7%A3/">agent对IPO论文的理解——工程视角</a>》第 5 节。<strong>把两份日志发我，我帮你做对照分析。</strong></p>
+<hr>
+<h1 id="附-A：显存怎么算（”B-参数”-↔-“GB-显存”）"><a href="#附-A：显存怎么算（”B-参数”-↔-“GB-显存”）" class="headerlink" title="附 A：显存怎么算（”B 参数” ↔ “GB 显存”）"></a>附 A：显存怎么算（”B 参数” ↔ “GB 显存”）</h1><p>核心公式：<strong>显存(GB) ≈ 参数量(B) × 每参数字节数</strong>（fp32=4、bf16=2、int8=1、int4=0.5）。0.6B 全参 DPO 的账：权重 1.2 + 梯度 1.2 + AdamW 状态 7.2（最大头）+ 参考模型 1.2 + 激活 2–4 ≈ <strong>13–15GB &lt; 24GB</strong> ✅。</p>
+<h2 id="A-1-先看训练的四步流水，显存里的五样东西就对应它"><a href="#A-1-先看训练的四步流水，显存里的五样东西就对应它" class="headerlink" title="A.1 先看训练的四步流水，显存里的五样东西就对应它"></a>A.1 先看训练的四步流水，显存里的五样东西就对应它</h2><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">前向：权重算结果，每层留下"草稿纸"（激活）</span><br><span class="line">  → 算损失</span><br><span class="line">  → 反向：查草稿，给每个参数算出"该往哪调多少"（梯度）</span><br><span class="line">  → 更新：优化器拿着梯度更新权重（并记历史账本）</span><br></pre></td></tr></table></figure>
+
+<p>训练时 GPU 里同时住着五样东西，分别对应这四步。</p>
+<h2 id="A-2-五样东西分别是什么、为什么占这么多"><a href="#A-2-五样东西分别是什么、为什么占这么多" class="headerlink" title="A.2 五样东西分别是什么、为什么占这么多"></a>A.2 五样东西分别是什么、为什么占这么多</h2><p>先把数字拆开：<strong>0.6B = 6 亿个数</strong>；一份 fp32（4 字节）= 2.4GB，一份 bf16（2 字节）= 1.2GB。下面每一项都是”几份参数大小”的问题。</p>
+<p><strong>① 权重 1.2GB——你认识的那堆矩阵数字</strong>。模型本体：6 亿个数 × 2 字节。</p>
+<p><strong>② 梯度 1.2GB——“每个参数该往哪调多少”的账本</strong>。反向传播会给<strong>每一个</strong>权重算一个导数（∂loss/∂w），梯度和权重一一对应、数量完全一样大，所以又一份 1.2GB。类比：6 亿个学生，每人一张”调参建议单”，单子和学生一样多。</p>
+<p><strong>③ AdamW 优化器状态 7.2GB——每个参数三本”高精度账”（最大头的由来）</strong>。Adam 更新参数时每个参数要记三样东西，<strong>每样都是一个参数对应一个数、且都用 4 字节 fp32</strong>：</p>
+<ul>
+<li><strong>fp32 主副本</strong>：bf16 精度不够做微小累加，训练时另存一份全精度权重精确值；</li>
+<li><strong>m（一阶矩）</strong>：梯度历史平均 = 更新方向的”惯性”；</li>
+<li><strong>v（二阶矩）</strong>：梯度平方历史平均 = 每个参数的”自适应步长”。<br>三本账 × 2.4GB = <strong>7.2GB</strong>——优化器状态是权重的 6 倍（3 份 × 4 字节 vs 1 份 × 2 字节）。</li>
+</ul>
+<p><strong>④ 参考模型 1.2GB——DPO 专属的”备份”</strong>。DPO 每步都要问”微调前的模型会给这个回答打多少分”，所以原始模型要<strong>完整再放一份</strong>在显存里（π_ref）。它只做前向、不参与更新，<strong>只花权重这一份钱</strong>（没有梯度、没有账本）。普通 SFT 训练没有这一项。</p>
+<p><strong>⑤ 激活 2–4GB——前向的”草稿纸”</strong>。每层前向都给每个 token 产生中间结果（隐藏状态），反向时要回头查它们算梯度，所以必须暂存。它不是参数，随 <strong>batch × 序列长度</strong>涨缩——UltraFeedback 回答很长，实测总占用 19.6GB 比估算高，多出来的基本都在这一项。<code>gradient_checkpointing=True</code> = “不存草稿、反向时重算”：慢 20–30%，换掉 60–70% 的激活显存。</p>
+<p><strong>法则</strong>：全参训练 ≈ 每 1B 参数 16GB（权重 2 + 梯度 2 + 优化器 12）；推理 ≈ 每 1B 参数 2GB（只有权重）；LoRA ≈ 每 1B 参数 2–3GB（只有 LoRA 那点参数有梯度与账本）。</p>
+<h1 id="附-B：三个坑（上一台实测过）"><a href="#附-B：三个坑（上一台实测过）" class="headerlink" title="附 B：三个坑（上一台实测过）"></a>附 B：三个坑（上一台实测过）</h1><table>
+<thead>
+<tr>
+<th>坑</th>
+<th>表现</th>
+<th>解决</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>多卡默认 DDP</td>
+<td>不加 <code>--num_processes=1</code> 卡初始化</td>
+<td>启动命令必须带（双卡并行也是两个单卡进程，各带各的）</td>
+</tr>
+<tr>
+<td>新版 TRL 参数</td>
+<td>报 <code>max_prompt_length</code> 未定义</td>
+<td>新版删了该参数、不传 <code>tokenizer=</code>（上面的脚本已适配）</td>
+</tr>
+<tr>
+<td>用错 Python</td>
+<td>装不上新版 torch/TRL</td>
+<td>一律 <code>conda activate rl</code>（python 3.10）</td>
+</tr>
+<tr>
+<td><strong>eval 阶段 OOM（24GB 卡实测）</strong></td>
+<td>训练正常（如 50 步无碍），到 eval 时报 <code>CUDA out of memory</code></td>
+<td><code>DPOConfig</code> 加 <code>per_device_eval_batch_size=1</code>；启动前 <code>export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True</code>；兜底 <code>eval_strategy="no"</code> 或 <code>max_length</code> 降到 384</td>
+</tr>
+</tbody></table>
+<h1 id="附-C：自己的机器，”大胆”的三个选项"><a href="#附-C：自己的机器，”大胆”的三个选项" class="headerlink" title="附 C：自己的机器，”大胆”的三个选项"></a>附 C：自己的机器，”大胆”的三个选项</h1><ol>
+<li><strong>直接上全量数据</strong>：两个脚本里 <code>train[:1000]</code> 改成去掉切片（全量约 6 万条），≈7750 步 × 2.5 秒 ≈ <strong>5.4 小时/epoch</strong>，对标 Zephyr 的”全量 × 1 epoch”规模，挂着跑即可；</li>
+<li><strong>多种子/多 β</strong>：β ∈ {0.05, 0.1, 0.5} 各跑一轮，画”奖励-KL 前沿”迷你版；</li>
+<li><strong>以后新实验</strong>：环境 <code>rl</code> 不动，建 <code>~/rl/simpo/</code>、<code>~/rl/kto/</code> 等子文件夹，模型继续共用 <code>~/rl/models/</code>。</li>
+</ol>
+<h1 id="附-D：数据量怎么选（推荐三档走）"><a href="#附-D：数据量怎么选（推荐三档走）" class="headerlink" title="附 D：数据量怎么选（推荐三档走）"></a>附 D：数据量怎么选（推荐三档走）</h1><p>数据集全量约 <strong>6.26 万条</strong> train 偏好对（<code>trl-lib/ultrafeedback_binarized</code>，UltraFeedback 二值化版，Zephyr 同款）。1000 条只是它的 1/62。验证命令：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">python -c <span class="string">"from datasets import load_dataset; print(len(load_dataset('trl-lib/ultrafeedback_binarized', split='train')))"</span></span><br></pre></td></tr></table></figure>
+
+<table>
+<thead>
+<tr>
+<th>档</th>
+<th>切片</th>
+<th>步数</th>
+<th>耗时/方法（双卡并行同时出两份）</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td><code>train[:1000]</code></td>
+<td>94</td>
+<td>~4 分钟</td>
+<td>流程验证（已完成）</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>train[:10000]</code></td>
+<td>1250</td>
+<td>~52 分钟</td>
+<td>中途检查：指标是否稳定上升</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>train</code>（全量）</td>
+<td>~7825</td>
+<td>~5.4 小时</td>
+<td><strong>最终基线</strong>（对标 Zephyr 全量 × 1 epoch）</td>
+</tr>
+</tbody></table>
+<p><strong>三个理由</strong>：① 1000 条只是”跑通”不是”基线”（accuracy 65.2% 与 BNRM 71.96% 的差距，数据量是头号嫌疑）；② 给老师的对照组必须可信，将来贝叶斯 DPO 要比的就是它；③ <strong>多档数据量正好验证 IPO 论文核心论点</strong>——“小样本下 DPO 过拟合、IPO 更稳”：看三档下 DPO 与 IPO 的 accuracy 差距如何变化。</p>
+<p><strong>改法与规则</strong>：脚本里 <code>split="train[:1000]"</code> 一行改成对应切片，其余不动；DPO 与 IPO 始终同一档、同一超参（唯一变量 = 数据量）；epoch 统一保持 1（全量 1 epoch 是 Zephyr 配方，小档想多练需两方法一致并标注清楚）。</p>
+<p><strong>预期看点</strong>：accuracy 随数据量上升（朝 BNRM 的 71.96% 靠近或超过）；<strong>DPO 的 margin 无天花板、一路涨，IPO 的 margin 收敛到 <mjx-container class="MathJax" jax="SVG" overflow="overflow"><svg style="vertical-align: -0.8ex;" xmlns="http://www.w3.org/2000/svg" width="2.613ex" height="2.757ex" role="img" focusable="false" viewBox="0 -864.9 1154.9 1218.4"><g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)"><g data-mml-node="math" data-latex="\frac{1}{2\tau}=5"><g data-mml-node="mfrac" data-latex="\frac{1}{2\tau}"><g data-mml-node="mn" transform="translate(400.7,394) scale(0.707)" data-latex="1"><path data-c="31" d="M269 666C228 624 168 603 89 603L89 564C141 564 184 572 217 588L217 82C217 64 213 52 204 47C195 42 170 39 130 39L95 39L95 0C120 2 174 3 257 3C340 3 394 2 419 0L419 39L384 39C343 39 318 42 310 47C302 52 297 64 297 82L297 636C297 660 295 666 269 666Z"></path></g><g data-mml-node="mrow" transform="translate(220,-345) scale(0.707)" data-latex="2\tau"><g data-mml-node="mn" data-latex="2"><path data-c="32" d="M237 666C186 666 143 648 106 612C69 576 50 534 50 483C50 449 75 424 106 424C136 424 161 450 161 480C161 513 137 536 105 536C102 536 100 536 98 535C117 584 161 627 224 627C306 627 352 556 352 470C352 403 318 331 250 255L62 43C49 28 50 29 50 0L421 0L450 180L417 180C409 129 402 100 396 91C391 86 361 84 306 84L139 84L236 179C304 243 390 312 419 365C439 400 449 435 449 470C449 588 357 666 237 666Z"></path></g><g data-mml-node="mi" data-latex="\tau" transform="translate(500,0)"><path data-c="1D70F" d="M468 431L192 431C139 431 91 397 47 330C34 310 27 297 27 292C30 284 31 279 43 279C50 279 56 283 62 292C94 341 134 366 183 366L260 366L165 56C158 34 155 21 155 18C155-2 166-12 187-12C198-12 208-9 214-3C227 9 228 12 232 33L297 366L459 366C494 366 511 378 511 403C511 426 493 431 468 431Z"></path></g></g><rect width="914.9" height="60" x="120" y="220"></rect></g></g></g></svg><mjx-break size="4"> </mjx-break><svg style="vertical-align: -0.566ex;" xmlns="http://www.w3.org/2000/svg" width="3.52ex" height="2.262ex" role="img" focusable="false" viewBox="0 -750 1555.8 1000"><g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)"><g data-mml-node="math" data-latex="\frac{1}{2\tau}=5"><g data-mml-node="mo" data-latex="="><path data-c="3D" d="M698 367L80 367C64 367 56 359 56 344C56 329 64 321 80 321L698 321C714 321 722 329 722 344C722 356 711 367 698 367M698 179L80 179C64 179 56 171 56 156C56 141 64 133 80 133L698 133C714 133 722 141 722 156C722 169 711 179 698 179Z"></path></g><g data-mml-node="mn" data-latex="5" transform="translate(1055.8,0)"><path data-c="35" d="M118 315C123 315 129 319 134 326C164 371 205 393 257 393C292 393 319 373 337 332C348 305 354 264 354 209C354 146 346 102 331 76C306 35 272 14 229 14C162 14 109 62 91 114C94 113 96 114 100 114C130 114 155 137 155 167C155 198 130 219 100 219C65 219 50 200 50 163C50 63 131-22 231-22C292-22 344 0 386 44C428 88 449 141 449 202C449 260 432 310 398 353C361 400 315 423 259 423C212 423 171 408 138 378L138 556C165 548 191 544 218 544C264 544 304 555 338 578C369 597 390 616 402 634C408 642 411 648 411 651C411 661 406 666 396 666C341 645 294 634 256 634C211 634 168 643 127 662C122 664 118 665 114 665C105 665 100 656 100 637L100 345C100 324 100 315 118 315Z"></path></g></g></g></svg></mjx-container></strong>——三档数据把两条曲线画在一起，就是”IPO 论文图 1/图 2 在 LM 尺度的复现”，是汇报里最有说服力的一张图。</p>
+<h1 id="附-E：DPOConfig-每个超参数详解（我们的脚本逐行版）"><a href="#附-E：DPOConfig-每个超参数详解（我们的脚本逐行版）" class="headerlink" title="附 E：DPOConfig 每个超参数详解（我们的脚本逐行版）"></a>附 E：DPOConfig 每个超参数详解（我们的脚本逐行版）</h1><p>想看 DPOConfig <strong>完整</strong>参数清单（100+ 个）与默认值，在服务器上跑：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">python -c <span class="string">"from trl import DPOConfig; import dataclasses; [print(f.name,'=',f.default) for f in dataclasses.fields(DPOConfig)]"</span></span><br></pre></td></tr></table></figure>
+
+<p>下面按三组逐个讲我们脚本里用到的每一个。</p>
+<h2 id="E-1-训练基础组"><a href="#E-1-训练基础组" class="headerlink" title="E.1 训练基础组"></a>E.1 训练基础组</h2><table>
+<thead>
+<tr>
+<th>参数</th>
+<th>管什么</th>
+<th>我们的值</th>
+<th>为什么是这个值 / 怎么调</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>output_dir</code></td>
+<td>checkpoint 和中间结果写到哪个目录</td>
+<td><code>./dpo_output</code></td>
+<td>IPO 版改成 <code>./ipo_output</code>，两个实验的输出分开</td>
+</tr>
+<tr>
+<td><code>num_train_epochs</code></td>
+<td>整个数据集从头到尾过几遍</td>
+<td>1</td>
+<td>全量数据 1 epoch 是 Zephyr 标准配方；小档数据（1k/10k）想多练可以加，但 DPO/IPO 必须保持一致</td>
+</tr>
+<tr>
+<td><code>learning_rate</code></td>
+<td>每步更新参数的步长</td>
+<td>1e-6</td>
+<td>LM 本来就会说话，对齐只是”微”调；太大（&gt;1e-5）会把概率分布搅乱（等价于 KL 约束失效）；DPO 论文原版就是 1e-6</td>
+</tr>
+<tr>
+<td><code>per_device_train_batch_size</code></td>
+<td>单张卡一次前向喂几条样本</td>
+<td>1</td>
+<td>受显存限制的最小值；越大梯度估计越稳，但吃显存</td>
+</tr>
+<tr>
+<td><code>gradient_accumulation_steps</code></td>
+<td>累积多少步的梯度后再统一更新一次参数</td>
+<td>8</td>
+<td><strong>有效 batch = 1 × 8 = 8</strong>。总步数 ≈ 训练条数 ÷ 8（800 条 → 94 步，你日志里 <code>epoch 0.534 @ step50</code> 就是这么来的）。想贴近 DPO 论文原版 batch=64 就把它调到 64（显存不变，只是更慢）</td>
+</tr>
+<tr>
+<td><code>per_device_eval_batch_size</code></td>
+<td>验证集评估时单卡一次喂几条</td>
+<td>1</td>
+<td><strong>实测必加</strong>：默认值较大，24GB 卡会在 eval 阶段 OOM（你踩过的那个坑）</td>
+</tr>
+<tr>
+<td><code>seed</code></td>
+<td>随机种子（数据切分、初始化等）</td>
+<td>42（未写=默认）</td>
+<td>做多种子实验时改它（如 0/1/42）看结果方差</td>
+</tr>
+</tbody></table>
+<h2 id="E-2-DPO-专属组"><a href="#E-2-DPO-专属组" class="headerlink" title="E.2 DPO 专属组"></a>E.2 DPO 专属组</h2><p><strong><code>beta = 0.1</code>——全文最重要的一个旋钮</strong>。管什么：DPO 里 β 是”KL 正则强度 + 隐式奖励缩放”二合一——β 越大，允许偏离参考模型的幅度越大，模型越敢大幅修改概率。IPO 里同一个参数就是论文里的 τ，还额外决定回归目标 <mjx-container class="MathJax" jax="SVG" overflow="overflow"><svg style="vertical-align: -0.8ex;" xmlns="http://www.w3.org/2000/svg" width="2.613ex" height="2.757ex" role="img" focusable="false" viewBox="0 -864.9 1154.9 1218.4"><g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)"><g data-mml-node="math" data-latex="\frac{1}{2\tau}"><g data-mml-node="mfrac" data-latex="\frac{1}{2\tau}"><g data-mml-node="mn" transform="translate(400.7,394) scale(0.707)" data-latex="1"><path data-c="31" d="M269 666C228 624 168 603 89 603L89 564C141 564 184 572 217 588L217 82C217 64 213 52 204 47C195 42 170 39 130 39L95 39L95 0C120 2 174 3 257 3C340 3 394 2 419 0L419 39L384 39C343 39 318 42 310 47C302 52 297 64 297 82L297 636C297 660 295 666 269 666Z"></path></g><g data-mml-node="mrow" transform="translate(220,-345) scale(0.707)" data-latex="2\tau"><g data-mml-node="mn" data-latex="2"><path data-c="32" d="M237 666C186 666 143 648 106 612C69 576 50 534 50 483C50 449 75 424 106 424C136 424 161 450 161 480C161 513 137 536 105 536C102 536 100 536 98 535C117 584 161 627 224 627C306 627 352 556 352 470C352 403 318 331 250 255L62 43C49 28 50 29 50 0L421 0L450 180L417 180C409 129 402 100 396 91C391 86 361 84 306 84L139 84L236 179C304 243 390 312 419 365C439 400 449 435 449 470C449 588 357 666 237 666Z"></path></g><g data-mml-node="mi" data-latex="\tau" transform="translate(500,0)"><path data-c="1D70F" d="M468 431L192 431C139 431 91 397 47 330C34 310 27 297 27 292C30 284 31 279 43 279C50 279 56 283 62 292C94 341 134 366 183 366L260 366L165 56C158 34 155 21 155 18C155-2 166-12 187-12C198-12 208-9 214-3C227 9 228 12 232 33L297 366L459 366C494 366 511 378 511 403C511 426 493 431 468 431Z"></path></g></g><rect width="914.9" height="60" x="120" y="220"></rect></g></g></g></svg></mjx-container>（β=0.1 → 目标 5）。怎么调：越小越保守（贴近 π_ref、生成稳但对齐慢），越大越激进（margin 涨得快但有过拟合风险）。论文默认 0.1；想画”奖励-KL 前沿”就扫 {0.05, 0.1, 0.5}。</p>
+<p><strong><code>loss_type = "ipo"</code>——损失函数开关</strong>（默认 <code>dpo</code>）。这就是”只换最后一行损失”的那个开关本体。可选值随 TRL 版本增加：<code>dpo</code> / <code>ipo</code> / <code>kto</code> / <code>cpo</code> / <code>orpo</code> / <code>simpo</code> 等。<strong>DPO 与 IPO 对照实验里，它是唯一允许不同的参数。</strong></p>
+<p><strong><code>max_length = 512</code></strong>。管什么：prompt + 回答拼起来最多保留多少 token，超长截断。它同时管两件事——模型能看到多长的上下文（内容完整度）和显存（注意力矩阵随长度平方增长）。UltraFeedback 的回答普遍很长，512 是折中；再遇 OOM 优先降到 384。</p>
+<p><strong><code>remove_unused_columns = False</code></strong>。管什么：Trainer 默认（True）会自动删掉数据集里”模型输入用不到”的列；但 DPO 需要 <code>prompt/chosen/rejected</code> 三列原样进入数据整理器（collator），删了就会报 KeyError。<strong>必须设 False</strong>。</p>
+<h2 id="E-3-显存与日志组"><a href="#E-3-显存与日志组" class="headerlink" title="E.3 显存与日志组"></a>E.3 显存与日志组</h2><p><strong><code>bf16 = True</code></strong>。管什么：bfloat16 混合精度训练——权重和激活用 16 位存、算，显存约省一半、速度更快；训练同时保留 fp32 主副本防精度损失（这就是显存账里”优化器 7.2GB”的由来）。3090（Ampere）支持；老卡 V100 不支持就改 <code>fp16=True</code>。</p>
+<p><strong><code>gradient_checkpointing = True</code></strong>。管什么：前向时不保存中间激活、反向时现场重算——<strong>用约 20–30% 的训练时间，换掉约 60–70% 的激活显存</strong>。0.6B 全参 + 24GB 卡的必备开关。</p>
+<p><strong><code>logging_steps = 5</code></strong>。管什么：每 5 步打印一次指标（loss、<code>rewards/margins</code>、<code>rewards/accuracies</code>、<code>logps/*</code>、<code>entropy</code>、<code>grad_norm</code> 等）。你 <code>dpo.log</code> 里那一行行 JSON 就是它产的。设 5 = 高频观察，适合调试期。</p>
+<p><strong><code>save_strategy</code> / <code>save_steps</code></strong>。管什么：什么时候存 checkpoint。<code>"steps"</code> = 每 <code>save_steps</code> 步存一次（我们每 50 步一次）。训练结束还会单独存一份 <code>./final</code>（脚本里的 <code>save_model</code>）。</p>
+<p><strong><code>eval_strategy</code> / <code>eval_steps</code></strong>。管什么：什么时候在验证集上评估。<code>"steps"</code> = 每 <code>eval_steps</code> 步跑一轮验证集指标——<strong>你第 50 步那次 OOM 就发生在这里</strong>（已用 <code>per_device_eval_batch_size=1</code> 修好）。想彻底省事可设 <code>"no"</code>（训练日志里已经有全部指标，eval 只是它们的验证集版本）。</p>
+<p><strong><code>report_to = "none"</code></strong>。管什么：训练指标上报到哪。<code>"none"</code> = 只打印终端；<code>"wandb"</code> / <code>"tensorboard"</code> = 接可视化平台。服务器没配 wandb 就保持 none。</p>
+<h2 id="E-4-启动命令行里的三个参数（不在-DPOConfig-里，但同样管训练）"><a href="#E-4-启动命令行里的三个参数（不在-DPOConfig-里，但同样管训练）" class="headerlink" title="E.4 启动命令行里的三个参数（不在 DPOConfig 里，但同样管训练）"></a>E.4 启动命令行里的三个参数（不在 DPOConfig 里，但同样管训练）</h2><table>
+<thead>
+<tr>
+<th>参数</th>
+<th>管什么</th>
+<th>注意</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>CUDA_VISIBLE_DEVICES=0/1</code></td>
+<td>让程序只看见指定的卡</td>
+<td>0 = 挂桌面的卡、1 = 干净卡；双卡并行时两个终端各设各的</td>
+</tr>
+<tr>
+<td><code>--num_processes=1</code></td>
+<td>accelerate 单进程运行</td>
+<td><strong>必须带</strong>：多卡工作站默认尝试 DDP 会卡初始化（上一台实测）</td>
+</tr>
+<tr>
+<td><code>--mixed_precision=bf16</code></td>
+<td>accelerate 层精度开关</td>
+<td>与脚本里 <code>bf16=True</code> 呼应，两层都开才生效</td>
+</tr>
+</tbody></table>
+<h2 id="E-5-你没写但默认值在悄悄生效的常用参数"><a href="#E-5-你没写但默认值在悄悄生效的常用参数" class="headerlink" title="E.5 你没写但默认值在悄悄生效的常用参数"></a>E.5 你没写但默认值在悄悄生效的常用参数</h2><table>
+<thead>
+<tr>
+<th>参数</th>
+<th>默认值</th>
+<th>管什么</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>lr_scheduler_type</code></td>
+<td>cosine</td>
+<td>学习率调度曲线；你日志里 lr 从 9.6e-7 缓慢下降就是它在走</td>
+</tr>
+<tr>
+<td><code>warmup_ratio</code></td>
+<td>0.1</td>
+<td>前 10% 步 lr 从 0 线性升到设定值（防开局震荡）</td>
+</tr>
+<tr>
+<td><code>max_grad_norm</code></td>
+<td>1.0</td>
+<td>梯度裁剪上限；日志里 <code>grad_norm</code> 200+ 是裁剪前的原始值</td>
+</tr>
+</tbody></table>
+<p><strong><code>max_grad_norm</code> 详解（IPO 实验实测踩过）</strong>：梯度裁剪 = 把所有参数的梯度拼成向量 g，若 ‖g‖ 超上限就等比例缩小（方向不变、步长受限），防一步更新过大炸 loss。判断标准：看日志 <code>grad_norm</code>——若常年贴着 max_grad_norm 说明裁剪频繁生效（该放宽或减小损失尺度），远低于则正常。<strong>实测教训</strong>：IPO（β=0.1）的 grad_norm 达 553–1576，被默认 1.0 裁到每步只剩 1/500–1/1500 → loss 卡 25 不降。修复：<code>beta=0.5</code> + <code>max_grad_norm=10.0</code>（常见范围 1.0–10.0，别一步关掉，防 NaN）。<br>| <code>optim</code> | adamw_torch | 优化器；DPO 论文原版用 RMSprop，TRL 默认 AdamW（两者都对） |<br>| <code>weight_decay</code> | 0 | L2 正则；对齐任务一般不加 |<br>| <code>save_total_limit</code> | None | 只保留最近 N 个 checkpoint（磁盘紧时设 2） |</p>
+<h2 id="E-6-一句话总结：哪些参数动不得"><a href="#E-6-一句话总结：哪些参数动不得" class="headerlink" title="E.6 一句话总结：哪些参数动不得"></a>E.6 一句话总结：哪些参数动不得</h2><p><strong>DPO vs IPO 对照实验里，唯一允许不同的参数是 <code>loss_type</code>。</strong> β、lr、batch、epochs、max_length、seed 全部必须两方法一致——否则对照就不是”只比损失函数”了。想扫超参（β、数据量、种子），两边一起扫。</p>
+<hr>
+<blockquote>
+<p>跑完把 <code>dpo.log</code>、<code>ipo.log</code> 发我；任何一步报错，把完整报错贴过来。</p>
+</blockquote>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://gaozhuoran2.github.io">擎天—射日</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://gaozhuoran2.github.io/2026/11/12/%E6%96%B0%E6%9C%8D%E5%8A%A1%E5%99%A8%E7%8E%AF%E5%A2%83%E9%85%8D%E7%BD%AE%E4%B8%8EDPO-IPO%E8%BF%90%E8%A1%8C%E6%8C%87%E5%8D%97/">https://gaozhuoran2.github.io/2026/11/12/%E6%96%B0%E6%9C%8D%E5%8A%A1%E5%99%A8%E7%8E%AF%E5%A2%83%E9%85%8D%E7%BD%AE%E4%B8%8EDPO-IPO%E8%BF%90%E8%A1%8C%E6%8C%87%E5%8D%97/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://gaozhuoran2.github.io" target="_blank">gzr的小窝</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/%E8%AE%BA%E6%96%87/">论文</a><a class="post-meta__tags" href="/tags/DPO/">DPO</a><a class="post-meta__tags" href="/tags/%E6%9C%8D%E5%8A%A1%E5%99%A8/">服务器</a></div><div class="post-share"><div class="social-share" data-image="/img/cover/8.jpeg" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related" href="/2026/11/12/IPO-DPO%E5%AF%B9%E7%85%A7%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%E5%88%86%E6%9E%90/" title="IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案"><img class="cover" src="/img/cover/5.jpeg" onerror="onerror=null;src='/img/404.jpg'" alt="cover of previous post"><div class="info"><div class="info-1"><div class="info-item-1">上一篇</div><div class="info-item-2">IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案</div></div><div class="info-2"><div class="info-item-1">新服务器（3090×2）第一轮 DPO/IPO 对照实验结果：DPO 成功复现旧基线（eval loss 0.649 / accuracy 70.1% / margin 0.123），IPO 完全未学习（loss 卡在 25、grad_norm 高达 1576 被裁剪杀死）。根因：IPO 平方损失的梯度常数 × 长序列 → 巨梯度 → max_grad_norm 裁剪；τ=0.1 不能照搬 DPO 的 β。附修复方案。</div></div></div></a><a class="pagination-related" href="/2026/11/12/%E5%A4%9A%E5%8F%8D%E9%A6%88%E6%95%B0%E6%8D%AE%E6%80%8E%E4%B9%88%E5%96%82%E7%BB%99DPO%E5%AE%B6%E6%97%8F%EF%BC%9A%E8%AF%84%E5%88%86%E3%80%81%E7%A4%BA%E8%8C%83%E3%80%81%E5%81%9C%E6%AD%A2%E4%BF%A1%E5%8F%B7%E7%9A%84%E8%BD%AC%E6%8D%A2%E6%8C%87%E5%8D%97/" title="多反馈数据怎么喂给DPO家族：评分、示范、停止信号的转换指南"><img class="cover" src="/img/cover/5.jpeg" onerror="onerror=null;src='/img/404.jpg'" alt="cover of next post"><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">多反馈数据怎么喂给DPO家族：评分、示范、停止信号的转换指南</div></div><div class="info-2"><div class="info-item-1">回答'DPO/IPO 只吃两两比较数据，那评分、示范、停止信号等多反馈数据怎么用'：一张转换流程图 + 每种反馈类型的三种出路（构造偏好对 / 阈值化给 KTO / 训练奖励模型）+ TRL 工具箱速查表 + 与你 MF-BNRM 多反馈方向的关系。</div></div></div></a></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span>相关推荐</span></div><div class="relatedPosts-list"><a class="pagination-related" href="/2026/11/12/IPO-DPO%E5%AF%B9%E7%85%A7%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%E5%88%86%E6%9E%90/" title="IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案"><img class="cover" src="/img/cover/5.jpeg" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-11-12</div><div class="info-item-2">IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案</div></div><div class="info-2"><div class="info-item-1">新服务器（3090×2）第一轮 DPO/IPO 对照实验结果：DPO 成功复现旧基线（eval loss 0.649 / accuracy 70.1% / margin 0.123），IPO 完全未学习（loss 卡在 25、grad_norm 高达 1576 被裁剪杀死）。根因：IPO 平方损失的梯度常数 × 长序列 → 巨梯度 → max_grad_norm 裁剪；τ=0.1 不能照搬 DPO 的 β。附修复方案。</div></div></div></a><a class="pagination-related" href="/2026/11/07/DPO%E5%A4%8D%E7%8E%B0%E4%B8%8E%E6%9C%8D%E5%8A%A1%E5%99%A8%E6%93%8D%E4%BD%9C%E5%85%A8%E6%B5%81%E7%A8%8B/" title="DPO复现：老师新任务解读与服务器操作全流程"><img class="cover" src="/img/cover/8.jpeg" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-11-07</div><div class="info-item-2">DPO复现：老师新任务解读与服务器操作全流程</div></div><div class="info-2"><div class="info-item-1">老师新任务：在服务器上用 TRL + Qwen3-0.6B 跑通 DPO 基线，记录 loss、reward margin、logps 等指标并整理结果，为后续贝叶斯 DPO（承接 MF-BNRM 方向）研究打基础。</div></div></div></a><a class="pagination-related" href="/2026/11/07/DPO%E5%9F%BA%E7%BA%BF%E5%A4%8D%E7%8E%B0%E6%8A%A5%E5%91%8A%EF%BC%9A%E4%BB%BB%E5%8A%A1%E8%A7%A3%E8%AF%BB%E3%80%81%E8%BF%90%E8%A1%8C%E6%AD%A5%E9%AA%A4%E4%B8%8E%E7%BB%93%E6%9E%9C%E5%88%86%E6%9E%90/" title="DPO基线复现报告：任务解读、运行步骤与结果分析"><img class="cover" src="/img/cover/5.jpeg" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-11-07</div><div class="info-item-2">DPO基线复现报告：任务解读、运行步骤与结果分析</div></div><div class="info-2"><div class="info-item-1">老师新任务全记录：读 DPO 原论文、按 GPT 方案在老师服务器上用 TRL + Qwen3-0.6B 跑通 DPO 基线，附一步一步操作、真实训练日志指标整理与结果分析（loss 0.689→0.648、margin 0.016→0.126、accuracy 65.2%），以及下一步贝叶斯 DPO 展望。</div></div></div></a><a class="pagination-related" href="/2026/11/13/agent%E5%AF%B9SimPO%E8%AE%BA%E6%96%87%E7%9A%84%E7%90%86%E8%A7%A3/" title="agent对SimPO论文的理解——工程视角：删掉参考模型+长度归一化，再讲margin与梯度背后的数学"><img class="cover" src="/img/cover/9.jpeg" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-11-13</div><div class="info-item-2">agent对SimPO论文的理解——工程视角：删掉参考模型+长度归一化，再讲margin与梯度背后的数学</div></div><div class="info-2"><div class="info-item-1">从工程角度拆解 SimPO：先讲工程上它相对 DPO/IPO 改了什么（免参考模型、长度归一化奖励、目标 margin γ）、前向怎么算、TRL 怎么一行切换、超参怎么设，再讲背后的数学（长度偏差机理、margin 泛化直觉、DPO 的 50% 排序错位、梯度分析），并与你 IPO 漂移实验直接对照。</div></div></div></a><a class="pagination-related" href="/2026/11/11/DPO%E8%AE%BA%E6%96%87%E5%85%A8%E6%96%87%E4%B8%AD%E6%96%87%E7%BF%BB%E8%AF%91/" title="DPO论文全文中文翻译 - 你的语言模型暗地里是一个奖励模型"><img class="cover" src="/img/cover/cover-1.png" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-11-11</div><div class="info-item-2">DPO论文全文中文翻译 - 你的语言模型暗地里是一个奖励模型</div></div><div class="info-2"><div class="info-item-1">NeurIPS 2023 论文《Direct Preference Optimization: Your Language Model is Secretly a Reward Model》的完整中文翻译：摘要、正文、作者贡献与附录 A–D，公式以 MathJax 还原，图表位置附占位说明。</div></div></div></a><a class="pagination-related" href="/2026/11/11/DPO%E7%9B%B8%E5%85%B3%E8%AE%BA%E6%96%87%E6%B8%85%E5%8D%95%E4%B8%8E%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%E5%AF%B9%E7%85%A7/" title="DPO相关论文清单与实验结果对照——把我的TRL+Qwen3-0.6B结果放进坐标系"><img class="cover" src="/img/cover/cover-3.png" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-11-11</div><div class="info-item-2">DPO相关论文清单与实验结果对照——把我的TRL+Qwen3-0.6B结果放进坐标系</div></div><div class="info-2"><div class="info-item-1">把 TRL+Qwen3-0.6B+UltraFeedback 的 DPO 基线（loss 0.69→0.648、margin 0.016→0.126、accuracy 65.2%）放进论文坐标系：按'同数据/同模型/同指标/同框架'四个轴整理了 20+ 篇 DPO 相关论文（官方 Qwen3、Zephyr、ORPO、IPO、KTO、SimPO、CGPO、贝叶斯奖励模型等），附每篇的模型、数据与已核实的结果数字，以及三个指标在论文语言里的'翻译'和下一批实验清单。</div></div></div></a></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">擎天—射日</div><div class="author-info-description">擎天神光，最后耀世</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">37</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">14</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">6</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/gaozhuoran2"><i class="fab fa-github"></i><span>Follow Me</span></a></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">3599 浩东99 麟月99 轩秀99</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#0-%E5%85%A8%E6%B5%81%E7%A8%8B%E6%80%BB%E8%A7%88%EF%BC%889-%E6%AD%A5%EF%BC%89"><span class="toc-number">1.</span> <span class="toc-text">0. 全流程总览（9 步）</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E7%AC%AC-1-%E6%AD%A5%EF%BC%9A%E5%BB%BA%E7%9B%AE%E5%BD%95"><span class="toc-number">2.</span> <span class="toc-text">第 1 步：建目录</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E7%AC%AC-2-%E6%AD%A5%EF%BC%9A%E5%BB%BA%E7%8E%AF%E5%A2%83-%E8%A3%85%E4%BE%9D%E8%B5%96"><span class="toc-number">3.</span> <span class="toc-text">第 2 步：建环境 + 装依赖</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E7%AC%AC-3-%E6%AD%A5%EF%BC%9A%E9%AA%8C%E8%AF%81-CUDA"><span class="toc-number">4.</span> <span class="toc-text">第 3 步：验证 CUDA</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E7%AC%AC-4-%E6%AD%A5%EF%BC%9A%E9%85%8D%E7%BD%AE%E5%9B%BD%E5%86%85%E9%95%9C%E5%83%8F%EF%BC%88%E4%BB%A5%E5%90%8E%E6%89%80%E6%9C%89-HF-%E4%B8%8B%E8%BD%BD%E9%83%BD%E5%8A%A0%E9%80%9F%EF%BC%89"><span class="toc-number">5.</span> <span class="toc-text">第 4 步：配置国内镜像（以后所有 HF 下载都加速）</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E7%AC%AC-5-%E6%AD%A5%EF%BC%9A%E4%B8%8B%E8%BD%BD%E6%A8%A1%E5%9E%8B-Qwen3-0-6B%EF%BC%88%E4%B8%80%E6%AC%A1%EF%BC%8C%E4%B8%A4%E5%AE%9E%E9%AA%8C%E5%85%B1%E7%94%A8%EF%BC%89"><span class="toc-number">6.</span> <span class="toc-text">第 5 步：下载模型 Qwen3-0.6B（一次，两实验共用）</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E7%AC%AC-6-%E6%AD%A5%EF%BC%9A%E5%86%99%E4%B8%A4%E4%B8%AA%E8%AE%AD%E7%BB%83%E8%84%9A%E6%9C%AC%EF%BC%88%E5%AE%8C%E6%95%B4%E4%BB%A3%E7%A0%81%EF%BC%8C%E7%9B%B4%E6%8E%A5%E5%A4%8D%E5%88%B6%EF%BC%89"><span class="toc-number">7.</span> <span class="toc-text">第 6 步：写两个训练脚本（完整代码，直接复制）</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E7%AC%AC-7-%E6%AD%A5%EF%BC%9A%E5%86%92%E7%83%9F%E6%B5%8B%E8%AF%95%EF%BC%885-%E6%AD%A5%EF%BC%8C%E9%A1%BA%E5%B8%A6%E4%B8%8B%E8%BD%BD%E6%95%B0%E6%8D%AE%E9%9B%86%EF%BC%89"><span class="toc-number">8.</span> <span class="toc-text">第 7 步：冒烟测试（5 步，顺带下载数据集）</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E7%AC%AC-8-%E6%AD%A5%EF%BC%9A%E6%AD%A3%E5%BC%8F%E8%B7%91%EF%BC%88%E5%8F%8C%E5%8D%A1%E5%B9%B6%E8%A1%8C%EF%BC%9ADPO-%E5%8D%A1-0-IPO-%E5%8D%A1-1%EF%BC%89"><span class="toc-number">9.</span> <span class="toc-text">第 8 步：正式跑（双卡并行：DPO 卡 0 + IPO 卡 1）</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E7%AC%AC-9-%E6%AD%A5%EF%BC%9A%E7%9C%8B%E6%97%A5%E5%BF%97%E3%80%81%E6%95%B4%E7%90%86%E4%BA%A4%E4%BB%98%E7%89%A9"><span class="toc-number">10.</span> <span class="toc-text">第 9 步：看日志、整理交付物</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E9%99%84-A%EF%BC%9A%E6%98%BE%E5%AD%98%E6%80%8E%E4%B9%88%E7%AE%97%EF%BC%88%E2%80%9DB-%E5%8F%82%E6%95%B0%E2%80%9D-%E2%86%94-%E2%80%9CGB-%E6%98%BE%E5%AD%98%E2%80%9D%EF%BC%89"><span class="toc-number">11.</span> <span class="toc-text">附 A：显存怎么算（”B 参数” ↔ “GB 显存”）</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#A-1-%E5%85%88%E7%9C%8B%E8%AE%AD%E7%BB%83%E7%9A%84%E5%9B%9B%E6%AD%A5%E6%B5%81%E6%B0%B4%EF%BC%8C%E6%98%BE%E5%AD%98%E9%87%8C%E7%9A%84%E4%BA%94%E6%A0%B7%E4%B8%9C%E8%A5%BF%E5%B0%B1%E5%AF%B9%E5%BA%94%E5%AE%83"><span class="toc-number">11.1.</span> <span class="toc-text">A.1 先看训练的四步流水，显存里的五样东西就对应它</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#A-2-%E4%BA%94%E6%A0%B7%E4%B8%9C%E8%A5%BF%E5%88%86%E5%88%AB%E6%98%AF%E4%BB%80%E4%B9%88%E3%80%81%E4%B8%BA%E4%BB%80%E4%B9%88%E5%8D%A0%E8%BF%99%E4%B9%88%E5%A4%9A"><span class="toc-number">11.2.</span> <span class="toc-text">A.2 五样东西分别是什么、为什么占这么多</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E9%99%84-B%EF%BC%9A%E4%B8%89%E4%B8%AA%E5%9D%91%EF%BC%88%E4%B8%8A%E4%B8%80%E5%8F%B0%E5%AE%9E%E6%B5%8B%E8%BF%87%EF%BC%89"><span class="toc-number">12.</span> <span class="toc-text">附 B：三个坑（上一台实测过）</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E9%99%84-C%EF%BC%9A%E8%87%AA%E5%B7%B1%E7%9A%84%E6%9C%BA%E5%99%A8%EF%BC%8C%E2%80%9D%E5%A4%A7%E8%83%86%E2%80%9D%E7%9A%84%E4%B8%89%E4%B8%AA%E9%80%89%E9%A1%B9"><span class="toc-number">13.</span> <span class="toc-text">附 C：自己的机器，”大胆”的三个选项</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E9%99%84-D%EF%BC%9A%E6%95%B0%E6%8D%AE%E9%87%8F%E6%80%8E%E4%B9%88%E9%80%89%EF%BC%88%E6%8E%A8%E8%8D%90%E4%B8%89%E6%A1%A3%E8%B5%B0%EF%BC%89"><span class="toc-number">14.</span> <span class="toc-text">附 D：数据量怎么选（推荐三档走）</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E9%99%84-E%EF%BC%9ADPOConfig-%E6%AF%8F%E4%B8%AA%E8%B6%85%E5%8F%82%E6%95%B0%E8%AF%A6%E8%A7%A3%EF%BC%88%E6%88%91%E4%BB%AC%E7%9A%84%E8%84%9A%E6%9C%AC%E9%80%90%E8%A1%8C%E7%89%88%EF%BC%89"><span class="toc-number">15.</span> <span class="toc-text">附 E：DPOConfig 每个超参数详解（我们的脚本逐行版）</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#E-1-%E8%AE%AD%E7%BB%83%E5%9F%BA%E7%A1%80%E7%BB%84"><span class="toc-number">15.1.</span> <span class="toc-text">E.1 训练基础组</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#E-2-DPO-%E4%B8%93%E5%B1%9E%E7%BB%84"><span class="toc-number">15.2.</span> <span class="toc-text">E.2 DPO 专属组</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#E-3-%E6%98%BE%E5%AD%98%E4%B8%8E%E6%97%A5%E5%BF%97%E7%BB%84"><span class="toc-number">15.3.</span> <span class="toc-text">E.3 显存与日志组</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#E-4-%E5%90%AF%E5%8A%A8%E5%91%BD%E4%BB%A4%E8%A1%8C%E9%87%8C%E7%9A%84%E4%B8%89%E4%B8%AA%E5%8F%82%E6%95%B0%EF%BC%88%E4%B8%8D%E5%9C%A8-DPOConfig-%E9%87%8C%EF%BC%8C%E4%BD%86%E5%90%8C%E6%A0%B7%E7%AE%A1%E8%AE%AD%E7%BB%83%EF%BC%89"><span class="toc-number">15.4.</span> <span class="toc-text">E.4 启动命令行里的三个参数（不在 DPOConfig 里，但同样管训练）</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#E-5-%E4%BD%A0%E6%B2%A1%E5%86%99%E4%BD%86%E9%BB%98%E8%AE%A4%E5%80%BC%E5%9C%A8%E6%82%84%E6%82%84%E7%94%9F%E6%95%88%E7%9A%84%E5%B8%B8%E7%94%A8%E5%8F%82%E6%95%B0"><span class="toc-number">15.5.</span> <span class="toc-text">E.5 你没写但默认值在悄悄生效的常用参数</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#E-6-%E4%B8%80%E5%8F%A5%E8%AF%9D%E6%80%BB%E7%BB%93%EF%BC%9A%E5%93%AA%E4%BA%9B%E5%8F%82%E6%95%B0%E5%8A%A8%E4%B8%8D%E5%BE%97"><span class="toc-number">15.6.</span> <span class="toc-text">E.6 一句话总结：哪些参数动不得</span></a></li></ol></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/2026/11/13/agent%E5%AF%B9SimPO%E8%AE%BA%E6%96%87%E7%9A%84%E7%90%86%E8%A7%A3/" title="agent对SimPO论文的理解——工程视角：删掉参考模型+长度归一化，再讲margin与梯度背后的数学"><img src="/img/cover/9.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="agent对SimPO论文的理解——工程视角：删掉参考模型+长度归一化，再讲margin与梯度背后的数学"/></a><div class="content"><a class="title" href="/2026/11/13/agent%E5%AF%B9SimPO%E8%AE%BA%E6%96%87%E7%9A%84%E7%90%86%E8%A7%A3/" title="agent对SimPO论文的理解——工程视角：删掉参考模型+长度归一化，再讲margin与梯度背后的数学">agent对SimPO论文的理解——工程视角：删掉参考模型+长度归一化，再讲margin与梯度背后的数学</a><time datetime="2026-11-13T02:30:00.000Z" title="发表于 2026-11-13 10:30:00">2026-11-13</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/11/13/SimPO%E8%AE%BA%E6%96%87%E4%B8%AD%E6%96%87%E7%BF%BB%E8%AF%91/" title="SimPO论文中文翻译 - 免参考模型的简单偏好优化"><img src="/img/cover/6.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="SimPO论文中文翻译 - 免参考模型的简单偏好优化"/></a><div class="content"><a class="title" href="/2026/11/13/SimPO%E8%AE%BA%E6%96%87%E4%B8%AD%E6%96%87%E7%BF%BB%E8%AF%91/" title="SimPO论文中文翻译 - 免参考模型的简单偏好优化">SimPO论文中文翻译 - 免参考模型的简单偏好优化</a><time datetime="2026-11-13T01:00:00.000Z" title="发表于 2026-11-13 09:00:00">2026-11-13</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/11/12/IPO-DPO%E5%AF%B9%E7%85%A7%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%E5%88%86%E6%9E%90/" title="IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案"><img src="/img/cover/5.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案"/></a><div class="content"><a class="title" href="/2026/11/12/IPO-DPO%E5%AF%B9%E7%85%A7%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%E5%88%86%E6%9E%90/" title="IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案">IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案</a><time datetime="2026-11-12T12:00:00.000Z" title="发表于 2026-11-12 20:00:00">2026-11-12</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/11/12/%E6%96%B0%E6%9C%8D%E5%8A%A1%E5%99%A8%E7%8E%AF%E5%A2%83%E9%85%8D%E7%BD%AE%E4%B8%8EDPO-IPO%E8%BF%90%E8%A1%8C%E6%8C%87%E5%8D%97/" title="新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）"><img src="/img/cover/8.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）"/></a><div class="content"><a class="title" href="/2026/11/12/%E6%96%B0%E6%9C%8D%E5%8A%A1%E5%99%A8%E7%8E%AF%E5%A2%83%E9%85%8D%E7%BD%AE%E4%B8%8EDPO-IPO%E8%BF%90%E8%A1%8C%E6%8C%87%E5%8D%97/" title="新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）">新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）</a><time datetime="2026-11-12T07:30:00.000Z" title="发表于 2026-11-12 15:30:00">2026-11-12</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/11/12/%E5%A4%9A%E5%8F%8D%E9%A6%88%E6%95%B0%E6%8D%AE%E6%80%8E%E4%B9%88%E5%96%82%E7%BB%99DPO%E5%AE%B6%E6%97%8F%EF%BC%9A%E8%AF%84%E5%88%86%E3%80%81%E7%A4%BA%E8%8C%83%E3%80%81%E5%81%9C%E6%AD%A2%E4%BF%A1%E5%8F%B7%E7%9A%84%E8%BD%AC%E6%8D%A2%E6%8C%87%E5%8D%97/" title="多反馈数据怎么喂给DPO家族：评分、示范、停止信号的转换指南"><img src="/img/cover/5.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="多反馈数据怎么喂给DPO家族：评分、示范、停止信号的转换指南"/></a><div class="content"><a class="title" href="/2026/11/12/%E5%A4%9A%E5%8F%8D%E9%A6%88%E6%95%B0%E6%8D%AE%E6%80%8E%E4%B9%88%E5%96%82%E7%BB%99DPO%E5%AE%B6%E6%97%8F%EF%BC%9A%E8%AF%84%E5%88%86%E3%80%81%E7%A4%BA%E8%8C%83%E3%80%81%E5%81%9C%E6%AD%A2%E4%BF%A1%E5%8F%B7%E7%9A%84%E8%BD%AC%E6%8D%A2%E6%8C%87%E5%8D%97/" title="多反馈数据怎么喂给DPO家族：评分、示范、停止信号的转换指南">多反馈数据怎么喂给DPO家族：评分、示范、停止信号的转换指南</a><time datetime="2026-11-12T06:00:00.000Z" title="发表于 2026-11-12 14:00:00">2026-11-12</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2025 - 2026 By 擎天—射日</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.1</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.4</a></span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.4"></script><script src="/js/main.js?v=5.5.4"></script><div class="js-pjax"></div><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script><div id="local-search"><div class="search-dialog"><nav class="search-nav"><span class="search-dialog-title">搜索</span><i class="fas fa-spinner fa-pulse" id="loading-status" hidden="hidden"></i><button class="search-close-button"><i class="fas fa-times"></i></button></nav><div class="text-center" id="loading-database"><i class="fas fa-spinner fa-pulse"></i><span>  数据加载中</span></div><div class="local-search-input"><input placeholder="搜索文章" type="text"/></div><hr/><div id="local-search-results"></div><div class="ais-Pagination" id="local-search-pagination" style="display:none;"><ul class="ais-Pagination-list"></ul></div><div id="local-search-stats"></div></div><div id="search-mask"></div><script src="/js/search/local-search.js?v=5.5.4"></script></div></div></body></html>

@@ -1,0 +1,273 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>Direct Preference Optimization: Your Language Model is Secretly a Reward Model | gzr的小窝</title><meta name="author" content="擎天—射日"><meta name="copyright" content="擎天—射日"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="擎天神光，最后耀世">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Direct Preference Optimization: Your Language Model is Secretly a Reward Model">
+<meta property="og:url" content="https://gaozhuoran2.github.io/2026/11/11/Direct-Preference-Optimization-Your-Language-Model-is-Secretly-a-Reward-Model/index.html">
+<meta property="og:site_name" content="gzr的小窝">
+<meta property="og:description" content="擎天神光，最后耀世">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://gaozhuoran2.github.io/img/cover/cover-3.png">
+<meta property="article:published_time" content="2026-11-11T02:36:55.000Z">
+<meta property="article:modified_time" content="2026-11-11T02:36:55.215Z">
+<meta property="article:author" content="擎天—射日">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://gaozhuoran2.github.io/img/cover/cover-3.png"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Direct Preference Optimization: Your Language Model is Secretly a Reward Model",
+  "url": "https://gaozhuoran2.github.io/2026/11/11/Direct-Preference-Optimization-Your-Language-Model-is-Secretly-a-Reward-Model/",
+  "image": "https://gaozhuoran2.github.io/img/cover/cover-3.png",
+  "datePublished": "2026-11-11T02:36:55.000Z",
+  "dateModified": "2026-11-11T02:36:55.215Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "擎天—射日",
+      "url": "https://gaozhuoran2.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/favicon.ico"><link rel="canonical" href="https://gaozhuoran2.github.io/2026/11/11/Direct-Preference-Optimization-Your-Language-Model-is-Secretly-a-Reward-Model/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css?v=5.5.4"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.1.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: {"path":"/search.xml","preload":false,"top_n_per_article":1,"unescape":false,"pagination":{"enable":false,"hitsPerPage":8},"languages":{"hits_empty":"未找到符合您查询的内容：${query}","hits_stats":"共找到 ${hits} 篇文章"}},
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":false},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: 'Direct Preference Optimization: Your Language Model is Secretly a Reward Model',
+  isHighlightShrink: false,
+  isToc: false,
+  pageType: 'post'
+}</script><link rel="stylesheet" href="/css/custom.css"><link rel="stylesheet" href="/css/pet.css?v=2"><meta name="generator" content="Hexo 8.1.1"><style>mjx-container[jax="SVG"] {
+  direction: ltr;
+}
+
+mjx-container[jax="SVG"] > svg {
+  overflow: visible;
+}
+
+mjx-container[jax="SVG"][display="true"] {
+  display: block;
+  text-align: center;
+  margin: 1em 0;
+}
+
+mjx-container[jax="SVG"][justify="left"] {
+  text-align: left;
+}
+
+mjx-container[jax="SVG"][justify="right"] {
+  text-align: right;
+}
+
+g[data-mml-node="merror"] > g {
+  fill: red;
+  stroke: red;
+}
+
+g[data-mml-node="merror"] > rect[data-background] {
+  fill: yellow;
+  stroke: none;
+}
+
+g[data-mml-node="mtable"] > line[data-line] {
+  stroke-width: 70px;
+  fill: none;
+}
+
+g[data-mml-node="mtable"] > rect[data-frame] {
+  stroke-width: 70px;
+  fill: none;
+}
+
+g[data-mml-node="mtable"] > .mjx-dashed {
+  stroke-dasharray: 140;
+}
+
+g[data-mml-node="mtable"] > .mjx-dotted {
+  stroke-linecap: round;
+  stroke-dasharray: 0,140;
+}
+
+g[data-mml-node="mtable"] > svg {
+  overflow: visible;
+}
+
+[jax="SVG"] mjx-tool {
+  display: inline-block;
+  position: relative;
+  width: 0;
+  height: 0;
+}
+
+[jax="SVG"] mjx-tool > mjx-tip {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+mjx-tool > mjx-tip {
+  display: inline-block;
+  padding: .2em;
+  border: 1px solid #888;
+  font-size: 70%;
+  background-color: #F8F8F8;
+  color: black;
+  box-shadow: 2px 2px 5px #AAAAAA;
+}
+
+g[data-mml-node="maction"][data-toggle] {
+  cursor: pointer;
+}
+
+mjx-status {
+  display: block;
+  position: fixed;
+  left: 1em;
+  bottom: 1em;
+  min-width: 25%;
+  padding: .2em .4em;
+  border: 1px solid #888;
+  font-size: 90%;
+  background-color: #F8F8F8;
+  color: black;
+}
+
+foreignObject[data-mjx-xml] {
+  font-family: initial;
+  line-height: normal;
+  overflow: visible;
+}
+
+.MathJax path {
+  stroke-width: 3;
+}
+
+mjx-container[display="true"] {
+  overflow: auto hidden;
+}
+
+mjx-container[display="true"] + br {
+  display: none;
+}
+</style></head><body><div class="bg-animation" id="web_bg" style="background-image: url(/img/bj.jpg);"></div><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">37</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">14</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">6</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 主页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 时间线</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/diary/"><i class="fa-fw fas fa-book"></i><span> 日记</span></a></div><div class="menus_item"><a class="site-page" href="/papers/"><i class="fa-fw fas fa-seedling"></i><span> 论文树</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/bj.jpg);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">gzr的小窝</span></a><a class="nav-page-title" href="/"><span class="site-name">Direct Preference Optimization: Your Language Model is Secretly a Reward Model</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div id="search-button"><span class="site-page social-icon search"><i class="fas fa-search fa-fw"></i><span> 搜索</span></span></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 主页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 时间线</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/diary/"><i class="fa-fw fas fa-book"></i><span> 日记</span></a></div><div class="menus_item"><a class="site-page" href="/papers/"><i class="fa-fw fas fa-seedling"></i><span> 论文树</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">Direct Preference Optimization: Your Language Model is Secretly a Reward Model</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-11-11T02:36:55.000Z" title="发表于 2026-11-11 10:36:55">2026-11-11</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-11-11T02:36:55.215Z" title="更新于 2026-11-11 10:36:55">2026-11-11</time></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-wordcount"><i class="far fa-file-word fa-fw post-meta-icon"></i><span class="post-meta-label">总字数:</span><span class="word-count">0</span><span class="post-meta-separator">|</span><i class="far fa-clock fa-fw post-meta-icon"></i><span class="post-meta-label">阅读时长:</span><span>1分钟</span></span><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"></article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://gaozhuoran2.github.io">擎天—射日</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://gaozhuoran2.github.io/2026/11/11/Direct-Preference-Optimization-Your-Language-Model-is-Secretly-a-Reward-Model/">https://gaozhuoran2.github.io/2026/11/11/Direct-Preference-Optimization-Your-Language-Model-is-Secretly-a-Reward-Model/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://gaozhuoran2.github.io" target="_blank">gzr的小窝</a>！</span></div></div><div class="tag_share"><div class="post-share"><div class="social-share" data-image="/img/cover/cover-3.png" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related" href="/2026/11/11/DPO%E8%AE%BA%E6%96%87%E5%85%A8%E6%96%87%E4%B8%AD%E6%96%87%E7%BF%BB%E8%AF%91/" title="DPO论文全文中文翻译 - 你的语言模型暗地里是一个奖励模型"><img class="cover" src="/img/cover/cover-1.png" onerror="onerror=null;src='/img/404.jpg'" alt="cover of previous post"><div class="info"><div class="info-1"><div class="info-item-1">上一篇</div><div class="info-item-2">DPO论文全文中文翻译 - 你的语言模型暗地里是一个奖励模型</div></div><div class="info-2"><div class="info-item-1">NeurIPS 2023 论文《Direct Preference Optimization: Your Language Model is Secretly a Reward Model》的完整中文翻译：摘要、正文、作者贡献与附录 A–D，公式以 MathJax 还原，图表位置附占位说明。</div></div></div></a><a class="pagination-related" href="/2026/11/09/AI%E7%AE%80%E5%8E%86%E8%AF%8A%E6%89%80%E4%BD%9C%E6%88%98%E6%89%8B%E5%86%8C/" title="AI简历诊所作战手册：五周从零到初赛提交的完整路线"><img class="cover" src="/img/cover/2.jpeg" onerror="onerror=null;src='/img/404.jpg'" alt="cover of next post"><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">AI简历诊所作战手册：五周从零到初赛提交的完整路线</div></div><div class="info-2"><div class="info-item-1">华为ICT大赛创新赛赛题1项目「AI简历诊所」的总路线图：产品闭环设计、五周七个里程碑、每一步的验收标准、奖励模型主线任务（数据/训练/指标）、三个兜底方案与初赛材料映射。</div></div></div></a></nav></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">擎天—射日</div><div class="author-info-description">擎天神光，最后耀世</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">37</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">14</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">6</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/gaozhuoran2"><i class="fab fa-github"></i><span>Follow Me</span></a></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">3599 浩东99 麟月99 轩秀99</div></div><div class="sticky_layout"><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/2026/11/13/agent%E5%AF%B9SimPO%E8%AE%BA%E6%96%87%E7%9A%84%E7%90%86%E8%A7%A3/" title="agent对SimPO论文的理解——工程视角：删掉参考模型+长度归一化，再讲margin与梯度背后的数学"><img src="/img/cover/9.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="agent对SimPO论文的理解——工程视角：删掉参考模型+长度归一化，再讲margin与梯度背后的数学"/></a><div class="content"><a class="title" href="/2026/11/13/agent%E5%AF%B9SimPO%E8%AE%BA%E6%96%87%E7%9A%84%E7%90%86%E8%A7%A3/" title="agent对SimPO论文的理解——工程视角：删掉参考模型+长度归一化，再讲margin与梯度背后的数学">agent对SimPO论文的理解——工程视角：删掉参考模型+长度归一化，再讲margin与梯度背后的数学</a><time datetime="2026-11-13T02:30:00.000Z" title="发表于 2026-11-13 10:30:00">2026-11-13</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/11/13/SimPO%E8%AE%BA%E6%96%87%E4%B8%AD%E6%96%87%E7%BF%BB%E8%AF%91/" title="SimPO论文中文翻译 - 免参考模型的简单偏好优化"><img src="/img/cover/6.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="SimPO论文中文翻译 - 免参考模型的简单偏好优化"/></a><div class="content"><a class="title" href="/2026/11/13/SimPO%E8%AE%BA%E6%96%87%E4%B8%AD%E6%96%87%E7%BF%BB%E8%AF%91/" title="SimPO论文中文翻译 - 免参考模型的简单偏好优化">SimPO论文中文翻译 - 免参考模型的简单偏好优化</a><time datetime="2026-11-13T01:00:00.000Z" title="发表于 2026-11-13 09:00:00">2026-11-13</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/11/12/IPO-DPO%E5%AF%B9%E7%85%A7%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%E5%88%86%E6%9E%90/" title="IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案"><img src="/img/cover/5.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案"/></a><div class="content"><a class="title" href="/2026/11/12/IPO-DPO%E5%AF%B9%E7%85%A7%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%E5%88%86%E6%9E%90/" title="IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案">IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案</a><time datetime="2026-11-12T12:00:00.000Z" title="发表于 2026-11-12 20:00:00">2026-11-12</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/11/12/%E6%96%B0%E6%9C%8D%E5%8A%A1%E5%99%A8%E7%8E%AF%E5%A2%83%E9%85%8D%E7%BD%AE%E4%B8%8EDPO-IPO%E8%BF%90%E8%A1%8C%E6%8C%87%E5%8D%97/" title="新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）"><img src="/img/cover/8.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）"/></a><div class="content"><a class="title" href="/2026/11/12/%E6%96%B0%E6%9C%8D%E5%8A%A1%E5%99%A8%E7%8E%AF%E5%A2%83%E9%85%8D%E7%BD%AE%E4%B8%8EDPO-IPO%E8%BF%90%E8%A1%8C%E6%8C%87%E5%8D%97/" title="新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）">新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）</a><time datetime="2026-11-12T07:30:00.000Z" title="发表于 2026-11-12 15:30:00">2026-11-12</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/11/12/%E5%A4%9A%E5%8F%8D%E9%A6%88%E6%95%B0%E6%8D%AE%E6%80%8E%E4%B9%88%E5%96%82%E7%BB%99DPO%E5%AE%B6%E6%97%8F%EF%BC%9A%E8%AF%84%E5%88%86%E3%80%81%E7%A4%BA%E8%8C%83%E3%80%81%E5%81%9C%E6%AD%A2%E4%BF%A1%E5%8F%B7%E7%9A%84%E8%BD%AC%E6%8D%A2%E6%8C%87%E5%8D%97/" title="多反馈数据怎么喂给DPO家族：评分、示范、停止信号的转换指南"><img src="/img/cover/5.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="多反馈数据怎么喂给DPO家族：评分、示范、停止信号的转换指南"/></a><div class="content"><a class="title" href="/2026/11/12/%E5%A4%9A%E5%8F%8D%E9%A6%88%E6%95%B0%E6%8D%AE%E6%80%8E%E4%B9%88%E5%96%82%E7%BB%99DPO%E5%AE%B6%E6%97%8F%EF%BC%9A%E8%AF%84%E5%88%86%E3%80%81%E7%A4%BA%E8%8C%83%E3%80%81%E5%81%9C%E6%AD%A2%E4%BF%A1%E5%8F%B7%E7%9A%84%E8%BD%AC%E6%8D%A2%E6%8C%87%E5%8D%97/" title="多反馈数据怎么喂给DPO家族：评分、示范、停止信号的转换指南">多反馈数据怎么喂给DPO家族：评分、示范、停止信号的转换指南</a><time datetime="2026-11-12T06:00:00.000Z" title="发表于 2026-11-12 14:00:00">2026-11-12</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2025 - 2026 By 擎天—射日</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.1</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.4</a></span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.4"></script><script src="/js/main.js?v=5.5.4"></script><div class="js-pjax"></div><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script><div id="local-search"><div class="search-dialog"><nav class="search-nav"><span class="search-dialog-title">搜索</span><i class="fas fa-spinner fa-pulse" id="loading-status" hidden="hidden"></i><button class="search-close-button"><i class="fas fa-times"></i></button></nav><div class="text-center" id="loading-database"><i class="fas fa-spinner fa-pulse"></i><span>  数据加载中</span></div><div class="local-search-input"><input placeholder="搜索文章" type="text"/></div><hr/><div id="local-search-results"></div><div class="ais-Pagination" id="local-search-pagination" style="display:none;"><ul class="ais-Pagination-list"></ul></div><div id="local-search-stats"></div></div><div id="search-mask"></div><script src="/js/search/local-search.js?v=5.5.4"></script></div></div></body></html>

@@ -1,0 +1,538 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>DPO相关论文清单与实验结果对照——把我的TRL+Qwen3-0.6B结果放进坐标系 | gzr的小窝</title><meta name="author" content="擎天—射日"><meta name="copyright" content="擎天—射日"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="把 TRL+Qwen3-0.6B+UltraFeedback 的 DPO 基线（loss 0.69→0.648、margin 0.016→0.126、accuracy 65.2%）放进论文坐标系：按&#39;同数据&#x2F;同模型&#x2F;同指标&#x2F;同框架&#39;四个轴整理了 20+ 篇 DPO 相关论文（官方 Qwen3、Zephyr、ORPO、IPO、KTO、SimPO、CGPO、贝叶斯奖励模型等），附每篇的模型、数据与已核">
+<meta property="og:type" content="article">
+<meta property="og:title" content="DPO相关论文清单与实验结果对照——把我的TRL+Qwen3-0.6B结果放进坐标系">
+<meta property="og:url" content="https://gaozhuoran2.github.io/2026/11/11/DPO%E7%9B%B8%E5%85%B3%E8%AE%BA%E6%96%87%E6%B8%85%E5%8D%95%E4%B8%8E%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%E5%AF%B9%E7%85%A7/index.html">
+<meta property="og:site_name" content="gzr的小窝">
+<meta property="og:description" content="把 TRL+Qwen3-0.6B+UltraFeedback 的 DPO 基线（loss 0.69→0.648、margin 0.016→0.126、accuracy 65.2%）放进论文坐标系：按&#39;同数据&#x2F;同模型&#x2F;同指标&#x2F;同框架&#39;四个轴整理了 20+ 篇 DPO 相关论文（官方 Qwen3、Zephyr、ORPO、IPO、KTO、SimPO、CGPO、贝叶斯奖励模型等），附每篇的模型、数据与已核">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://gaozhuoran2.github.io/img/cover/cover-3.png">
+<meta property="article:published_time" content="2026-11-11T15:30:00.000Z">
+<meta property="article:modified_time" content="2026-11-11T01:38:59.391Z">
+<meta property="article:author" content="擎天—射日">
+<meta property="article:tag" content="DPO">
+<meta property="article:tag" content="论文">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://gaozhuoran2.github.io/img/cover/cover-3.png"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "DPO相关论文清单与实验结果对照——把我的TRL+Qwen3-0.6B结果放进坐标系",
+  "url": "https://gaozhuoran2.github.io/2026/11/11/DPO%E7%9B%B8%E5%85%B3%E8%AE%BA%E6%96%87%E6%B8%85%E5%8D%95%E4%B8%8E%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%E5%AF%B9%E7%85%A7/",
+  "image": "https://gaozhuoran2.github.io/img/cover/cover-3.png",
+  "datePublished": "2026-11-11T15:30:00.000Z",
+  "dateModified": "2026-11-11T01:38:59.391Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "擎天—射日",
+      "url": "https://gaozhuoran2.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/favicon.ico"><link rel="canonical" href="https://gaozhuoran2.github.io/2026/11/11/DPO%E7%9B%B8%E5%85%B3%E8%AE%BA%E6%96%87%E6%B8%85%E5%8D%95%E4%B8%8E%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%E5%AF%B9%E7%85%A7/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css?v=5.5.4"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.1.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: {"path":"/search.xml","preload":false,"top_n_per_article":1,"unescape":false,"pagination":{"enable":false,"hitsPerPage":8},"languages":{"hits_empty":"未找到符合您查询的内容：${query}","hits_stats":"共找到 ${hits} 篇文章"}},
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":false},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: 'DPO相关论文清单与实验结果对照——把我的TRL+Qwen3-0.6B结果放进坐标系',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><link rel="stylesheet" href="/css/custom.css"><link rel="stylesheet" href="/css/pet.css?v=2"><meta name="generator" content="Hexo 8.1.1"><style>mjx-container[jax="SVG"] {
+  direction: ltr;
+}
+
+mjx-container[jax="SVG"] > svg {
+  overflow: visible;
+}
+
+mjx-container[jax="SVG"][display="true"] {
+  display: block;
+  text-align: center;
+  margin: 1em 0;
+}
+
+mjx-container[jax="SVG"][justify="left"] {
+  text-align: left;
+}
+
+mjx-container[jax="SVG"][justify="right"] {
+  text-align: right;
+}
+
+g[data-mml-node="merror"] > g {
+  fill: red;
+  stroke: red;
+}
+
+g[data-mml-node="merror"] > rect[data-background] {
+  fill: yellow;
+  stroke: none;
+}
+
+g[data-mml-node="mtable"] > line[data-line] {
+  stroke-width: 70px;
+  fill: none;
+}
+
+g[data-mml-node="mtable"] > rect[data-frame] {
+  stroke-width: 70px;
+  fill: none;
+}
+
+g[data-mml-node="mtable"] > .mjx-dashed {
+  stroke-dasharray: 140;
+}
+
+g[data-mml-node="mtable"] > .mjx-dotted {
+  stroke-linecap: round;
+  stroke-dasharray: 0,140;
+}
+
+g[data-mml-node="mtable"] > svg {
+  overflow: visible;
+}
+
+[jax="SVG"] mjx-tool {
+  display: inline-block;
+  position: relative;
+  width: 0;
+  height: 0;
+}
+
+[jax="SVG"] mjx-tool > mjx-tip {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+mjx-tool > mjx-tip {
+  display: inline-block;
+  padding: .2em;
+  border: 1px solid #888;
+  font-size: 70%;
+  background-color: #F8F8F8;
+  color: black;
+  box-shadow: 2px 2px 5px #AAAAAA;
+}
+
+g[data-mml-node="maction"][data-toggle] {
+  cursor: pointer;
+}
+
+mjx-status {
+  display: block;
+  position: fixed;
+  left: 1em;
+  bottom: 1em;
+  min-width: 25%;
+  padding: .2em .4em;
+  border: 1px solid #888;
+  font-size: 90%;
+  background-color: #F8F8F8;
+  color: black;
+}
+
+foreignObject[data-mjx-xml] {
+  font-family: initial;
+  line-height: normal;
+  overflow: visible;
+}
+
+.MathJax path {
+  stroke-width: 3;
+}
+
+mjx-container[display="true"] {
+  overflow: auto hidden;
+}
+
+mjx-container[display="true"] + br {
+  display: none;
+}
+</style></head><body><div class="bg-animation" id="web_bg" style="background-image: url(/img/bj.jpg);"></div><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">37</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">14</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">6</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 主页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 时间线</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/diary/"><i class="fa-fw fas fa-book"></i><span> 日记</span></a></div><div class="menus_item"><a class="site-page" href="/papers/"><i class="fa-fw fas fa-seedling"></i><span> 论文树</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/bj.jpg);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">gzr的小窝</span></a><a class="nav-page-title" href="/"><span class="site-name">DPO相关论文清单与实验结果对照——把我的TRL+Qwen3-0.6B结果放进坐标系</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div id="search-button"><span class="site-page social-icon search"><i class="fas fa-search fa-fw"></i><span> 搜索</span></span></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 主页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 时间线</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/diary/"><i class="fa-fw fas fa-book"></i><span> 日记</span></a></div><div class="menus_item"><a class="site-page" href="/papers/"><i class="fa-fw fas fa-seedling"></i><span> 论文树</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">DPO相关论文清单与实验结果对照——把我的TRL+Qwen3-0.6B结果放进坐标系</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-11-11T15:30:00.000Z" title="发表于 2026-11-11 23:30:00">2026-11-11</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-11-11T01:38:59.391Z" title="更新于 2026-11-11 09:38:59">2026-11-11</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/%E8%AE%BA%E6%96%87%E5%AD%A6%E4%B9%A0/">论文学习</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-wordcount"><i class="far fa-file-word fa-fw post-meta-icon"></i><span class="post-meta-label">总字数:</span><span class="word-count">4.3k</span><span class="post-meta-separator">|</span><i class="far fa-clock fa-fw post-meta-icon"></i><span class="post-meta-label">阅读时长:</span><span>15分钟</span></span><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><blockquote>
+<p><strong>配套阅读</strong>：本文是”论文检索 + 结果对照”版。我的基线复现记录见《<a href="/2026/11/07/DPO%E5%9F%BA%E7%BA%BF%E5%A4%8D%E7%8E%B0%E6%8A%A5%E5%91%8A%EF%BC%9A%E4%BB%BB%E5%8A%A1%E8%A7%A3%E8%AF%BB%E3%80%81%E8%BF%90%E8%A1%8C%E6%AD%A5%E9%AA%A4%E4%B8%8E%E7%BB%93%E6%9E%9C%E5%88%86%E6%9E%90/">DPO基线复现报告：任务解读、运行步骤与结果分析</a>》；DPO 原论文的翻译与工程讲解见《<a href="/2026/11/11/DPO%E8%AE%BA%E6%96%87%E5%85%A8%E6%96%87%E4%B8%AD%E6%96%87%E7%BF%BB%E8%AF%91/">DPO论文全文中文翻译——你的语言模型暗地里是一个奖励模型</a>》与《<a href="/2026/11/11/agent%E5%AF%B9DPO%E8%AE%BA%E6%96%87%E7%9A%84%E7%90%86%E8%A7%A3/">agent对DPO论文的理解——工程视角</a>》。</p>
+<p><strong>说明</strong>：本文所有论文的 arXiv 编号与关键数字都经 arXiv 页面/API 核实过（2026-11-11 检索）；带 ⚠️ 的速查表条目只给了方向，编号建议按标题在 arXiv 复核后再引用。</p>
+</blockquote>
+<hr>
+<h1 id="0-先立靶子：我的基线长什么样"><a href="#0-先立靶子：我的基线长什么样" class="headerlink" title="0. 先立靶子：我的基线长什么样"></a>0. 先立靶子：我的基线长什么样</h1><table>
+<thead>
+<tr>
+<th>项目</th>
+<th>我的实验</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>框架</td>
+<td>Hugging Face TRL（<code>DPOTrainer</code> + <code>DPOConfig</code>）</td>
+</tr>
+<tr>
+<td>模型</td>
+<td>Qwen/Qwen3-0.6B（28 层、Q 头 16 / KV 头 8、tied embedding、32K 上下文，Apache 2.0）全参微调</td>
+</tr>
+<tr>
+<td>数据</td>
+<td><code>trl-lib/ultrafeedback_binarized</code>，train[:1000]，8:2 切 800 训练 / 200 验证</td>
+</tr>
+<tr>
+<td>超参</td>
+<td>β=0.1，lr=1e-6（线性 warmup），有效 batch=8，max_length=512，1 epoch，bf16，gradient checkpointing</td>
+</tr>
+<tr>
+<td>规模</td>
+<td>94 个更新步，238 秒，单卡 A6000</td>
+</tr>
+<tr>
+<td>结果</td>
+<td>loss 0.69→0.648；margin 0.016→0.126；accuracy 62.5%→65.2%</td>
+</tr>
+</tbody></table>
+<h1 id="1-四个”对应轴”：怎么把论文结果放进我的坐标系"><a href="#1-四个”对应轴”：怎么把论文结果放进我的坐标系" class="headerlink" title="1. 四个”对应轴”：怎么把论文结果放进我的坐标系"></a>1. 四个”对应轴”：怎么把论文结果放进我的坐标系</h1><p>找论文不是为了”读一遍”，是为了能<strong>把我的三个数（loss/margin/accuracy）和别人对表</strong>。四个对齐轴：</p>
+<table>
+<thead>
+<tr>
+<th>轴</th>
+<th>我的实验</th>
+<th>能对上的论文群</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>① 同数据</td>
+<td>UltraFeedback 二值化偏好</td>
+<td>Zephyr、ORPO、Tulu 系、SimPO 等——它们全用 UltraFeedback</td>
+</tr>
+<tr>
+<td>② 同模型</td>
+<td>Qwen3-0.6B</td>
+<td>Qwen3 技术报告（官方自己给 0.6B 做 SFT+DPO）</td>
+</tr>
+<tr>
+<td>③ 同指标</td>
+<td>loss / margin / accuracy</td>
+<td>DPO 原论文（隐式奖励 margin）、SimPO（margin 分析）、IPO 与批评文献（loss 曲线的陷阱）</td>
+</tr>
+<tr>
+<td>④ 同框架</td>
+<td>TRL</td>
+<td>Zephyr 就是用 TRL 产出的 7B 里程碑，代码级可比</td>
+</tr>
+</tbody></table>
+<h1 id="2-第一梯队：最直接可对的三篇"><a href="#2-第一梯队：最直接可对的三篇" class="headerlink" title="2. 第一梯队：最直接可对的三篇"></a>2. 第一梯队：最直接可对的三篇</h1><h2 id="2-1-Qwen3-Technical-Report（官方自己怎么-DPO-0-6B）"><a href="#2-1-Qwen3-Technical-Report（官方自己怎么-DPO-0-6B）" class="headerlink" title="2.1 Qwen3 Technical Report（官方自己怎么 DPO 0.6B）"></a>2.1 Qwen3 Technical Report（官方自己怎么 DPO 0.6B）</h2><ul>
+<li><strong>arXiv:2505.09388</strong>（Qwen Team，2025）</li>
+<li><strong>对应轴：②同模型</strong>。Qwen3 后训练分”Long-CoT 冷启动 → 推理 RL → 思考/非思考模式融合 → <strong>General RL</strong> → 强到弱蒸馏”五步；其中 <strong>General RL 阶段用的正是 DPO</strong>（技术报告第 4.4 节）。也就是说：<strong>官方把你的 Qwen3-0.6B 基座变成对话模型的最后一步，算法和你脚本里跑的完全一样</strong>，差别只在数据量和规模。</li>
+<li>0.6B 架构（官方博客）：28 层、16 个 Q 头 / 8 个 KV 头、embedding 共享、32K 上下文——复现报告里可以引用，说明基座规格。</li>
+<li><strong>对照点</strong>：官方 0.6B 后训练版就是你脚本的”终极形态”；建议下载官方 instruct 版用同一份 UltraFeedback 验证集跑一遍你的评估口径，看 65.2% 与官方产物的差距 = 你的”数据量差距”。</li>
+</ul>
+<h2 id="2-2-Zephyr：Direct-Distillation-of-LM-Alignment（dDPO-UltraFeedback）"><a href="#2-2-Zephyr：Direct-Distillation-of-LM-Alignment（dDPO-UltraFeedback）" class="headerlink" title="2.2 Zephyr：Direct Distillation of LM Alignment（dDPO + UltraFeedback）"></a>2.2 Zephyr：Direct Distillation of LM Alignment（dDPO + UltraFeedback）</h2><ul>
+<li><strong>arXiv:2310.16944</strong>（Tunstall et al.，Hugging Face，2023）</li>
+<li><strong>对应轴：①同数据 + ④同框架</strong>。流程 = dSFT（UltraChat 对话数据）→ <strong>dDPO（UltraFeedback 二值化偏好，约 6 万条，1 个 epoch，TRL 框架）</strong>，全程无人工标注、微调中不采样、只花几小时。<strong>它就是”TRL + UltraFeedback 跑 DPO”这条路的祖师爷</strong>，你的脚本是它的 0.6B 迷你版。</li>
+<li><strong>已核实的结果</strong>：MT-Bench 7.34（7B 级当时 SOTA），<strong>超过 Llama2-Chat-70B</strong>（摘要原文）；AlpacaEval 胜率 90.60%（相对 text-davinci-003）。</li>
+<li><strong>对照点</strong>：Zephyr 证明”同框架同数据、只是换成 7B 模型 + 6 万条数据”能做出当年最强 7B——你的 1000 条 × 0.6B 是它的 1/60 规模探针。想对齐它的可信度，把 <code>train[:1000]</code> 换成全量 UltraFeedback 重跑即可。</li>
+</ul>
+<h2 id="2-3-ORPO：Monolithic-Preference-Optimization（不用参考模型、直接对比-125M→7B）"><a href="#2-3-ORPO：Monolithic-Preference-Optimization（不用参考模型、直接对比-125M→7B）" class="headerlink" title="2.3 ORPO：Monolithic Preference Optimization（不用参考模型、直接对比 125M→7B）"></a>2.3 ORPO：Monolithic Preference Optimization（不用参考模型、直接对比 125M→7B）</h2><ul>
+<li><strong>arXiv:2403.07691</strong>（Hong, Lee, Thorne，2024）</li>
+<li><strong>对应轴：①同数据 + ③同指标（间接）</strong>。把 SFT 和偏好对齐<strong>合并成一个阶段</strong>：在 SFT 交叉熵之外加一个”odds ratio”项惩罚不被偏好的回答，<strong>不需要参考模型</strong>（省一半显存——你的 4 次前向变 2 次）。</li>
+<li><strong>已核实的结果</strong>：只在 UltraFeedback 上微调 Phi-2（2.7B）/ Llama-2（7B）/ Mistral（7B），<strong>超过 7B/13B 级 SOTA</strong>：AlpacaEval 2.0 最高 12.20%、IFEval 66.19%、MT-Bench 7.32；缩放实验从 <strong>125M 一路做到 7B</strong>（和你 0.6B 档位最近的一篇）。</li>
+<li><strong>对照点</strong>：你是”标准 DPO”对照组，ORPO 是”去掉 ref 模型”的变体对照组——同一份 UltraFeedback 数据上跑 ORPO，指标（loss 口径不同，但 accuracy/margin 可比）直接互相对表。</li>
+</ul>
+<h1 id="3-第二梯队：改-DPO-损失的那批（老师第二阶段”自定义-Loss”的直接素材）"><a href="#3-第二梯队：改-DPO-损失的那批（老师第二阶段”自定义-Loss”的直接素材）" class="headerlink" title="3. 第二梯队：改 DPO 损失的那批（老师第二阶段”自定义 Loss”的直接素材）"></a>3. 第二梯队：改 DPO 损失的那批（老师第二阶段”自定义 Loss”的直接素材）</h1><p>这一批和你的研究关系最近——老师第二阶段要在 TRL 里自定义 Loss 做 IPO、Conservative DPO、Bayesian DPO，下面的每一篇都对应一个”可以抄的损失函数”。</p>
+<h2 id="3-1-IPO：ΨPO-框架（DPO-过拟合的解药）"><a href="#3-1-IPO：ΨPO-框架（DPO-过拟合的解药）" class="headerlink" title="3.1 IPO：ΨPO 框架（DPO 过拟合的解药）"></a>3.1 IPO：ΨPO 框架（DPO 过拟合的解药）</h2><ul>
+<li><strong>arXiv:2310.12036</strong>（Azar et al.，Google DeepMind，2023）</li>
+<li><strong>核心</strong>：提出统一框架 ΨPO（RLHF 与 DPO 都是特例）；指出 DPO 的两个隐患——<strong>弱正则化导致过拟合</strong>（”数据集里的偏好被完全记住，未见过样本上会翻车”）和<strong>BT 点式奖励近似不合理</strong>。IPO = 取 Ψ 为恒等映射，损失是把”偏好概率比”做<strong>平方</strong>而非 sigmoid 对数。</li>
+<li><strong>实验结果</strong>：论文本身是”理论 + 玩具 bandit 示例”（论文自己说大规模 LM 实验留待后续），但 <strong>TRL 已内置 <code>IPOConfig</code></strong>，社区在 TL;DR/Anthropic HH 上的对比普遍显示 IPO 胜率曲线比 DPO 稳（不随步数掉）。</li>
+<li><strong>对照点</strong>：老师点名要做 IPO。你的 DPO 基线 loss 0.648 是否”过拟合 800 条”？跑同配置 IPO 对比 accuracy/margin 就能回答。<strong>IPO 的 loss 数值不再是 -logσ，别和 DPO 的 0.648 直接比大小，要比 accuracy 和胜率。</strong></li>
+</ul>
+<h2 id="3-2-KTO：前景理论版（不要偏好对，只要”好-坏”标签）"><a href="#3-2-KTO：前景理论版（不要偏好对，只要”好-坏”标签）" class="headerlink" title="3.2 KTO：前景理论版（不要偏好对，只要”好/坏”标签）"></a>3.2 KTO：前景理论版（不要偏好对，只要”好/坏”标签）</h2><ul>
+<li><strong>arXiv:2402.01306</strong>（Ethayarajh et al.，ICML 2024）</li>
+<li><strong>核心</strong>：从 Kahneman-Tversky 前景理论出发，提出”human-aware losses（HALOs）”框架，论证 DPO 等的成功部分来自模拟人类效用偏置；KTO 只用一个二值信号（desirable/undesirable）就能对齐，<strong>不要求每个提示都有成对偏好</strong>——数据收集成本低一档。</li>
+<li><strong>已核实的结果</strong>：1B–30B 尺度上匹配或超过偏好方法（DPO 等）。</li>
+<li><strong>对照点</strong>：如果你手里有”只有好/坏标签、没有配对”的数据（很多真实数据就是），KTO 是唯一能跑的选项；TRL 有 <code>KTOConfig</code> 直接开箱。</li>
+</ul>
+<h2 id="3-3-SimPO：免参考模型-目标-margin（和你-margin-指标直接相关）"><a href="#3-3-SimPO：免参考模型-目标-margin（和你-margin-指标直接相关）" class="headerlink" title="3.3 SimPO：免参考模型 + 目标 margin（和你 margin 指标直接相关）"></a>3.3 SimPO：免参考模型 + 目标 margin（和你 margin 指标直接相关）</h2><ul>
+<li><strong>arXiv:2405.14734</strong>（Meng, Xia, Chen，Princeton，NeurIPS 2024）</li>
+<li><strong>核心</strong>：用<strong>序列平均对数概率</strong>当隐式奖励（消除长度偏差）+ 一个<strong>目标奖励 margin γ</strong>（要求胜负奖励差至少到 γ，而不是只求为正）。<strong>不需要参考模型</strong>。</li>
+<li><strong>已核实的结果</strong>：Mistral/Llama3/Gemma2 基座与 instruct 上全面优于 DPO 及其变体：AlpacaEval 2 最高 <strong>+6.4 点</strong>、Arena-Hard <strong>+7.5 点</strong>；最强模型 Gemma-2-9B-it：AlpacaEval 2 LC <strong>72.4%</strong>、Arena-Hard <strong>59.1%</strong>，&lt;10B 组 Chatbot Arena 第一。</li>
+<li><strong>对照点（重点！）</strong>：论文分析了 DPO 隐式奖励的<strong>长度偏差</strong>——你的 margin 0.016→0.126 里有一部分是”chosen 平均更长”送的，不是真正的偏好。SimPO 的 margin 是 length-normalized 的，二者<strong>不能直接比大小</strong>；要对照，先在 TRL 里统计 chosen/rejected 的平均长度，再把你的 margin 换成”单位长度 margin”。它的目标 margin γ 也是”margin 应该多大才健康”的第一篇正式回答。</li>
+</ul>
+<h2 id="3-4-CGPO-Mixture-of-Judges：多目标下的”保守”解法"><a href="#3-4-CGPO-Mixture-of-Judges：多目标下的”保守”解法" class="headerlink" title="3.4 CGPO / Mixture of Judges：多目标下的”保守”解法"></a>3.4 CGPO / Mixture of Judges：多目标下的”保守”解法</h2><ul>
+<li><strong>arXiv:2409.20370</strong>（Xu et al.，Meta，2024）</li>
+<li><strong>核心</strong>：多目标 RLHF 中靠”多评委混合 + 约束优化 + 分层”，<strong>检测并缓解 reward hacking</strong>，自动找到多目标帕累托最优，无需人工调权重。对应老师计划里的”Conservative DPO”思路。</li>
+<li><strong>已核实的结果</strong>：相比 PPO/DPO：AlpacaEval-2 <strong>+7.4%</strong>、Arena-Hard <strong>+12.5%</strong>，数学/代码领域持续领先；PPO 在代码榜上严重 reward hacking，CGPO 成功治理。</li>
+<li><strong>对照点</strong>：你的 0.6B 实验只有一个目标（偏好），但老师要做的”保守/悲观贝叶斯”本质也是”别让不确定的奖励被过度信任”——CGPO 是这条线上的最工业化的版本，读它的 MoJ 设计能给”贝叶斯 DPO 里不确定性怎么用”提供工程参考。</li>
+</ul>
+<h2 id="3-5-其他损失变体速查表-⚠️"><a href="#3-5-其他损失变体速查表-⚠️" class="headerlink" title="3.5 其他损失变体速查表 ⚠️"></a>3.5 其他损失变体速查表 ⚠️</h2><table>
+<thead>
+<tr>
+<th>论文</th>
+<th>一句话改动</th>
+<th>arXiv</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>RSO（统计拒绝采样优化）</td>
+<td>用统计拒绝采样构造偏好对 + hinge loss 变体</td>
+<td>2309.06657</td>
+</tr>
+<tr>
+<td>RRHF（排名响应对齐）</td>
+<td>对 K 个回答做排序损失，对齐人类排序</td>
+<td>2304.05302</td>
+</tr>
+<tr>
+<td>SLiC-HF</td>
+<td>序列似然校准 + 排序损失，早于 DPO 的免 RL 路线</td>
+<td>2305.10425</td>
+</tr>
+<tr>
+<td>SPPO（自博弈偏好优化）</td>
+<td>把 BT 的纳什均衡用自博弈逼近，胜率可解释</td>
+<td>2405.00675</td>
+</tr>
+<tr>
+<td>DPOP（DPO-Positive）</td>
+<td>防止 DPO 对 chosen 概率反而下降</td>
+<td>2404.12915</td>
+</tr>
+<tr>
+<td>TDPO（逐 token DPO）</td>
+<td>把序列级偏好拆成 token 级信用分配</td>
+<td>2404.04221</td>
+</tr>
+<tr>
+<td>f-DPO</td>
+<td>用 f-散度族推广 DPO 目标</td>
+<td>2309.16297</td>
+</tr>
+<tr>
+<td>CPO（对比偏好优化）</td>
+<td>只在 chosen 上 SFT 式训练，抑制 rejected</td>
+<td>2401.08417</td>
+</tr>
+<tr>
+<td>NCA（纳什对比学习）</td>
+<td>对比视角的纳什对齐目标</td>
+<td>2404.05218</td>
+</tr>
+<tr>
+<td>WARP</td>
+<td>加权平均多个奖励策略，抗过拟合</td>
+<td>2406.16768</td>
+</tr>
+<tr>
+<td>Step-DPO</td>
+<td>数学推理的逐步偏好优化</td>
+<td>2406.18629</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>⚠️ 上表 ID 为社区常用版本，正式引用前请按标题在 arXiv 复核。给老师选 Loss 时：<strong>优先 IPO / KTO / SimPO / DPOP</strong>——这四篇有理论动机、TRL 生态支持好、和”贝叶斯 DPO”的改造点（正则、margin、不确定性）距离最近。</p>
+</blockquote>
+<h1 id="4-第三梯队：DPO-的批评与对照研究（解释”loss-降了是不是就赢了”）"><a href="#4-第三梯队：DPO-的批评与对照研究（解释”loss-降了是不是就赢了”）" class="headerlink" title="4. 第三梯队：DPO 的批评与对照研究（解释”loss 降了是不是就赢了”）"></a>4. 第三梯队：DPO 的批评与对照研究（解释”loss 降了是不是就赢了”）</h1><p>这一批回答的是你汇报时老师可能问的问题：<strong>loss 从 0.69 降到 0.648，就能说”结果不错”吗？</strong></p>
+<h2 id="4-1-Is-DPO-Superior-to-PPO-（ICML-2024-的综合裁决）"><a href="#4-1-Is-DPO-Superior-to-PPO-（ICML-2024-的综合裁决）" class="headerlink" title="4.1 Is DPO Superior to PPO?（ICML 2024 的综合裁决）"></a>4.1 Is DPO Superior to PPO?（ICML 2024 的综合裁决）</h2><ul>
+<li><strong>arXiv:2404.10719</strong>（Xu et al.，ICML 2024）</li>
+<li><strong>核心</strong>：从理论与实验两方面指出 <strong>DPO 存在根本局限</strong>；同时剖析 PPO 为何在学术榜上表现差（实现与超参问题），并证明<strong>调好的 PPO 在对话到代码的全部测试台上反超所有对齐方法</strong>（含 DPO 系），在代码竞赛上 SOTA。开源 ReaLHF 框架。</li>
+<li><strong>对照点</strong>：你的任务不是选 PPO——但”DPO 有根本局限”这半句话要进汇报：<strong>DPO 的 loss 和 accuracy 只说明”模型学会了数据集里的偏好排序”，不等于”回答变好了”</strong>（下一条给理论证据）。</li>
+</ul>
+<h2 id="4-2-Towards-Analyzing-and-Understanding-the-Limitations-of-DPO"><a href="#4-2-Towards-Analyzing-and-Understanding-the-Limitations-of-DPO" class="headerlink" title="4.2 Towards Analyzing and Understanding the Limitations of DPO"></a>4.2 Towards Analyzing and Understanding the Limitations of DPO</h2><ul>
+<li><strong>arXiv:2404.04626</strong>（Feng et al.，2024）</li>
+<li><strong>核心</strong>：用场论方法分析 DPO 损失梯度场，给出理论结论：<strong>DPO 降低 dispreferred 概率的速度 &gt; 提升 preferred 概率的速度</strong>——训练大部分”功劳”在压坏回答，而不是抬好回答。</li>
+<li><strong>对照点（对你的日志直接可用）</strong>：TRL 日志里 <code>logps/chosen</code> 和 <code>logps/rejected</code> 是分开的！把这两条曲线画出来：如果 rejected 的 logp 跌得比 chosen 涨得快，就与这篇的理论吻合。<strong>你的 margin 0.016→0.126 里到底多少来自 chosen 涨、多少来自 rejected 跌，这组数据是回答”基线质量”的关键证据</strong>，汇报时配这张图。</li>
+</ul>
+<h2 id="4-3-Secrets-of-RLHF-in-LLMs-Part-I-PPO（PPO-侧镜子）"><a href="#4-3-Secrets-of-RLHF-in-LLMs-Part-I-PPO（PPO-侧镜子）" class="headerlink" title="4.3 Secrets of RLHF in LLMs Part I: PPO（PPO 侧镜子）"></a>4.3 Secrets of RLHF in LLMs Part I: PPO（PPO 侧镜子）</h2><ul>
+<li><strong>arXiv:2307.04964</strong>（Zheng et al.，2023）</li>
+<li><strong>核心</strong>：系统研究 PPO 的 reward 设计（KL 控制、advantage 归一化等），是对照”RLHF 有多难调”的经典。读它就知道 DPO 到底帮你绕开了多少 PPO 的坑——汇报”为什么选 DPO 当基线”时引用。</li>
+</ul>
+<h1 id="5-第四梯队：贝叶斯-不确定性（Bayesian-DPO-的地基）"><a href="#5-第四梯队：贝叶斯-不确定性（Bayesian-DPO-的地基）" class="headerlink" title="5. 第四梯队：贝叶斯/不确定性（Bayesian DPO 的地基）"></a>5. 第四梯队：贝叶斯/不确定性（Bayesian DPO 的地基）</h1><p>这是给老师第二阶段准备的阅读清单。共同问题：<strong>DPO 的隐式奖励 <mjx-container class="MathJax" jax="SVG" overflow="overflow"><svg style="vertical-align: -0.566ex;" xmlns="http://www.w3.org/2000/svg" width="1.958ex" height="2.434ex" role="img" focusable="false" viewBox="0 -826 865.6 1076"><g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)"><g data-mml-node="math" data-latex="\hat r_\theta=\beta\log(\pi_\theta/\pi_{\text{ref}})"><g data-mml-node="msub" data-latex="\hat r_\theta"><g data-mml-node="TeXAtom" data-latex="\hat r" data-mjx-texclass="ORD"><g data-mml-node="mover"><g data-mml-node="mi" data-latex="r"><path data-c="1D45F" d="M436 374C436 416 395 442 351 442C302 442 261 419 227 372C217 411 183 442 136 442C95 442 65 410 44 345C34 312 29 293 29 287C29 278 34 273 45 273C50 273 53 274 56 276C61 285 64 292 65 299C83 375 106 413 133 413C150 413 159 399 159 371C159 358 154 331 144 290L87 63C84 50 78 24 78 19C78-1 89-11 110-11C130-11 143-1 150 19L169 91C180 134 187 162 190 175L221 303C223 311 231 324 244 343C271 381 302 413 351 413C363 413 373 411 382 406C352 397 337 378 337 351C337 325 351 312 378 312C411 312 436 341 436 374Z"></path></g><g data-mml-node="mo" transform="translate(246.5,32) translate(-250 0)"><path data-c="2C6" d="M386 515L403 533L250 694L97 533L114 515L250 618Z"></path></g></g></g><g data-mml-node="mi" transform="translate(484,-150) scale(0.707)" data-latex="\theta"><path data-c="1D703" d="M164-11C209-11 256 16 302 70C382 163 455 335 455 498C455 539 448 582 434 625C416 678 382 705 333 705C288 705 243 678 196 624C116 532 42 360 42 196C42 94 75-11 164-11M332 675C365 675 382 637 382 560C382 517 372 452 352 367L155 367C180 460 204 529 229 574C266 641 301 675 332 675M145 327L341 327C322 246 299 181 274 132C235 57 199 19 164 19C131 19 115 58 115 135C115 185 125 249 145 327Z"></path></g></g></g></g></svg><mjx-break size="4"> </mjx-break><svg style="vertical-align: -0.566ex;" xmlns="http://www.w3.org/2000/svg" width="15.379ex" height="2.262ex" role="img" focusable="false" viewBox="0 -750 6797.6 1000"><g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)"><g data-mml-node="math" data-latex="\hat r_\theta=\beta\log(\pi_\theta/\pi_{\text{ref}})"><g data-mml-node="mo" data-latex="="><path data-c="3D" d="M698 367L80 367C64 367 56 359 56 344C56 329 64 321 80 321L698 321C714 321 722 329 722 344C722 356 711 367 698 367M698 179L80 179C64 179 56 171 56 156C56 141 64 133 80 133L698 133C714 133 722 141 722 156C722 169 711 179 698 179Z"></path></g><g data-mml-node="mi" data-latex="\beta" transform="translate(1055.8,0)"><path data-c="1D6FD" d="M427 706C298 706 212 553 182 432L30-178C30-189 35-194 44-194L49-194C56-194 61-191 62-184L126 74C148 16 191-13 255-13C317-13 374 6 425 45C496 98 532 167 532 250C532 317 509 367 463 400C520 435 556 480 569 534C572 547 574 560 574 571C574 654 507 706 427 706M306 399C311 402 329 403 358 403C365 403 371 402 378 401C368 399 359 398 350 398L332 398C321 398 312 398 306 399M148 138C148 154 150 170 154 186L213 426C240 534 312 675 426 675C483 675 511 646 511 589C511 575 509 559 504 540C490 484 464 444 425 421C403 429 381 433 359 433C315 433 270 432 270 396C270 389 273 383 278 379C287 372 310 368 349 368C374 368 399 372 422 380C449 358 463 324 463 278C463 253 459 224 451 193C428 103 360 17 256 17C188 17 148 68 148 138Z"></path></g><g data-mml-node="mi" data-latex="\log" transform="translate(1796.4,0)"><path data-c="6C" d="M144 3L255 0L255 39C219 39 197 40 190 44C183 48 180 60 180 79L180 694L33 683L33 645C68 645 90 642 97 636C104 630 108 616 108 593L108 79C108 60 105 48 98 44C91 40 69 39 33 39L33 0Z"></path><path data-c="6F" d="M249-11C311-11 363 11 406 55C449 99 471 152 471 214C471 277 450 332 408 378C366 424 313 448 250 448C187 448 135 424 92 378C49 332 28 277 28 214C28 152 49 99 92 55C135 11 188-11 249-11M250 21C202 21 166 42 141 85C125 113 117 159 117 222C117 283 125 327 140 355C164 398 200 419 249 419C296 419 332 398 357 357C374 329 382 284 382 222C382 106 348 21 250 21Z" transform="translate(278,0)"></path><path data-c="67" d="M431 453C393 453 358 438 326 408C296 431 262 442 223 442C137 442 59 378 59 294C59 252 74 218 104 192C85 168 75 141 75 110C75 72 88 43 113 24C71 10 28-26 28-77C28-120 56-154 111-178C153-197 199-206 249-206C300-206 347-197 389-178C444-154 471-120 471-75C471-22 449 17 405 42C359 67 308 70 234 70C190 70 166 70 161 71C133 75 113 102 113 133C113 148 117 162 126 174C154 155 186 145 223 145C309 145 386 209 386 293C386 332 373 364 347 389C372 412 399 423 428 423C423 418 420 410 420 400C420 378 431 367 453 367C474 367 485 378 485 401C485 432 461 453 431 453M223 411C277 411 304 372 304 294C304 215 277 175 223 175C168 175 141 214 141 293C141 372 168 411 223 411M164 4L222 4C274 4 316 1 348-6C391-15 412-39 412-77C412-109 392-134 352-153C321-168 287-175 250-175C214-175 180-168 148-153C107-134 87-109 87-77C87-35 123 4 164 4Z" transform="translate(778,0)"></path></g><g data-mml-node="mo" transform="translate(3074.4,0)"><path data-c="2061" d=""></path></g><g data-mml-node="mo" data-latex="(" transform="translate(3074.4,0)"><path data-c="28" d="M318-248C327-248 332-243 332-234C332-231 330-227 327-223C275-183 233-117 202-26C175 53 161 131 161 208L161 292C161 369 175 447 202 526C233 617 275 683 327 723C330 726 332 730 332 734C332 743 327 748 318 748C317 748 314 747 311 745C251 699 201 631 160 540C121 453 101 371 101 292L101 208C101 129 121 47 160-40C201-131 251-199 311-245C314-247 317-248 318-248Z"></path></g><g data-mml-node="msub" data-latex="\pi_\theta" transform="translate(3463.4,0)"><g data-mml-node="mi" data-latex="\pi"><path data-c="1D70B" d="M524 431L194 431C153 431 117 415 88 384C74 369 27 305 27 292C31 285 31 279 43 279C50 279 56 283 62 292C94 341 135 366 184 366L235 366C212 279 170 172 110 45C105 33 102 24 102 19C102-1 113-11 134-11C153-11 167 0 176 21C194 78 207 122 214 152L269 366L372 366C345 247 331 164 331 117C331 68 342-11 379-11C400-11 423 9 423 30C423 35 421 43 417 53C398 100 389 153 389 214C389 261 395 312 406 366L515 366C550 366 567 378 567 403C567 426 549 431 524 431Z"></path></g><g data-mml-node="mi" transform="translate(603,-150) scale(0.707)" data-latex="\theta"><path data-c="1D703" d="M164-11C209-11 256 16 302 70C382 163 455 335 455 498C455 539 448 582 434 625C416 678 382 705 333 705C288 705 243 678 196 624C116 532 42 360 42 196C42 94 75-11 164-11M332 675C365 675 382 637 382 560C382 517 372 452 352 367L155 367C180 460 204 529 229 574C266 641 301 675 332 675M145 327L341 327C322 246 299 181 274 132C235 57 199 19 164 19C131 19 115 58 115 135C115 185 125 249 145 327Z"></path></g></g><g data-mml-node="mo" data-latex="/" transform="translate(4448.1,0)"><path data-c="2F" d="M444 718C445 720 445 723 445 726C445 742 437 750 421 750C410 750 403 745 399 734L57-218C56-220 56-223 56-226C56-242 64-250 80-250C91-250 98-245 102-234Z"></path></g><g data-mml-node="msub" data-latex="\pi_{\text{ref}}" transform="translate(4948.1,0)"><g data-mml-node="mi" data-latex="\pi"><path data-c="1D70B" d="M524 431L194 431C153 431 117 415 88 384C74 369 27 305 27 292C31 285 31 279 43 279C50 279 56 283 62 292C94 341 135 366 184 366L235 366C212 279 170 172 110 45C105 33 102 24 102 19C102-1 113-11 134-11C153-11 167 0 176 21C194 78 207 122 214 152L269 366L372 366C345 247 331 164 331 117C331 68 342-11 379-11C400-11 423 9 423 30C423 35 421 43 417 53C398 100 389 153 389 214C389 261 395 312 406 366L515 366C550 366 567 378 567 403C567 426 549 431 524 431Z"></path></g><g data-mml-node="TeXAtom" transform="translate(603,-150) scale(0.707)" data-latex="{\text{ref}}" data-mjx-texclass="ORD"><g data-mml-node="mtext" data-latex="\text{ref}"><path data-c="72" d="M364 378C364 417 327 442 288 442C237 442 198 412 172 351L172 442L28 431L28 393C63 393 84 390 92 384C100 378 104 365 104 342L104 79C104 60 101 48 94 44C87 40 65 38 28 38L28 0L143 3C185 4 228 3 271 0L271 38L247 38C214 38 193 41 186 46C179 51 176 63 176 81L176 232C176 275 184 314 199 347C219 390 248 412 287 413C277 403 272 391 272 377C272 346 287 331 318 331C345 331 364 352 364 378Z"></path><path data-c="65" d="M415 251C415 366 348 448 236 448C176 448 126 425 85 378C47 334 28 281 28 220C28 157 49 104 91 58C133 12 185-11 247-11C304-11 348 9 378 48C403 81 415 105 415 121C415 131 409 136 398 136C390 136 385 131 382 120C360 54 317 21 253 21C208 21 173 42 146 85C127 116 118 163 117 227L387 227C409 227 415 229 415 251M326 349C337 316 342 284 342 255L118 255C121 321 138 366 168 389C193 409 215 419 236 419C281 419 311 396 326 349Z" transform="translate(392,0)"></path><path data-c="66" d="M265 705C176 705 110 633 110 544L110 434L33 434L33 396L110 396L110 79C110 60 107 48 100 44C93 40 71 39 34 39L34 0L149 3C191 4 234 3 277 0L277 39L253 39C220 39 199 41 192 46C185 51 182 63 182 81L182 396L294 396L294 434L179 434L179 545C179 605 210 675 265 675C273 675 280 674 287 672C272 664 264 650 264 631C264 600 279 584 310 584C341 584 357 600 357 632C357 677 310 705 265 705Z" transform="translate(836,0)"></path></g></g></g><g data-mml-node="mo" data-latex=")" transform="translate(6408.6,0)"><path data-c="29" d="M78-245C138-199 188-131 229-40C268 47 288 129 288 208L288 292C288 371 268 453 229 540C188 631 138 699 78 745C75 747 72 748 71 748C62 748 57 743 57 734C57 730 59 726 62 723C114 683 156 617 187 526C214 447 228 369 228 292L228 208C228 131 214 53 187-26C156-117 114-183 62-223C59-227 57-231 57-234C57-243 62-248 71-248C72-248 75-247 78-245Z"></path></g></g></g></svg></mjx-container> 是点估计，没有不确定性；当偏好数据带噪声（不同标注者、隐藏上下文）时，确定性 margin 会过度自信</strong>——这几篇各自给了一种”带不确定性的奖励”。</p>
+<h2 id="5-1-Bayesian-Reward-Models-for-LLM-Alignment（最贴题）"><a href="#5-1-Bayesian-Reward-Models-for-LLM-Alignment（最贴题）" class="headerlink" title="5.1 Bayesian Reward Models for LLM Alignment（最贴题）"></a>5.1 Bayesian Reward Models for LLM Alignment（最贴题）</h2><ul>
+<li><strong>arXiv:2402.13210</strong>（Yang, Robeyns, Coste, Shi, Wang, Bou-Ammar, Aitchison，2024）</li>
+<li><strong>核心</strong>：在 LoRA 权重上做 <strong>Laplace 近似</strong>训练贝叶斯奖励模型，离训练分布越远不确定性越高；用该不确定性<strong>缓解 Best-of-N 采样中的 reward overoptimization</strong>（即 BNRM 论文治的那个 reward hacking）。</li>
+<li><strong>对照点</strong>：这几乎就是”BNRM 的 DPO 前身”——Laplace 近似 × LoRA 是你能在 0.6B 上真跑出来的不确定性；把它的思想挪到 DPO 的 margin 上，就是 Bayesian DPO 的一个最省算力版本。</li>
+</ul>
+<h2 id="5-2-Distributional-Preference-Learning-DPL"><a href="#5-2-Distributional-Preference-Learning-DPL" class="headerlink" title="5.2 Distributional Preference Learning (DPL)"></a>5.2 Distributional Preference Learning (DPL)</h2><ul>
+<li><strong>arXiv:2312.08358</strong>（Siththaranjan, Laidlaw, Hadfield-Menell，ICLR 2024）</li>
+<li><strong>核心</strong>：证明 RLHF 隐式按 <strong>Borda count</strong> 聚合隐藏上下文，会出反直觉结果；提出 DPL：<strong>为每个回答估计分数分布</strong>而非点分数，更好地容纳标注者异质性；实验显示显著降低 LLM 聊天机器人的越狱脆弱性。</li>
+<li><strong>对照点</strong>：与 MAVRL（多反馈、标注者噪声）同一条脉络；老师把”分布分数”装进 DPO margin（<mjx-container class="MathJax" jax="SVG" overflow="overflow"><svg style="vertical-align: -0.566ex;" xmlns="http://www.w3.org/2000/svg" width="1.636ex" height="2.262ex" role="img" focusable="false" viewBox="0 -750 723 1000"><g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)"><g data-mml-node="math" data-latex="Z\sim q_\phi"><g data-mml-node="mi" data-latex="Z"><path data-c="1D44D" d="M720 653C722 662 723 668 723 670C723 679 718 683 707 683L277 683C252 683 249 680 243 660L189 483C187 478 186 472 185 467C188 459 190 453 201 453C206 453 212 457 218 465C239 530 267 577 302 604C337 631 389 644 457 644L609 644L62 33L58 13C58 4 64 0 75 0L516 0C542 0 545 2 551 23L621 242C622 246 625 253 625 257C625 267 619 272 608 272C601 272 594 263 588 244C566 176 539 126 506 94C471 59 413 42 333 42L173 42Z"></path></g></g></g></svg><mjx-break size="4"> </mjx-break><svg style="vertical-align: -0.667ex;" xmlns="http://www.w3.org/2000/svg" width="4.528ex" height="2.364ex" role="img" focusable="false" viewBox="0 -750 2001.2 1045"><g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)"><g data-mml-node="math" data-latex="Z\sim q_\phi"><g data-mml-node="mo" data-latex="\sim"><path data-c="223C" d="M597 143C674 166 714 235 717 350C717 361 712 366 701 366C691 366 686 361 685 351C684 308 675 275 657 251C637 224 592 194 548 194C518 194 486 207 453 233C434 248 418 261 406 271C335 333 274 364 222 364C207 364 192 362 177 357C92 332 59 262 56 150C56 139 61 134 72 134C82 134 87 139 88 149C89 192 98 225 116 249C135 275 182 306 225 306C255 306 287 293 320 267C339 252 355 239 367 229C438 167 499 136 551 136C566 136 582 138 597 143Z"></path></g><g data-mml-node="msub" data-latex="q_\phi" transform="translate(1050.8,0)"><g data-mml-node="mi" data-latex="q"><path data-c="1D45E" d="M372 377C352 420 321 442 280 442C215 442 158 409 109 342C63 280 40 216 40 149C40 62 90-13 173-13C209-13 245 4 282 38L241-126C238-141 229-150 215-153C210-154 197-155 174-155C168-156 164-156 162-156C153-157 148-165 148-179L148-183C151-190 157-194 165-194C184-194 244-191 263-191C282-191 345-194 364-194C378-194 385-186 385-170C385-160 375-155 356-155C338-155 313-156 313-144C313-140 314-133 317-123L452 427C452 436 447 441 438 441C420 441 382 391 372 377M340 373C349 352 354 338 354 329C354 328 353 322 351 313L327 216C308 144 299 107 298 105C279 70 224 16 176 16C137 16 117 46 117 105C117 151 148 263 162 300C181 347 225 412 280 412C307 412 327 399 340 373Z"></path></g><g data-mml-node="mi" transform="translate(479,-150) scale(0.707)" data-latex="\phi"><path data-c="1D719" d="M385 445C404 524 424 601 442 680L442 683C439 690 434 694 426 694C417 694 411 686 408 671L351 445C276 442 208 414 147 362C82 307 49 243 49 170C49 62 132-7 237-13C218-92 204-149 195-183C194-186 194-189 194-190C194-200 199-205 210-205C221-205 224-199 227-187L271-14C346-11 414 17 475 69C540 125 573 189 573 262C573 369 488 436 385 445M377 415C453 410 501 363 501 283C501 243 492 203 474 164C442 92 369 26 278 17M121 149C121 189 130 229 148 268C180 340 253 405 343 415L244 16C169 22 121 69 121 149Z"></path></g></g></g></g></svg></mjx-container> 采样进 <mjx-container class="MathJax" jax="SVG" overflow="overflow"><svg style="vertical-align: -0.025ex;" xmlns="http://www.w3.org/2000/svg" width="1.292ex" height="1ex" role="img" focusable="false" viewBox="0 -431 571 442"><g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)"><g data-mml-node="math" data-latex="\sigma"><g data-mml-node="mi" data-latex="\sigma"><path data-c="1D70E" d="M525 431L300 431C252 431 207 416 166 385C102 336 38 250 38 148C38 58 100-11 190-11C257-11 317 18 368 76C417 132 441 194 441 263C441 304 432 338 414 366L515 366C550 366 567 378 567 403C567 426 550 431 525 431M107 121C107 180 121 234 150 282C184 338 228 366 283 366C341 366 370 336 370 275C370 250 365 221 355 187C335 116 302 66 256 39C233 25 211 18 191 18C136 18 107 63 107 121Z"></path></g></g></g></svg></mjx-container>）的计划，数学上最接近的就是这篇。</li>
+</ul>
+<h2 id="5-3-Helping-or-Herding-（集成奖励模型的界限）"><a href="#5-3-Helping-or-Herding-（集成奖励模型的界限）" class="headerlink" title="5.3 Helping or Herding?（集成奖励模型的界限）"></a>5.3 Helping or Herding?（集成奖励模型的界限）</h2><ul>
+<li><strong>arXiv:2312.09244</strong>（Eisenstein et al.，DeepMind，COLM 2024）</li>
+<li><strong>核心</strong>：奖励模型集成<strong>能缓解但不能消除</strong> reward hacking——这是”悲观/保守”路线的实证边界，提醒贝叶斯 DPO 也要设预期。</li>
+<li><strong>对照点</strong>：如果老师的 Bayesian DPO 用”后验集成”实现，这篇是必须引的对标文献。</li>
+</ul>
+<h2 id="5-4-Reward-Robust-RLHF-in-LLMs"><a href="#5-4-Reward-Robust-RLHF-in-LLMs" class="headerlink" title="5.4 Reward-Robust RLHF in LLMs"></a>5.4 Reward-Robust RLHF in LLMs</h2><ul>
+<li><strong>arXiv:2409.15360</strong>（2024）</li>
+<li><strong>核心</strong>：针对奖励模型不稳定与不完美，提出 reward-robust RLHF 框架，目标是”奖励模型差一点，对齐也不崩”。</li>
+<li><strong>对照点</strong>：对应老师计划里的”Pessimistic Bayesian DPO”——悲观解在多篇论文里都有对应物（这篇 + CGPO），说明这个方向有共识。</li>
+</ul>
+<h2 id="5-5-Preference-Transformer（奖励不确定性的鼻祖）"><a href="#5-5-Preference-Transformer（奖励不确定性的鼻祖）" class="headerlink" title="5.5 Preference Transformer（奖励不确定性的鼻祖）"></a>5.5 Preference Transformer（奖励不确定性的鼻祖）</h2><ul>
+<li><strong>arXiv:2303.00957</strong>（Kim et al.，NeurIPS 2023）</li>
+<li><strong>核心</strong>：把奖励建模成<strong>随机变量</strong>，用 Transformer 输出奖励分布（均值+方差），通过 BT 模型引入不确定性——MAVRL/BNRM 那套”奖励是分布”的直接祖先。</li>
+<li><strong>对照点</strong>：你之前笔记里”<mjx-container class="MathJax" jax="SVG" overflow="overflow"><svg style="vertical-align: -0.566ex;" xmlns="http://www.w3.org/2000/svg" width="1.717ex" height="2.262ex" role="img" focusable="false" viewBox="0 -750 759 1000"><g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)"><g data-mml-node="math" data-latex="R=\mu+\sigma\varepsilon"><g data-mml-node="mi" data-latex="R"><path data-c="1D445" d="M739 531C739 582 713 621 662 649C621 672 572 683 517 683L235 683C212 683 202 682 202 659C202 652 205 647 211 646C221 645 229 644 234 644C264 643 281 641 286 640C291 639 294 636 294 631C294 629 293 623 290 613L158 82C153 60 143 46 128 41C121 39 103 38 72 38C50 38 41 37 41 15C41 4 47-1 59 0L183 3L309 0C325-1 333 8 333 23C333 33 322 38 301 38C261 38 241 43 241 52C241 52 242 54 244 68L308 327L423 327C492 327 527 298 527 241C527 232 522 210 513 174C502 132 497 104 497 89C497 13 556-22 632-22C660-22 687-9 714 16C741 41 755 68 755 96C755 106 750 111 739 111C732 111 726 106 723 95C712 64 698 41 682 28C666 15 651 8 636 8C613 8 601 27 601 64C601 88 604 125 611 176C614 197 615 212 615 223C615 276 587 315 531 339C625 362 739 429 739 531M609 616C629 603 639 581 639 550C639 530 635 507 626 480C599 398 531 357 422 357L316 357L379 610C384 631 392 642 403 643C408 644 428 644 463 644C528 644 566 642 609 616Z"></path></g></g></g></svg><mjx-break size="4"> </mjx-break><svg style="vertical-align: -0.566ex;" xmlns="http://www.w3.org/2000/svg" width="3.753ex" height="2.262ex" role="img" focusable="false" viewBox="0 -750 1658.8 1000"><g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)"><g data-mml-node="math" data-latex="R=\mu+\sigma\varepsilon"><g data-mml-node="mo" data-latex="="><path data-c="3D" d="M698 367L80 367C64 367 56 359 56 344C56 329 64 321 80 321L698 321C714 321 722 329 722 344C722 356 711 367 698 367M698 179L80 179C64 179 56 171 56 156C56 141 64 133 80 133L698 133C714 133 722 141 722 156C722 169 711 179 698 179Z"></path></g><g data-mml-node="mi" data-latex="\mu" transform="translate(1055.8,0)"><path data-c="1D707" d="M572 142C572 151 567 156 556 156C548 156 542 149 539 136C519 56 495 16 468 16C451 16 442 30 442 58C442 75 448 109 461 159L489 266C498 302 506 327 512 358L518 386C520 393 521 398 521 400C521 421 510 431 488 431C466 431 452 419 446 394L374 108C374 97 358 77 326 47C304 26 279 16 250 16C204 16 181 43 181 98C181 117 185 144 194 181L236 347C244 378 249 400 251 411C251 432 240 442 218 442C196 442 182 429 175 403L33-169C31-177 30-182 30-185C30-206 41-216 62-216C77-216 89-208 100-193C103-186 120-117 153 14C177-4 208-13 246-13C305-13 344 18 375 54C386 17 419-13 466-13C535-13 556 68 572 142Z"></path></g></g></g></svg><mjx-break size="3"> </mjx-break><svg style="vertical-align: -0.566ex;" xmlns="http://www.w3.org/2000/svg" width="4.609ex" height="2.262ex" role="img" focusable="false" viewBox="0 -750 2037.2 1000"><g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)"><g data-mml-node="math" data-latex="R=\mu+\sigma\varepsilon"><g data-mml-node="mo" data-latex="+"><path data-c="2B" d="M698 274L413 274L413 559C413 575 405 583 389 583C373 583 365 575 365 559L365 274L80 274C64 274 56 266 56 250C56 234 64 226 80 226L365 226L365-59C365-75 373-83 389-83C405-83 413-75 413-59L413 226L698 226C714 226 722 234 722 250C722 263 711 274 698 274Z"></path></g><g data-mml-node="mi" data-latex="\sigma" transform="translate(1000.2,0)"><path data-c="1D70E" d="M525 431L300 431C252 431 207 416 166 385C102 336 38 250 38 148C38 58 100-11 190-11C257-11 317 18 368 76C417 132 441 194 441 263C441 304 432 338 414 366L515 366C550 366 567 378 567 403C567 426 550 431 525 431M107 121C107 180 121 234 150 282C184 338 228 366 283 366C341 366 370 336 370 275C370 250 365 221 355 187C335 116 302 66 256 39C233 25 211 18 191 18C136 18 107 63 107 121Z"></path></g><g data-mml-node="mi" data-latex="\varepsilon" transform="translate(1571.2,0)"><path data-c="1D700" d="M429 393C429 405 416 418 388 432C360 446 330 453 299 453C250 453 202 441 157 418C103 390 76 353 76 308C76 282 88 259 112 239C71 214 26 165 26 106C26 24 104-22 190-22C239-22 280-11 313 10C356 37 378 62 378 83C378 92 373 97 363 97C358 97 354 94 350 88C325 44 286 31 199 31C176 31 154 33 134 37C97 44 59 71 59 112C59 161 105 204 143 222C165 213 193 209 227 209C282 209 310 221 310 244C310 264 285 274 235 274C201 274 171 268 144 256C120 269 108 286 108 308C108 339 132 364 179 381C214 394 251 400 289 400C322 400 352 391 377 373C387 366 394 363 399 363C414 363 429 378 429 393M235 245C246 245 256 244 266 242C256 240 243 239 227 239C214 239 202 239 193 240C206 243 220 245 235 245Z"></path></g></g></g></svg></mjx-container> 重参数化采样进 margin”的套路，最早的系统化版本就是这篇。</li>
+</ul>
+<h1 id="6-把我的三个指标”翻译”进论文语言"><a href="#6-把我的三个指标”翻译”进论文语言" class="headerlink" title="6. 把我的三个指标”翻译”进论文语言"></a>6. 把我的三个指标”翻译”进论文语言</h1><table>
+<thead>
+<tr>
+<th>我的数字</th>
+<th>论文里的对应物</th>
+<th>怎么对</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>loss 0.69→0.648</td>
+<td>DPO 原论文式 7 的 <mjx-container class="MathJax" jax="SVG" overflow="overflow"><svg style="vertical-align: -0.566ex;" xmlns="http://www.w3.org/2000/svg" width="7.578ex" height="2.262ex" role="img" focusable="false" viewBox="0 -750 3349.3 1000"><g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)"><g data-mml-node="math" data-latex="-\log\sigma(\cdot)"><g data-mml-node="mo" data-latex="-"><path data-c="2212" d="M698 270L80 270C64 270 56 263 56 250C56 237 64 230 80 230L698 230C714 230 722 237 722 250C722 262 710 270 698 270Z"></path></g><g data-mml-node="mi" data-latex="\log" transform="translate(944.7,0)"><path data-c="6C" d="M144 3L255 0L255 39C219 39 197 40 190 44C183 48 180 60 180 79L180 694L33 683L33 645C68 645 90 642 97 636C104 630 108 616 108 593L108 79C108 60 105 48 98 44C91 40 69 39 33 39L33 0Z"></path><path data-c="6F" d="M249-11C311-11 363 11 406 55C449 99 471 152 471 214C471 277 450 332 408 378C366 424 313 448 250 448C187 448 135 424 92 378C49 332 28 277 28 214C28 152 49 99 92 55C135 11 188-11 249-11M250 21C202 21 166 42 141 85C125 113 117 159 117 222C117 283 125 327 140 355C164 398 200 419 249 419C296 419 332 398 357 357C374 329 382 284 382 222C382 106 348 21 250 21Z" transform="translate(278,0)"></path><path data-c="67" d="M431 453C393 453 358 438 326 408C296 431 262 442 223 442C137 442 59 378 59 294C59 252 74 218 104 192C85 168 75 141 75 110C75 72 88 43 113 24C71 10 28-26 28-77C28-120 56-154 111-178C153-197 199-206 249-206C300-206 347-197 389-178C444-154 471-120 471-75C471-22 449 17 405 42C359 67 308 70 234 70C190 70 166 70 161 71C133 75 113 102 113 133C113 148 117 162 126 174C154 155 186 145 223 145C309 145 386 209 386 293C386 332 373 364 347 389C372 412 399 423 428 423C423 418 420 410 420 400C420 378 431 367 453 367C474 367 485 378 485 401C485 432 461 453 431 453M223 411C277 411 304 372 304 294C304 215 277 175 223 175C168 175 141 214 141 293C141 372 168 411 223 411M164 4L222 4C274 4 316 1 348-6C391-15 412-39 412-77C412-109 392-134 352-153C321-168 287-175 250-175C214-175 180-168 148-153C107-134 87-109 87-77C87-35 123 4 164 4Z" transform="translate(778,0)"></path></g><g data-mml-node="mo" transform="translate(2222.7,0)"><path data-c="2061" d=""></path></g><g data-mml-node="mi" data-latex="\sigma" transform="translate(2389.3,0)"><path data-c="1D70E" d="M525 431L300 431C252 431 207 416 166 385C102 336 38 250 38 148C38 58 100-11 190-11C257-11 317 18 368 76C417 132 441 194 441 263C441 304 432 338 414 366L515 366C550 366 567 378 567 403C567 426 550 431 525 431M107 121C107 180 121 234 150 282C184 338 228 366 283 366C341 366 370 336 370 275C370 250 365 221 355 187C335 116 302 66 256 39C233 25 211 18 191 18C136 18 107 63 107 121Z"></path></g><g data-mml-node="mo" data-latex="(" transform="translate(2960.3,0)"><path data-c="28" d="M318-248C327-248 332-243 332-234C332-231 330-227 327-223C275-183 233-117 202-26C175 53 161 131 161 208L161 292C161 369 175 447 202 526C233 617 275 683 327 723C330 726 332 730 332 734C332 743 327 748 318 748C317 748 314 747 311 745C251 699 201 631 160 540C121 453 101 371 101 292L101 208C101 129 121 47 160-40C201-131 251-199 311-245C314-247 317-248 318-248Z"></path></g></g></g></svg><mjx-break size="0"> </mjx-break><svg style="vertical-align: -0.566ex;" xmlns="http://www.w3.org/2000/svg" width="1.509ex" height="2.262ex" role="img" focusable="false" viewBox="0 -750 667 1000"><g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)"><g data-mml-node="math" data-latex="-\log\sigma(\cdot)"><g data-mml-node="mo" data-latex="\cdot"><path data-c="22C5" d="M192 250C192 279 168 303 139 303C110 303 86 279 86 250C86 221 110 197 139 197C168 197 192 221 192 250Z"></path></g><g data-mml-node="mo" data-latex=")" transform="translate(278,0)"><path data-c="29" d="M78-245C138-199 188-131 229-40C268 47 288 129 288 208L288 292C288 371 268 453 229 540C188 631 138 699 78 745C75 747 72 748 71 748C62 748 57 743 57 734C57 730 59 726 62 723C114 683 156 617 187 526C214 447 228 369 228 292L228 208C228 131 214 53 187-26C156-117 114-183 62-223C59-227 57-231 57-234C57-243 62-248 71-248C72-248 75-247 78-245Z"></path></g></g></g></svg></mjx-container>，起点 log2≈0.693 是”随机猜”基线（你 BNRM 笔记里早见过）</td>
+<td>对照 IPO/批评文献：<strong>loss 降 ≠ 质量涨</strong>。0.648 说明”排序任务在学”，但 94 步远没到 DPO 论文那种”loss 掉到 0.4 附近”的收敛区（你 BNRM 复现 0.7→0.4 就是参照）</td>
+</tr>
+<tr>
+<td>margin 0.016→0.126</td>
+<td>隐式奖励差 <mjx-container class="MathJax" jax="SVG" overflow="overflow"><svg style="vertical-align: -1.231ex;" xmlns="http://www.w3.org/2000/svg" width="11.499ex" height="3.594ex" role="img" focusable="false" viewBox="0 -1044.3 5082.7 1588.6"><g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)"><g data-mml-node="math" data-latex="\beta[\log\frac{\pi_\theta(y_w)}{\pi_{\text{ref}}(y_w)}-\log\frac{\pi_\theta(y_l)}{\pi_{\text{ref}}(y_l)}]"><g data-mml-node="mi" data-latex="\beta"><path data-c="1D6FD" d="M427 706C298 706 212 553 182 432L30-178C30-189 35-194 44-194L49-194C56-194 61-191 62-184L126 74C148 16 191-13 255-13C317-13 374 6 425 45C496 98 532 167 532 250C532 317 509 367 463 400C520 435 556 480 569 534C572 547 574 560 574 571C574 654 507 706 427 706M306 399C311 402 329 403 358 403C365 403 371 402 378 401C368 399 359 398 350 398L332 398C321 398 312 398 306 399M148 138C148 154 150 170 154 186L213 426C240 534 312 675 426 675C483 675 511 646 511 589C511 575 509 559 504 540C490 484 464 444 425 421C403 429 381 433 359 433C315 433 270 432 270 396C270 389 273 383 278 379C287 372 310 368 349 368C374 368 399 372 422 380C449 358 463 324 463 278C463 253 459 224 451 193C428 103 360 17 256 17C188 17 148 68 148 138Z"></path></g><g data-mml-node="mo" data-latex="[" transform="translate(574,0)"><path data-c="5B" d="M233-202L159-202L159 702L233 702C248 702 256 710 256 726C256 742 248 750 233 750L114 750L114-250L233-250C248-250 256-242 256-226C256-214 245-202 233-202Z"></path></g><g data-mml-node="mi" data-latex="\log" transform="translate(852,0)"><path data-c="6C" d="M144 3L255 0L255 39C219 39 197 40 190 44C183 48 180 60 180 79L180 694L33 683L33 645C68 645 90 642 97 636C104 630 108 616 108 593L108 79C108 60 105 48 98 44C91 40 69 39 33 39L33 0Z"></path><path data-c="6F" d="M249-11C311-11 363 11 406 55C449 99 471 152 471 214C471 277 450 332 408 378C366 424 313 448 250 448C187 448 135 424 92 378C49 332 28 277 28 214C28 152 49 99 92 55C135 11 188-11 249-11M250 21C202 21 166 42 141 85C125 113 117 159 117 222C117 283 125 327 140 355C164 398 200 419 249 419C296 419 332 398 357 357C374 329 382 284 382 222C382 106 348 21 250 21Z" transform="translate(278,0)"></path><path data-c="67" d="M431 453C393 453 358 438 326 408C296 431 262 442 223 442C137 442 59 378 59 294C59 252 74 218 104 192C85 168 75 141 75 110C75 72 88 43 113 24C71 10 28-26 28-77C28-120 56-154 111-178C153-197 199-206 249-206C300-206 347-197 389-178C444-154 471-120 471-75C471-22 449 17 405 42C359 67 308 70 234 70C190 70 166 70 161 71C133 75 113 102 113 133C113 148 117 162 126 174C154 155 186 145 223 145C309 145 386 209 386 293C386 332 373 364 347 389C372 412 399 423 428 423C423 418 420 410 420 400C420 378 431 367 453 367C474 367 485 378 485 401C485 432 461 453 431 453M223 411C277 411 304 372 304 294C304 215 277 175 223 175C168 175 141 214 141 293C141 372 168 411 223 411M164 4L222 4C274 4 316 1 348-6C391-15 412-39 412-77C412-109 392-134 352-153C321-168 287-175 250-175C214-175 180-168 148-153C107-134 87-109 87-77C87-35 123 4 164 4Z" transform="translate(778,0)"></path></g><g data-mml-node="mo" transform="translate(2130,0)"><path data-c="2061" d=""></path></g><g data-mml-node="mfrac" data-latex="\frac{\pi_\theta(y_w)}{\pi_{\text{ref}}(y_w)}" transform="translate(2296.7,0)"><g data-mml-node="mrow" transform="translate(388.2,515.4) scale(0.707)" data-latex="\pi_\theta(y_w)"><g data-mml-node="msub" data-latex="\pi_\theta"><g data-mml-node="mi" data-latex="\pi"><path data-c="1D70B" d="M524 431L194 431C153 431 117 415 88 384C74 369 27 305 27 292C31 285 31 279 43 279C50 279 56 283 62 292C94 341 135 366 184 366L235 366C212 279 170 172 110 45C105 33 102 24 102 19C102-1 113-11 134-11C153-11 167 0 176 21C194 78 207 122 214 152L269 366L372 366C345 247 331 164 331 117C331 68 342-11 379-11C400-11 423 9 423 30C423 35 421 43 417 53C398 100 389 153 389 214C389 261 395 312 406 366L515 366C550 366 567 378 567 403C567 426 549 431 524 431Z"></path></g><g data-mml-node="mi" transform="translate(603,-150) scale(0.707)" data-latex="\theta"><path data-c="1D703" d="M164-11C209-11 256 16 302 70C382 163 455 335 455 498C455 539 448 582 434 625C416 678 382 705 333 705C288 705 243 678 196 624C116 532 42 360 42 196C42 94 75-11 164-11M332 675C365 675 382 637 382 560C382 517 372 452 352 367L155 367C180 460 204 529 229 574C266 641 301 675 332 675M145 327L341 327C322 246 299 181 274 132C235 57 199 19 164 19C131 19 115 58 115 135C115 185 125 249 145 327Z"></path></g></g><g data-mml-node="mo" data-latex="(" transform="translate(984.6,0)"><path data-c="28" d="M318-248C327-248 332-243 332-234C332-231 330-227 327-223C275-183 233-117 202-26C175 53 161 131 161 208L161 292C161 369 175 447 202 526C233 617 275 683 327 723C330 726 332 730 332 734C332 743 327 748 318 748C317 748 314 747 311 745C251 699 201 631 160 540C121 453 101 371 101 292L101 208C101 129 121 47 160-40C201-131 251-199 311-245C314-247 317-248 318-248Z"></path></g><g data-mml-node="msub" data-latex="y_w" transform="translate(1373.6,0)"><g data-mml-node="mi" data-latex="y"><path data-c="1D466" d="M163 442C118 442 83 417 58 367C39 328 29 301 29 286C29 277 34 272 45 272C59 272 60 278 64 293C87 372 119 412 160 412C173 412 180 403 180 385C180 369 175 346 164 317C126 214 107 145 107 108C107 32 154-13 231-13C264-13 295-1 323 23C288-109 233-175 158-175C124-175 101-164 89-142C129-140 149-121 149-85C149-60 136-47 109-47C72-47 50-78 50-115C50-170 100-205 158-205C273-205 367-99 392-1L486 377C489 388 490 396 490 401C490 421 479 431 458 431C442 431 429 423 420 408C414 387 409 369 406 354L342 97C332 61 279 16 234 16C196 16 177 41 177 92C177 134 194 198 227 284C240 319 247 343 247 357C247 406 212 442 163 442Z"></path></g><g data-mml-node="mi" transform="translate(523,-150) scale(0.707)" data-latex="w"><path data-c="1D464" d="M590 391C590 382 595 372 606 362C629 340 641 313 641 281C641 264 635 237 623 198C586 78 539 18 482 18C435 18 412 45 412 100C412 119 416 142 423 171C441 243 460 314 477 387C479 394 480 398 480 401C480 421 469 431 447 431C427 431 414 421 407 401L367 245C352 187 341 167 341 115C341 107 341 101 342 98C319 45 290 18 255 18C205 18 180 47 180 104C180 141 197 204 231 293C242 323 248 344 248 357C248 406 212 442 163 442C118 442 84 417 59 367C39 328 29 301 29 287C29 278 34 273 45 273C58 273 60 279 64 293C88 373 120 413 160 413C174 413 181 403 181 384C181 369 175 347 164 317C127 220 108 154 108 117C108 32 165-11 252-11C294-11 328 10 355 53C375 10 416-11 479-11C541-11 590 30 625 112C648 164 691 302 691 369C691 384 690 394 689 399C685 418 666 442 644 442C618 442 590 417 590 391Z"></path></g></g><g data-mml-node="mo" data-latex=")" transform="translate(2452.9,0)"><path data-c="29" d="M78-245C138-199 188-131 229-40C268 47 288 129 288 208L288 292C288 371 268 453 229 540C188 631 138 699 78 745C75 747 72 748 71 748C62 748 57 743 57 734C57 730 59 726 62 723C114 683 156 617 187 526C214 447 228 369 228 292L228 208C228 131 214 53 187-26C156-117 114-183 62-223C59-227 57-231 57-234C57-243 62-248 71-248C72-248 75-247 78-245Z"></path></g></g><g data-mml-node="mrow" transform="translate(220,-368.9) scale(0.707)" data-latex="\pi_{\text{ref}}(y_w)"><g data-mml-node="msub" data-latex="\pi_{\text{ref}}"><g data-mml-node="mi" data-latex="\pi"><path data-c="1D70B" d="M524 431L194 431C153 431 117 415 88 384C74 369 27 305 27 292C31 285 31 279 43 279C50 279 56 283 62 292C94 341 135 366 184 366L235 366C212 279 170 172 110 45C105 33 102 24 102 19C102-1 113-11 134-11C153-11 167 0 176 21C194 78 207 122 214 152L269 366L372 366C345 247 331 164 331 117C331 68 342-11 379-11C400-11 423 9 423 30C423 35 421 43 417 53C398 100 389 153 389 214C389 261 395 312 406 366L515 366C550 366 567 378 567 403C567 426 549 431 524 431Z"></path></g><g data-mml-node="TeXAtom" transform="translate(603,-150) scale(0.707)" data-latex="{\text{ref}}" data-mjx-texclass="ORD"><g data-mml-node="mtext" data-latex="\text{ref}"><path data-c="72" d="M364 378C364 417 327 442 288 442C237 442 198 412 172 351L172 442L28 431L28 393C63 393 84 390 92 384C100 378 104 365 104 342L104 79C104 60 101 48 94 44C87 40 65 38 28 38L28 0L143 3C185 4 228 3 271 0L271 38L247 38C214 38 193 41 186 46C179 51 176 63 176 81L176 232C176 275 184 314 199 347C219 390 248 412 287 413C277 403 272 391 272 377C272 346 287 331 318 331C345 331 364 352 364 378Z"></path><path data-c="65" d="M415 251C415 366 348 448 236 448C176 448 126 425 85 378C47 334 28 281 28 220C28 157 49 104 91 58C133 12 185-11 247-11C304-11 348 9 378 48C403 81 415 105 415 121C415 131 409 136 398 136C390 136 385 131 382 120C360 54 317 21 253 21C208 21 173 42 146 85C127 116 118 163 117 227L387 227C409 227 415 229 415 251M326 349C337 316 342 284 342 255L118 255C121 321 138 366 168 389C193 409 215 419 236 419C281 419 311 396 326 349Z" transform="translate(392,0)"></path><path data-c="66" d="M265 705C176 705 110 633 110 544L110 434L33 434L33 396L110 396L110 79C110 60 107 48 100 44C93 40 71 39 34 39L34 0L149 3C191 4 234 3 277 0L277 39L253 39C220 39 199 41 192 46C185 51 182 63 182 81L182 396L294 396L294 434L179 434L179 545C179 605 210 675 265 675C273 675 280 674 287 672C272 664 264 650 264 631C264 600 279 584 310 584C341 584 357 600 357 632C357 677 310 705 265 705Z" transform="translate(836,0)"></path></g></g></g><g data-mml-node="mo" data-latex="(" transform="translate(1460.5,0)"><path data-c="28" d="M318-248C327-248 332-243 332-234C332-231 330-227 327-223C275-183 233-117 202-26C175 53 161 131 161 208L161 292C161 369 175 447 202 526C233 617 275 683 327 723C330 726 332 730 332 734C332 743 327 748 318 748C317 748 314 747 311 745C251 699 201 631 160 540C121 453 101 371 101 292L101 208C101 129 121 47 160-40C201-131 251-199 311-245C314-247 317-248 318-248Z"></path></g><g data-mml-node="msub" data-latex="y_w" transform="translate(1849.5,0)"><g data-mml-node="mi" data-latex="y"><path data-c="1D466" d="M163 442C118 442 83 417 58 367C39 328 29 301 29 286C29 277 34 272 45 272C59 272 60 278 64 293C87 372 119 412 160 412C173 412 180 403 180 385C180 369 175 346 164 317C126 214 107 145 107 108C107 32 154-13 231-13C264-13 295-1 323 23C288-109 233-175 158-175C124-175 101-164 89-142C129-140 149-121 149-85C149-60 136-47 109-47C72-47 50-78 50-115C50-170 100-205 158-205C273-205 367-99 392-1L486 377C489 388 490 396 490 401C490 421 479 431 458 431C442 431 429 423 420 408C414 387 409 369 406 354L342 97C332 61 279 16 234 16C196 16 177 41 177 92C177 134 194 198 227 284C240 319 247 343 247 357C247 406 212 442 163 442Z"></path></g><g data-mml-node="mi" transform="translate(523,-150) scale(0.707)" data-latex="w"><path data-c="1D464" d="M590 391C590 382 595 372 606 362C629 340 641 313 641 281C641 264 635 237 623 198C586 78 539 18 482 18C435 18 412 45 412 100C412 119 416 142 423 171C441 243 460 314 477 387C479 394 480 398 480 401C480 421 469 431 447 431C427 431 414 421 407 401L367 245C352 187 341 167 341 115C341 107 341 101 342 98C319 45 290 18 255 18C205 18 180 47 180 104C180 141 197 204 231 293C242 323 248 344 248 357C248 406 212 442 163 442C118 442 84 417 59 367C39 328 29 301 29 287C29 278 34 273 45 273C58 273 60 279 64 293C88 373 120 413 160 413C174 413 181 403 181 384C181 369 175 347 164 317C127 220 108 154 108 117C108 32 165-11 252-11C294-11 328 10 355 53C375 10 416-11 479-11C541-11 590 30 625 112C648 164 691 302 691 369C691 384 690 394 689 399C685 418 666 442 644 442C618 442 590 417 590 391Z"></path></g></g><g data-mml-node="mo" data-latex=")" transform="translate(2928.8,0)"><path data-c="29" d="M78-245C138-199 188-131 229-40C268 47 288 129 288 208L288 292C288 371 268 453 229 540C188 631 138 699 78 745C75 747 72 748 71 748C62 748 57 743 57 734C57 730 59 726 62 723C114 683 156 617 187 526C214 447 228 369 228 292L228 208C228 131 214 53 187-26C156-117 114-183 62-223C59-227 57-231 57-234C57-243 62-248 71-248C72-248 75-247 78-245Z"></path></g></g><rect width="2546" height="60" x="120" y="220"></rect></g></g></g></svg><mjx-break size="3"> </mjx-break><svg style="vertical-align: -1.231ex;" xmlns="http://www.w3.org/2000/svg" width="11.991ex" height="3.594ex" role="img" focusable="false" viewBox="0 -1044.3 5299.9 1588.6"><g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)"><g data-mml-node="math" data-latex="\beta[\log\frac{\pi_\theta(y_w)}{\pi_{\text{ref}}(y_w)}-\log\frac{\pi_\theta(y_l)}{\pi_{\text{ref}}(y_l)}]"><g data-mml-node="mo" data-latex="-"><path data-c="2212" d="M698 270L80 270C64 270 56 263 56 250C56 237 64 230 80 230L698 230C714 230 722 237 722 250C722 262 710 270 698 270Z"></path></g><g data-mml-node="mi" data-latex="\log" transform="translate(1000.2,0)"><path data-c="6C" d="M144 3L255 0L255 39C219 39 197 40 190 44C183 48 180 60 180 79L180 694L33 683L33 645C68 645 90 642 97 636C104 630 108 616 108 593L108 79C108 60 105 48 98 44C91 40 69 39 33 39L33 0Z"></path><path data-c="6F" d="M249-11C311-11 363 11 406 55C449 99 471 152 471 214C471 277 450 332 408 378C366 424 313 448 250 448C187 448 135 424 92 378C49 332 28 277 28 214C28 152 49 99 92 55C135 11 188-11 249-11M250 21C202 21 166 42 141 85C125 113 117 159 117 222C117 283 125 327 140 355C164 398 200 419 249 419C296 419 332 398 357 357C374 329 382 284 382 222C382 106 348 21 250 21Z" transform="translate(278,0)"></path><path data-c="67" d="M431 453C393 453 358 438 326 408C296 431 262 442 223 442C137 442 59 378 59 294C59 252 74 218 104 192C85 168 75 141 75 110C75 72 88 43 113 24C71 10 28-26 28-77C28-120 56-154 111-178C153-197 199-206 249-206C300-206 347-197 389-178C444-154 471-120 471-75C471-22 449 17 405 42C359 67 308 70 234 70C190 70 166 70 161 71C133 75 113 102 113 133C113 148 117 162 126 174C154 155 186 145 223 145C309 145 386 209 386 293C386 332 373 364 347 389C372 412 399 423 428 423C423 418 420 410 420 400C420 378 431 367 453 367C474 367 485 378 485 401C485 432 461 453 431 453M223 411C277 411 304 372 304 294C304 215 277 175 223 175C168 175 141 214 141 293C141 372 168 411 223 411M164 4L222 4C274 4 316 1 348-6C391-15 412-39 412-77C412-109 392-134 352-153C321-168 287-175 250-175C214-175 180-168 148-153C107-134 87-109 87-77C87-35 123 4 164 4Z" transform="translate(778,0)"></path></g><g data-mml-node="mo" transform="translate(2278.2,0)"><path data-c="2061" d=""></path></g><g data-mml-node="mfrac" data-latex="\frac{\pi_\theta(y_l)}{\pi_{\text{ref}}(y_l)}" transform="translate(2444.9,0)"><g data-mml-node="mrow" transform="translate(388.3,515.4) scale(0.707)" data-latex="\pi_\theta(y_l)"><g data-mml-node="msub" data-latex="\pi_\theta"><g data-mml-node="mi" data-latex="\pi"><path data-c="1D70B" d="M524 431L194 431C153 431 117 415 88 384C74 369 27 305 27 292C31 285 31 279 43 279C50 279 56 283 62 292C94 341 135 366 184 366L235 366C212 279 170 172 110 45C105 33 102 24 102 19C102-1 113-11 134-11C153-11 167 0 176 21C194 78 207 122 214 152L269 366L372 366C345 247 331 164 331 117C331 68 342-11 379-11C400-11 423 9 423 30C423 35 421 43 417 53C398 100 389 153 389 214C389 261 395 312 406 366L515 366C550 366 567 378 567 403C567 426 549 431 524 431Z"></path></g><g data-mml-node="mi" transform="translate(603,-150) scale(0.707)" data-latex="\theta"><path data-c="1D703" d="M164-11C209-11 256 16 302 70C382 163 455 335 455 498C455 539 448 582 434 625C416 678 382 705 333 705C288 705 243 678 196 624C116 532 42 360 42 196C42 94 75-11 164-11M332 675C365 675 382 637 382 560C382 517 372 452 352 367L155 367C180 460 204 529 229 574C266 641 301 675 332 675M145 327L341 327C322 246 299 181 274 132C235 57 199 19 164 19C131 19 115 58 115 135C115 185 125 249 145 327Z"></path></g></g><g data-mml-node="mo" data-latex="(" transform="translate(984.6,0)"><path data-c="28" d="M318-248C327-248 332-243 332-234C332-231 330-227 327-223C275-183 233-117 202-26C175 53 161 131 161 208L161 292C161 369 175 447 202 526C233 617 275 683 327 723C330 726 332 730 332 734C332 743 327 748 318 748C317 748 314 747 311 745C251 699 201 631 160 540C121 453 101 371 101 292L101 208C101 129 121 47 160-40C201-131 251-199 311-245C314-247 317-248 318-248Z"></path></g><g data-mml-node="msub" data-latex="y_l" transform="translate(1373.6,0)"><g data-mml-node="mi" data-latex="y"><path data-c="1D466" d="M163 442C118 442 83 417 58 367C39 328 29 301 29 286C29 277 34 272 45 272C59 272 60 278 64 293C87 372 119 412 160 412C173 412 180 403 180 385C180 369 175 346 164 317C126 214 107 145 107 108C107 32 154-13 231-13C264-13 295-1 323 23C288-109 233-175 158-175C124-175 101-164 89-142C129-140 149-121 149-85C149-60 136-47 109-47C72-47 50-78 50-115C50-170 100-205 158-205C273-205 367-99 392-1L486 377C489 388 490 396 490 401C490 421 479 431 458 431C442 431 429 423 420 408C414 387 409 369 406 354L342 97C332 61 279 16 234 16C196 16 177 41 177 92C177 134 194 198 227 284C240 319 247 343 247 357C247 406 212 442 163 442Z"></path></g><g data-mml-node="mi" transform="translate(523,-150) scale(0.707)" data-latex="l"><path data-c="1D459" d="M173 632L49 119C46 105 44 93 44 84C44 31 83-11 136-11C185-11 220 41 241 145C241 154 236 159 225 159C217 159 211 152 208 138C188 59 165 19 138 19C121 19 113 33 113 60C113 75 115 91 119 107L258 679L258 683C255 690 249 694 242 694C210 694 136 685 124 684C109 682 102 674 102 659C102 650 111 645 130 645C147 645 173 645 173 632Z"></path></g></g><g data-mml-node="mo" data-latex=")" transform="translate(2157.4,0)"><path data-c="29" d="M78-245C138-199 188-131 229-40C268 47 288 129 288 208L288 292C288 371 268 453 229 540C188 631 138 699 78 745C75 747 72 748 71 748C62 748 57 743 57 734C57 730 59 726 62 723C114 683 156 617 187 526C214 447 228 369 228 292L228 208C228 131 214 53 187-26C156-117 114-183 62-223C59-227 57-231 57-234C57-243 62-248 71-248C72-248 75-247 78-245Z"></path></g></g><g data-mml-node="mrow" transform="translate(220,-368.9) scale(0.707)" data-latex="\pi_{\text{ref}}(y_l)"><g data-mml-node="msub" data-latex="\pi_{\text{ref}}"><g data-mml-node="mi" data-latex="\pi"><path data-c="1D70B" d="M524 431L194 431C153 431 117 415 88 384C74 369 27 305 27 292C31 285 31 279 43 279C50 279 56 283 62 292C94 341 135 366 184 366L235 366C212 279 170 172 110 45C105 33 102 24 102 19C102-1 113-11 134-11C153-11 167 0 176 21C194 78 207 122 214 152L269 366L372 366C345 247 331 164 331 117C331 68 342-11 379-11C400-11 423 9 423 30C423 35 421 43 417 53C398 100 389 153 389 214C389 261 395 312 406 366L515 366C550 366 567 378 567 403C567 426 549 431 524 431Z"></path></g><g data-mml-node="TeXAtom" transform="translate(603,-150) scale(0.707)" data-latex="{\text{ref}}" data-mjx-texclass="ORD"><g data-mml-node="mtext" data-latex="\text{ref}"><path data-c="72" d="M364 378C364 417 327 442 288 442C237 442 198 412 172 351L172 442L28 431L28 393C63 393 84 390 92 384C100 378 104 365 104 342L104 79C104 60 101 48 94 44C87 40 65 38 28 38L28 0L143 3C185 4 228 3 271 0L271 38L247 38C214 38 193 41 186 46C179 51 176 63 176 81L176 232C176 275 184 314 199 347C219 390 248 412 287 413C277 403 272 391 272 377C272 346 287 331 318 331C345 331 364 352 364 378Z"></path><path data-c="65" d="M415 251C415 366 348 448 236 448C176 448 126 425 85 378C47 334 28 281 28 220C28 157 49 104 91 58C133 12 185-11 247-11C304-11 348 9 378 48C403 81 415 105 415 121C415 131 409 136 398 136C390 136 385 131 382 120C360 54 317 21 253 21C208 21 173 42 146 85C127 116 118 163 117 227L387 227C409 227 415 229 415 251M326 349C337 316 342 284 342 255L118 255C121 321 138 366 168 389C193 409 215 419 236 419C281 419 311 396 326 349Z" transform="translate(392,0)"></path><path data-c="66" d="M265 705C176 705 110 633 110 544L110 434L33 434L33 396L110 396L110 79C110 60 107 48 100 44C93 40 71 39 34 39L34 0L149 3C191 4 234 3 277 0L277 39L253 39C220 39 199 41 192 46C185 51 182 63 182 81L182 396L294 396L294 434L179 434L179 545C179 605 210 675 265 675C273 675 280 674 287 672C272 664 264 650 264 631C264 600 279 584 310 584C341 584 357 600 357 632C357 677 310 705 265 705Z" transform="translate(836,0)"></path></g></g></g><g data-mml-node="mo" data-latex="(" transform="translate(1460.5,0)"><path data-c="28" d="M318-248C327-248 332-243 332-234C332-231 330-227 327-223C275-183 233-117 202-26C175 53 161 131 161 208L161 292C161 369 175 447 202 526C233 617 275 683 327 723C330 726 332 730 332 734C332 743 327 748 318 748C317 748 314 747 311 745C251 699 201 631 160 540C121 453 101 371 101 292L101 208C101 129 121 47 160-40C201-131 251-199 311-245C314-247 317-248 318-248Z"></path></g><g data-mml-node="msub" data-latex="y_l" transform="translate(1849.5,0)"><g data-mml-node="mi" data-latex="y"><path data-c="1D466" d="M163 442C118 442 83 417 58 367C39 328 29 301 29 286C29 277 34 272 45 272C59 272 60 278 64 293C87 372 119 412 160 412C173 412 180 403 180 385C180 369 175 346 164 317C126 214 107 145 107 108C107 32 154-13 231-13C264-13 295-1 323 23C288-109 233-175 158-175C124-175 101-164 89-142C129-140 149-121 149-85C149-60 136-47 109-47C72-47 50-78 50-115C50-170 100-205 158-205C273-205 367-99 392-1L486 377C489 388 490 396 490 401C490 421 479 431 458 431C442 431 429 423 420 408C414 387 409 369 406 354L342 97C332 61 279 16 234 16C196 16 177 41 177 92C177 134 194 198 227 284C240 319 247 343 247 357C247 406 212 442 163 442Z"></path></g><g data-mml-node="mi" transform="translate(523,-150) scale(0.707)" data-latex="l"><path data-c="1D459" d="M173 632L49 119C46 105 44 93 44 84C44 31 83-11 136-11C185-11 220 41 241 145C241 154 236 159 225 159C217 159 211 152 208 138C188 59 165 19 138 19C121 19 113 33 113 60C113 75 115 91 119 107L258 679L258 683C255 690 249 694 242 694C210 694 136 685 124 684C109 682 102 674 102 659C102 650 111 645 130 645C147 645 173 645 173 632Z"></path></g></g><g data-mml-node="mo" data-latex=")" transform="translate(2633.2,0)"><path data-c="29" d="M78-245C138-199 188-131 229-40C268 47 288 129 288 208L288 292C288 371 268 453 229 540C188 631 138 699 78 745C75 747 72 748 71 748C62 748 57 743 57 734C57 730 59 726 62 723C114 683 156 617 187 526C214 447 228 369 228 292L228 208C228 131 214 53 187-26C156-117 114-183 62-223C59-227 57-231 57-234C57-243 62-248 71-248C72-248 75-247 78-245Z"></path></g></g><rect width="2337" height="60" x="120" y="220"></rect></g><g data-mml-node="mo" data-latex="]" transform="translate(5021.9,0)"><path data-c="5D" d="M45-250L164-250L164 750L45 750C30 750 22 742 22 726C22 710 30 702 45 702L119 702L119-202L45-202C30-202 22-210 22-226C22-242 30-250 45-250Z"></path></g></g></g></svg></mjx-container>；SimPO 里叫 length-normalized margin + 目标 γ</td>
+<td>①先查长度偏差（SimPO 的警告）；②把 margin 拆成 chosen 涨 + rejected 跌两部分（4.2 节理论预期后者更快）；③SimPO 的目标 margin γ 是”健康 margin”的参考量纲</td>
+</tr>
+<tr>
+<td>accuracy 62.5%→65.2%</td>
+<td>偏好排序准确率；DPO 论文附录 C.1 用”RM 验证集准确率”同一口径；你 BNRM 复现的 eval_BNBT_accuracy 71.96% 是同行指标</td>
+<td>65.2% 说明 800 条小样本下排序任务在学、但离 BNRM 的 71.96% 有距离——差距 = 数据量 + 模型容量，报告里如实写</td>
+</tr>
+<tr>
+<td>（缺）KL(πθ‖πref)</td>
+<td>DPO 论文图 2 的横轴，”奖励-KL 前沿”的左轴</td>
+<td><strong>建议补</strong>：TRL 日志有 <code>kl</code>（训练时参考 KL），加一行打印即可。没有 KL，你的结果进不了 DPO 论文那个”奖励-KL 前沿”坐标系</td>
+</tr>
+<tr>
+<td>（缺）胜率/能力分</td>
+<td>Zephyr 的 MT-Bench 7.34、ORPO 的 AlpacaEval 2 12.20% 等</td>
+<td>0.6B 档没有论文直接报这些分（ORPO 最小 125M 但只报缩放曲线），建议用 reward-bench 或自建 GPT-4 二选一胜率（提示词抄 DPO 论文附录 C.2）补一个”能力分”</td>
+</tr>
+</tbody></table>
+<p><strong>一句话结论</strong>：你的三个数在论文语言里都是”训练动态指标”（证明流程通、模型在学），不是”能力指标”（回答好不好）。汇报时把两类分开，老师才能拿它当贝叶斯 DPO 的对照组。</p>
+<h1 id="7-下一批实验清单（按性价比排序）"><a href="#7-下一批实验清单（按性价比排序）" class="headerlink" title="7. 下一批实验清单（按性价比排序）"></a>7. 下一批实验清单（按性价比排序）</h1><ol>
+<li><strong>补三个免费指标</strong>（改日志，不重训）：<code>logps/chosen</code>、<code>logps/rejected</code>、<code>kl</code>——立刻能画 4.2 节的”压坏 vs 抬好”图，并拿到 KL 进”奖励-KL 前沿”。</li>
+<li><strong>同脚本换 Loss 跑 IPO / KTO / SimPO</strong>（TRL 都有现成 config，老师第二阶段点名）：同数据同超参，直接出”变体 vs 基线”的 accuracy/margin 对照表。</li>
+<li><strong>扩数据到全量 UltraFeedback 重跑 DPO</strong>：对标 Zephyr 的”6 万条 × 1 epoch”规模结论（你已 1/60 规模探针），看 accuracy 是否朝 BNRM 的 71.96% 走。</li>
+<li><strong>加一个能力评估</strong>：reward-bench（ARC/GSM8K 偏好子集）或 GPT-4/DeepSeek 二选一胜率（用 DPO 论文附录 C.2 提示词），把”训练动态”升级成”能力分”。</li>
+<li><strong>给老师预读贝叶斯路线</strong>：按 5.1 Bayesian RM（Laplace×LoRA）→ 5.2 DPL（分布分数进 margin）→ 5.3 Helping or Herding（集成边界）的顺序精读，这三篇正好覆盖”Bayesian DPO / Conservative / Pessimistic”三个变体的数学来源。</li>
+</ol>
+<blockquote>
+<p>补一句方法论：第 3 节到第 5 节每篇论文都只挑了”和我的实验能对上”的信息写；真要引用时，数字以 arXiv 原文为准。清单里所有链接：<code>arxiv.org/abs/&lt;编号&gt;</code> 直接打开。</p>
+</blockquote>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://gaozhuoran2.github.io">擎天—射日</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://gaozhuoran2.github.io/2026/11/11/DPO%E7%9B%B8%E5%85%B3%E8%AE%BA%E6%96%87%E6%B8%85%E5%8D%95%E4%B8%8E%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%E5%AF%B9%E7%85%A7/">https://gaozhuoran2.github.io/2026/11/11/DPO%E7%9B%B8%E5%85%B3%E8%AE%BA%E6%96%87%E6%B8%85%E5%8D%95%E4%B8%8E%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%E5%AF%B9%E7%85%A7/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://gaozhuoran2.github.io" target="_blank">gzr的小窝</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/%E8%AE%BA%E6%96%87/">论文</a><a class="post-meta__tags" href="/tags/DPO/">DPO</a></div><div class="post-share"><div class="social-share" data-image="/img/cover/cover-3.png" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related" href="/2026/11/12/IPO%E8%AE%BA%E6%96%87%E4%B8%AD%E6%96%87%E7%BF%BB%E8%AF%91/" title="IPO论文中文翻译 - 一个理解人类偏好学习的统一理论范式（ΨPO）"><img class="cover" src="/img/cover/cover-4.png" onerror="onerror=null;src='/img/404.jpg'" alt="cover of previous post"><div class="info"><div class="info-1"><div class="info-item-1">上一篇</div><div class="info-item-2">IPO论文中文翻译 - 一个理解人类偏好学习的统一理论范式（ΨPO）</div></div><div class="info-2"><div class="info-item-1">IPO 论文《A General Theoretical Paradigm to Understand Learning from Human Preferences》（Google DeepMind，arXiv 2310.12036）的结构化中文翻译：摘要、正文与关键定理全译，公式以 MathJax 还原，附录证明按要点摘译，参考文献保留英文原文。</div></div></div></a><a class="pagination-related" href="/2026/11/11/agent%E5%AF%B9DPO%E8%AE%BA%E6%96%87%E7%9A%84%E7%90%86%E8%A7%A3/" title="agent对DPO论文的理解——工程视角：输入、架构、前向与损失函数全流程拆解"><img class="cover" src="/img/cover/cover-2.png" onerror="onerror=null;src='/img/404.jpg'" alt="cover of next post"><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">agent对DPO论文的理解——工程视角：输入、架构、前向与损失函数全流程拆解</div></div><div class="info-2"><div class="info-item-1">从'读-跑-读'三拍拆解 DPO：第一拍建立整体地图（流程、输入、架构、哪里是 Transformer、哪里是 MLP、输出头是什么），第二拍对着 TRL 日志逐行读代码（前向七步、损失三行、梯度三因子、超参、最小实现），第三拍精读数学（免 RL 的等价类论证）与批判性重读（loss 降≠赢）。</div></div></div></a></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span>相关推荐</span></div><div class="relatedPosts-list"><a class="pagination-related" href="/2026/11/12/IPO%E8%AE%BA%E6%96%87%E4%B8%AD%E6%96%87%E7%BF%BB%E8%AF%91/" title="IPO论文中文翻译 - 一个理解人类偏好学习的统一理论范式（ΨPO）"><img class="cover" src="/img/cover/cover-4.png" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-11-12</div><div class="info-item-2">IPO论文中文翻译 - 一个理解人类偏好学习的统一理论范式（ΨPO）</div></div><div class="info-2"><div class="info-item-1">IPO 论文《A General Theoretical Paradigm to Understand Learning from Human Preferences》（Google DeepMind，arXiv 2310.12036）的结构化中文翻译：摘要、正文与关键定理全译，公式以 MathJax 还原，附录证明按要点摘译，参考文献保留英文原文。</div></div></div></a><a class="pagination-related" href="/2026/11/12/%E6%96%B0%E6%9C%8D%E5%8A%A1%E5%99%A8%E7%8E%AF%E5%A2%83%E9%85%8D%E7%BD%AE%E4%B8%8EDPO-IPO%E8%BF%90%E8%A1%8C%E6%8C%87%E5%8D%97/" title="新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）"><img class="cover" src="/img/cover/8.jpeg" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-11-12</div><div class="info-item-2">新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）</div></div><div class="info-2"><div class="info-item-1">新服务器（自己的 Dell Precision 7920，RTX 3090×2）从零到跑通 DPO/IPO 的完整操作手册：建目录、conda 环境 rl、国内镜像、下载模型、两个完整训练脚本、冒烟测试、双卡并行——照着 1→9 步从上到下跑即可出结果，附显存计算与三个坑。</div></div></div></a><a class="pagination-related" href="/2026/11/13/agent%E5%AF%B9SimPO%E8%AE%BA%E6%96%87%E7%9A%84%E7%90%86%E8%A7%A3/" title="agent对SimPO论文的理解——工程视角：删掉参考模型+长度归一化，再讲margin与梯度背后的数学"><img class="cover" src="/img/cover/9.jpeg" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-11-13</div><div class="info-item-2">agent对SimPO论文的理解——工程视角：删掉参考模型+长度归一化，再讲margin与梯度背后的数学</div></div><div class="info-2"><div class="info-item-1">从工程角度拆解 SimPO：先讲工程上它相对 DPO/IPO 改了什么（免参考模型、长度归一化奖励、目标 margin γ）、前向怎么算、TRL 怎么一行切换、超参怎么设，再讲背后的数学（长度偏差机理、margin 泛化直觉、DPO 的 50% 排序错位、梯度分析），并与你 IPO 漂移实验直接对照。</div></div></div></a><a class="pagination-related" href="/2026/11/12/IPO-DPO%E5%AF%B9%E7%85%A7%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%E5%88%86%E6%9E%90/" title="IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案"><img class="cover" src="/img/cover/5.jpeg" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-11-12</div><div class="info-item-2">IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案</div></div><div class="info-2"><div class="info-item-1">新服务器（3090×2）第一轮 DPO/IPO 对照实验结果：DPO 成功复现旧基线（eval loss 0.649 / accuracy 70.1% / margin 0.123），IPO 完全未学习（loss 卡在 25、grad_norm 高达 1576 被裁剪杀死）。根因：IPO 平方损失的梯度常数 × 长序列 → 巨梯度 → max_grad_norm 裁剪；τ=0.1 不能照搬 DPO 的 β。附修复方案。</div></div></div></a><a class="pagination-related" href="/2026/11/13/SimPO%E8%AE%BA%E6%96%87%E4%B8%AD%E6%96%87%E7%BF%BB%E8%AF%91/" title="SimPO论文中文翻译 - 免参考模型的简单偏好优化"><img class="cover" src="/img/cover/6.png" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-11-13</div><div class="info-item-2">SimPO论文中文翻译 - 免参考模型的简单偏好优化</div></div><div class="info-2"><div class="info-item-1">SimPO 论文《SimPO: Simple Preference Optimization with a Reference-Free Reward》（Princeton，NeurIPS 2024，arXiv 2405.14734）的结构化中文翻译：摘要、引言、方法（式 1–6）、实验设置、主要结果与三项分析全译，公式以 MathJax 还原，参考文献保留英文原文（见原 PDF）。</div></div></div></a><a class="pagination-related" href="/2026/11/07/DPO%E5%9F%BA%E7%BA%BF%E5%A4%8D%E7%8E%B0%E6%8A%A5%E5%91%8A%EF%BC%9A%E4%BB%BB%E5%8A%A1%E8%A7%A3%E8%AF%BB%E3%80%81%E8%BF%90%E8%A1%8C%E6%AD%A5%E9%AA%A4%E4%B8%8E%E7%BB%93%E6%9E%9C%E5%88%86%E6%9E%90/" title="DPO基线复现报告：任务解读、运行步骤与结果分析"><img class="cover" src="/img/cover/5.jpeg" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-11-07</div><div class="info-item-2">DPO基线复现报告：任务解读、运行步骤与结果分析</div></div><div class="info-2"><div class="info-item-1">老师新任务全记录：读 DPO 原论文、按 GPT 方案在老师服务器上用 TRL + Qwen3-0.6B 跑通 DPO 基线，附一步一步操作、真实训练日志指标整理与结果分析（loss 0.689→0.648、margin 0.016→0.126、accuracy 65.2%），以及下一步贝叶斯 DPO 展望。</div></div></div></a></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">擎天—射日</div><div class="author-info-description">擎天神光，最后耀世</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">37</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">14</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">6</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/gaozhuoran2"><i class="fab fa-github"></i><span>Follow Me</span></a></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">3599 浩东99 麟月99 轩秀99</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#0-%E5%85%88%E7%AB%8B%E9%9D%B6%E5%AD%90%EF%BC%9A%E6%88%91%E7%9A%84%E5%9F%BA%E7%BA%BF%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="toc-number">1.</span> <span class="toc-text">0. 先立靶子：我的基线长什么样</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#1-%E5%9B%9B%E4%B8%AA%E2%80%9D%E5%AF%B9%E5%BA%94%E8%BD%B4%E2%80%9D%EF%BC%9A%E6%80%8E%E4%B9%88%E6%8A%8A%E8%AE%BA%E6%96%87%E7%BB%93%E6%9E%9C%E6%94%BE%E8%BF%9B%E6%88%91%E7%9A%84%E5%9D%90%E6%A0%87%E7%B3%BB"><span class="toc-number">2.</span> <span class="toc-text">1. 四个”对应轴”：怎么把论文结果放进我的坐标系</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#2-%E7%AC%AC%E4%B8%80%E6%A2%AF%E9%98%9F%EF%BC%9A%E6%9C%80%E7%9B%B4%E6%8E%A5%E5%8F%AF%E5%AF%B9%E7%9A%84%E4%B8%89%E7%AF%87"><span class="toc-number">3.</span> <span class="toc-text">2. 第一梯队：最直接可对的三篇</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#2-1-Qwen3-Technical-Report%EF%BC%88%E5%AE%98%E6%96%B9%E8%87%AA%E5%B7%B1%E6%80%8E%E4%B9%88-DPO-0-6B%EF%BC%89"><span class="toc-number">3.1.</span> <span class="toc-text">2.1 Qwen3 Technical Report（官方自己怎么 DPO 0.6B）</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-2-Zephyr%EF%BC%9ADirect-Distillation-of-LM-Alignment%EF%BC%88dDPO-UltraFeedback%EF%BC%89"><span class="toc-number">3.2.</span> <span class="toc-text">2.2 Zephyr：Direct Distillation of LM Alignment（dDPO + UltraFeedback）</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-3-ORPO%EF%BC%9AMonolithic-Preference-Optimization%EF%BC%88%E4%B8%8D%E7%94%A8%E5%8F%82%E8%80%83%E6%A8%A1%E5%9E%8B%E3%80%81%E7%9B%B4%E6%8E%A5%E5%AF%B9%E6%AF%94-125M%E2%86%927B%EF%BC%89"><span class="toc-number">3.3.</span> <span class="toc-text">2.3 ORPO：Monolithic Preference Optimization（不用参考模型、直接对比 125M→7B）</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#3-%E7%AC%AC%E4%BA%8C%E6%A2%AF%E9%98%9F%EF%BC%9A%E6%94%B9-DPO-%E6%8D%9F%E5%A4%B1%E7%9A%84%E9%82%A3%E6%89%B9%EF%BC%88%E8%80%81%E5%B8%88%E7%AC%AC%E4%BA%8C%E9%98%B6%E6%AE%B5%E2%80%9D%E8%87%AA%E5%AE%9A%E4%B9%89-Loss%E2%80%9D%E7%9A%84%E7%9B%B4%E6%8E%A5%E7%B4%A0%E6%9D%90%EF%BC%89"><span class="toc-number">4.</span> <span class="toc-text">3. 第二梯队：改 DPO 损失的那批（老师第二阶段”自定义 Loss”的直接素材）</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#3-1-IPO%EF%BC%9A%CE%A8PO-%E6%A1%86%E6%9E%B6%EF%BC%88DPO-%E8%BF%87%E6%8B%9F%E5%90%88%E7%9A%84%E8%A7%A3%E8%8D%AF%EF%BC%89"><span class="toc-number">4.1.</span> <span class="toc-text">3.1 IPO：ΨPO 框架（DPO 过拟合的解药）</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-2-KTO%EF%BC%9A%E5%89%8D%E6%99%AF%E7%90%86%E8%AE%BA%E7%89%88%EF%BC%88%E4%B8%8D%E8%A6%81%E5%81%8F%E5%A5%BD%E5%AF%B9%EF%BC%8C%E5%8F%AA%E8%A6%81%E2%80%9D%E5%A5%BD-%E5%9D%8F%E2%80%9D%E6%A0%87%E7%AD%BE%EF%BC%89"><span class="toc-number">4.2.</span> <span class="toc-text">3.2 KTO：前景理论版（不要偏好对，只要”好&#x2F;坏”标签）</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-3-SimPO%EF%BC%9A%E5%85%8D%E5%8F%82%E8%80%83%E6%A8%A1%E5%9E%8B-%E7%9B%AE%E6%A0%87-margin%EF%BC%88%E5%92%8C%E4%BD%A0-margin-%E6%8C%87%E6%A0%87%E7%9B%B4%E6%8E%A5%E7%9B%B8%E5%85%B3%EF%BC%89"><span class="toc-number">4.3.</span> <span class="toc-text">3.3 SimPO：免参考模型 + 目标 margin（和你 margin 指标直接相关）</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-4-CGPO-Mixture-of-Judges%EF%BC%9A%E5%A4%9A%E7%9B%AE%E6%A0%87%E4%B8%8B%E7%9A%84%E2%80%9D%E4%BF%9D%E5%AE%88%E2%80%9D%E8%A7%A3%E6%B3%95"><span class="toc-number">4.4.</span> <span class="toc-text">3.4 CGPO &#x2F; Mixture of Judges：多目标下的”保守”解法</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-5-%E5%85%B6%E4%BB%96%E6%8D%9F%E5%A4%B1%E5%8F%98%E4%BD%93%E9%80%9F%E6%9F%A5%E8%A1%A8-%E2%9A%A0%EF%B8%8F"><span class="toc-number">4.5.</span> <span class="toc-text">3.5 其他损失变体速查表 ⚠️</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#4-%E7%AC%AC%E4%B8%89%E6%A2%AF%E9%98%9F%EF%BC%9ADPO-%E7%9A%84%E6%89%B9%E8%AF%84%E4%B8%8E%E5%AF%B9%E7%85%A7%E7%A0%94%E7%A9%B6%EF%BC%88%E8%A7%A3%E9%87%8A%E2%80%9Dloss-%E9%99%8D%E4%BA%86%E6%98%AF%E4%B8%8D%E6%98%AF%E5%B0%B1%E8%B5%A2%E4%BA%86%E2%80%9D%EF%BC%89"><span class="toc-number">5.</span> <span class="toc-text">4. 第三梯队：DPO 的批评与对照研究（解释”loss 降了是不是就赢了”）</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#4-1-Is-DPO-Superior-to-PPO-%EF%BC%88ICML-2024-%E7%9A%84%E7%BB%BC%E5%90%88%E8%A3%81%E5%86%B3%EF%BC%89"><span class="toc-number">5.1.</span> <span class="toc-text">4.1 Is DPO Superior to PPO?（ICML 2024 的综合裁决）</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#4-2-Towards-Analyzing-and-Understanding-the-Limitations-of-DPO"><span class="toc-number">5.2.</span> <span class="toc-text">4.2 Towards Analyzing and Understanding the Limitations of DPO</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#4-3-Secrets-of-RLHF-in-LLMs-Part-I-PPO%EF%BC%88PPO-%E4%BE%A7%E9%95%9C%E5%AD%90%EF%BC%89"><span class="toc-number">5.3.</span> <span class="toc-text">4.3 Secrets of RLHF in LLMs Part I: PPO（PPO 侧镜子）</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#5-%E7%AC%AC%E5%9B%9B%E6%A2%AF%E9%98%9F%EF%BC%9A%E8%B4%9D%E5%8F%B6%E6%96%AF-%E4%B8%8D%E7%A1%AE%E5%AE%9A%E6%80%A7%EF%BC%88Bayesian-DPO-%E7%9A%84%E5%9C%B0%E5%9F%BA%EF%BC%89"><span class="toc-number">6.</span> <span class="toc-text">5. 第四梯队：贝叶斯&#x2F;不确定性（Bayesian DPO 的地基）</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#5-1-Bayesian-Reward-Models-for-LLM-Alignment%EF%BC%88%E6%9C%80%E8%B4%B4%E9%A2%98%EF%BC%89"><span class="toc-number">6.1.</span> <span class="toc-text">5.1 Bayesian Reward Models for LLM Alignment（最贴题）</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-2-Distributional-Preference-Learning-DPL"><span class="toc-number">6.2.</span> <span class="toc-text">5.2 Distributional Preference Learning (DPL)</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-3-Helping-or-Herding-%EF%BC%88%E9%9B%86%E6%88%90%E5%A5%96%E5%8A%B1%E6%A8%A1%E5%9E%8B%E7%9A%84%E7%95%8C%E9%99%90%EF%BC%89"><span class="toc-number">6.3.</span> <span class="toc-text">5.3 Helping or Herding?（集成奖励模型的界限）</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-4-Reward-Robust-RLHF-in-LLMs"><span class="toc-number">6.4.</span> <span class="toc-text">5.4 Reward-Robust RLHF in LLMs</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-5-Preference-Transformer%EF%BC%88%E5%A5%96%E5%8A%B1%E4%B8%8D%E7%A1%AE%E5%AE%9A%E6%80%A7%E7%9A%84%E9%BC%BB%E7%A5%96%EF%BC%89"><span class="toc-number">6.5.</span> <span class="toc-text">5.5 Preference Transformer（奖励不确定性的鼻祖）</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#6-%E6%8A%8A%E6%88%91%E7%9A%84%E4%B8%89%E4%B8%AA%E6%8C%87%E6%A0%87%E2%80%9D%E7%BF%BB%E8%AF%91%E2%80%9D%E8%BF%9B%E8%AE%BA%E6%96%87%E8%AF%AD%E8%A8%80"><span class="toc-number">7.</span> <span class="toc-text">6. 把我的三个指标”翻译”进论文语言</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#7-%E4%B8%8B%E4%B8%80%E6%89%B9%E5%AE%9E%E9%AA%8C%E6%B8%85%E5%8D%95%EF%BC%88%E6%8C%89%E6%80%A7%E4%BB%B7%E6%AF%94%E6%8E%92%E5%BA%8F%EF%BC%89"><span class="toc-number">8.</span> <span class="toc-text">7. 下一批实验清单（按性价比排序）</span></a></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/2026/11/13/agent%E5%AF%B9SimPO%E8%AE%BA%E6%96%87%E7%9A%84%E7%90%86%E8%A7%A3/" title="agent对SimPO论文的理解——工程视角：删掉参考模型+长度归一化，再讲margin与梯度背后的数学"><img src="/img/cover/9.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="agent对SimPO论文的理解——工程视角：删掉参考模型+长度归一化，再讲margin与梯度背后的数学"/></a><div class="content"><a class="title" href="/2026/11/13/agent%E5%AF%B9SimPO%E8%AE%BA%E6%96%87%E7%9A%84%E7%90%86%E8%A7%A3/" title="agent对SimPO论文的理解——工程视角：删掉参考模型+长度归一化，再讲margin与梯度背后的数学">agent对SimPO论文的理解——工程视角：删掉参考模型+长度归一化，再讲margin与梯度背后的数学</a><time datetime="2026-11-13T02:30:00.000Z" title="发表于 2026-11-13 10:30:00">2026-11-13</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/11/13/SimPO%E8%AE%BA%E6%96%87%E4%B8%AD%E6%96%87%E7%BF%BB%E8%AF%91/" title="SimPO论文中文翻译 - 免参考模型的简单偏好优化"><img src="/img/cover/6.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="SimPO论文中文翻译 - 免参考模型的简单偏好优化"/></a><div class="content"><a class="title" href="/2026/11/13/SimPO%E8%AE%BA%E6%96%87%E4%B8%AD%E6%96%87%E7%BF%BB%E8%AF%91/" title="SimPO论文中文翻译 - 免参考模型的简单偏好优化">SimPO论文中文翻译 - 免参考模型的简单偏好优化</a><time datetime="2026-11-13T01:00:00.000Z" title="发表于 2026-11-13 09:00:00">2026-11-13</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/11/12/IPO-DPO%E5%AF%B9%E7%85%A7%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%E5%88%86%E6%9E%90/" title="IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案"><img src="/img/cover/5.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案"/></a><div class="content"><a class="title" href="/2026/11/12/IPO-DPO%E5%AF%B9%E7%85%A7%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%E5%88%86%E6%9E%90/" title="IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案">IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案</a><time datetime="2026-11-12T12:00:00.000Z" title="发表于 2026-11-12 20:00:00">2026-11-12</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/11/12/%E6%96%B0%E6%9C%8D%E5%8A%A1%E5%99%A8%E7%8E%AF%E5%A2%83%E9%85%8D%E7%BD%AE%E4%B8%8EDPO-IPO%E8%BF%90%E8%A1%8C%E6%8C%87%E5%8D%97/" title="新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）"><img src="/img/cover/8.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）"/></a><div class="content"><a class="title" href="/2026/11/12/%E6%96%B0%E6%9C%8D%E5%8A%A1%E5%99%A8%E7%8E%AF%E5%A2%83%E9%85%8D%E7%BD%AE%E4%B8%8EDPO-IPO%E8%BF%90%E8%A1%8C%E6%8C%87%E5%8D%97/" title="新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）">新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）</a><time datetime="2026-11-12T07:30:00.000Z" title="发表于 2026-11-12 15:30:00">2026-11-12</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/11/12/%E5%A4%9A%E5%8F%8D%E9%A6%88%E6%95%B0%E6%8D%AE%E6%80%8E%E4%B9%88%E5%96%82%E7%BB%99DPO%E5%AE%B6%E6%97%8F%EF%BC%9A%E8%AF%84%E5%88%86%E3%80%81%E7%A4%BA%E8%8C%83%E3%80%81%E5%81%9C%E6%AD%A2%E4%BF%A1%E5%8F%B7%E7%9A%84%E8%BD%AC%E6%8D%A2%E6%8C%87%E5%8D%97/" title="多反馈数据怎么喂给DPO家族：评分、示范、停止信号的转换指南"><img src="/img/cover/5.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="多反馈数据怎么喂给DPO家族：评分、示范、停止信号的转换指南"/></a><div class="content"><a class="title" href="/2026/11/12/%E5%A4%9A%E5%8F%8D%E9%A6%88%E6%95%B0%E6%8D%AE%E6%80%8E%E4%B9%88%E5%96%82%E7%BB%99DPO%E5%AE%B6%E6%97%8F%EF%BC%9A%E8%AF%84%E5%88%86%E3%80%81%E7%A4%BA%E8%8C%83%E3%80%81%E5%81%9C%E6%AD%A2%E4%BF%A1%E5%8F%B7%E7%9A%84%E8%BD%AC%E6%8D%A2%E6%8C%87%E5%8D%97/" title="多反馈数据怎么喂给DPO家族：评分、示范、停止信号的转换指南">多反馈数据怎么喂给DPO家族：评分、示范、停止信号的转换指南</a><time datetime="2026-11-12T06:00:00.000Z" title="发表于 2026-11-12 14:00:00">2026-11-12</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2025 - 2026 By 擎天—射日</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.1</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.4</a></span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.4"></script><script src="/js/main.js?v=5.5.4"></script><div class="js-pjax"></div><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script><div id="local-search"><div class="search-dialog"><nav class="search-nav"><span class="search-dialog-title">搜索</span><i class="fas fa-spinner fa-pulse" id="loading-status" hidden="hidden"></i><button class="search-close-button"><i class="fas fa-times"></i></button></nav><div class="text-center" id="loading-database"><i class="fas fa-spinner fa-pulse"></i><span>  数据加载中</span></div><div class="local-search-input"><input placeholder="搜索文章" type="text"/></div><hr/><div id="local-search-results"></div><div class="ais-Pagination" id="local-search-pagination" style="display:none;"><ul class="ais-Pagination-list"></ul></div><div id="local-search-stats"></div></div><div id="search-mask"></div><script src="/js/search/local-search.js?v=5.5.4"></script></div></div></body></html>

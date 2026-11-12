@@ -1,0 +1,426 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>华为ICT大赛创新赛参赛建议：C++竞赛生队伍怎么选赛道、做什么、怎么分工 | gzr的小窝</title><meta name="author" content="擎天—射日"><meta name="copyright" content="擎天—射日"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="三个高中信息学竞赛出身、只有 C++ 基础和一点点强化学习&#x2F;硬件知识的大二学生，怎么打第十一届华为ICT大赛创新赛：三个赛题的取舍、奖励模型选题方案、三人分工、最小技术栈与 30 天倒排计划。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="华为ICT大赛创新赛参赛建议：C++竞赛生队伍怎么选赛道、做什么、怎么分工">
+<meta property="og:url" content="https://gaozhuoran2.github.io/2026/11/09/%E5%8D%8E%E4%B8%BAICT%E5%A4%A7%E8%B5%9B%E5%88%9B%E6%96%B0%E8%B5%9B%E5%8F%82%E8%B5%9B%E5%BB%BA%E8%AE%AE/index.html">
+<meta property="og:site_name" content="gzr的小窝">
+<meta property="og:description" content="三个高中信息学竞赛出身、只有 C++ 基础和一点点强化学习&#x2F;硬件知识的大二学生，怎么打第十一届华为ICT大赛创新赛：三个赛题的取舍、奖励模型选题方案、三人分工、最小技术栈与 30 天倒排计划。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://gaozhuoran2.github.io/img/cover/10.jpg">
+<meta property="article:published_time" content="2026-11-09T10:30:00.000Z">
+<meta property="article:modified_time" content="2026-11-09T02:34:15.084Z">
+<meta property="article:author" content="擎天—射日">
+<meta property="article:tag" content="创新赛">
+<meta property="article:tag" content="华为ICT大赛">
+<meta property="article:tag" content="比赛">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://gaozhuoran2.github.io/img/cover/10.jpg"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "华为ICT大赛创新赛参赛建议：C++竞赛生队伍怎么选赛道、做什么、怎么分工",
+  "url": "https://gaozhuoran2.github.io/2026/11/09/%E5%8D%8E%E4%B8%BAICT%E5%A4%A7%E8%B5%9B%E5%88%9B%E6%96%B0%E8%B5%9B%E5%8F%82%E8%B5%9B%E5%BB%BA%E8%AE%AE/",
+  "image": "https://gaozhuoran2.github.io/img/cover/10.jpg",
+  "datePublished": "2026-11-09T10:30:00.000Z",
+  "dateModified": "2026-11-09T02:34:15.084Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "擎天—射日",
+      "url": "https://gaozhuoran2.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/favicon.ico"><link rel="canonical" href="https://gaozhuoran2.github.io/2026/11/09/%E5%8D%8E%E4%B8%BAICT%E5%A4%A7%E8%B5%9B%E5%88%9B%E6%96%B0%E8%B5%9B%E5%8F%82%E8%B5%9B%E5%BB%BA%E8%AE%AE/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css?v=5.5.4"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.1.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: {"path":"/search.xml","preload":false,"top_n_per_article":1,"unescape":false,"pagination":{"enable":false,"hitsPerPage":8},"languages":{"hits_empty":"未找到符合您查询的内容：${query}","hits_stats":"共找到 ${hits} 篇文章"}},
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":false},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: '华为ICT大赛创新赛参赛建议：C++竞赛生队伍怎么选赛道、做什么、怎么分工',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><link rel="stylesheet" href="/css/custom.css"><link rel="stylesheet" href="/css/pet.css?v=2"><meta name="generator" content="Hexo 8.1.1"><style>mjx-container[jax="SVG"] {
+  direction: ltr;
+}
+
+mjx-container[jax="SVG"] > svg {
+  overflow: visible;
+}
+
+mjx-container[jax="SVG"][display="true"] {
+  display: block;
+  text-align: center;
+  margin: 1em 0;
+}
+
+mjx-container[jax="SVG"][justify="left"] {
+  text-align: left;
+}
+
+mjx-container[jax="SVG"][justify="right"] {
+  text-align: right;
+}
+
+g[data-mml-node="merror"] > g {
+  fill: red;
+  stroke: red;
+}
+
+g[data-mml-node="merror"] > rect[data-background] {
+  fill: yellow;
+  stroke: none;
+}
+
+g[data-mml-node="mtable"] > line[data-line] {
+  stroke-width: 70px;
+  fill: none;
+}
+
+g[data-mml-node="mtable"] > rect[data-frame] {
+  stroke-width: 70px;
+  fill: none;
+}
+
+g[data-mml-node="mtable"] > .mjx-dashed {
+  stroke-dasharray: 140;
+}
+
+g[data-mml-node="mtable"] > .mjx-dotted {
+  stroke-linecap: round;
+  stroke-dasharray: 0,140;
+}
+
+g[data-mml-node="mtable"] > svg {
+  overflow: visible;
+}
+
+[jax="SVG"] mjx-tool {
+  display: inline-block;
+  position: relative;
+  width: 0;
+  height: 0;
+}
+
+[jax="SVG"] mjx-tool > mjx-tip {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+mjx-tool > mjx-tip {
+  display: inline-block;
+  padding: .2em;
+  border: 1px solid #888;
+  font-size: 70%;
+  background-color: #F8F8F8;
+  color: black;
+  box-shadow: 2px 2px 5px #AAAAAA;
+}
+
+g[data-mml-node="maction"][data-toggle] {
+  cursor: pointer;
+}
+
+mjx-status {
+  display: block;
+  position: fixed;
+  left: 1em;
+  bottom: 1em;
+  min-width: 25%;
+  padding: .2em .4em;
+  border: 1px solid #888;
+  font-size: 90%;
+  background-color: #F8F8F8;
+  color: black;
+}
+
+foreignObject[data-mjx-xml] {
+  font-family: initial;
+  line-height: normal;
+  overflow: visible;
+}
+
+.MathJax path {
+  stroke-width: 3;
+}
+
+mjx-container[display="true"] {
+  overflow: auto hidden;
+}
+
+mjx-container[display="true"] + br {
+  display: none;
+}
+</style></head><body><div class="bg-animation" id="web_bg" style="background-image: url(/img/bj.jpg);"></div><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">37</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">14</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">6</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 主页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 时间线</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/diary/"><i class="fa-fw fas fa-book"></i><span> 日记</span></a></div><div class="menus_item"><a class="site-page" href="/papers/"><i class="fa-fw fas fa-seedling"></i><span> 论文树</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/bj.jpg);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">gzr的小窝</span></a><a class="nav-page-title" href="/"><span class="site-name">华为ICT大赛创新赛参赛建议：C++竞赛生队伍怎么选赛道、做什么、怎么分工</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div id="search-button"><span class="site-page social-icon search"><i class="fas fa-search fa-fw"></i><span> 搜索</span></span></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 主页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 时间线</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/diary/"><i class="fa-fw fas fa-book"></i><span> 日记</span></a></div><div class="menus_item"><a class="site-page" href="/papers/"><i class="fa-fw fas fa-seedling"></i><span> 论文树</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">华为ICT大赛创新赛参赛建议：C++竞赛生队伍怎么选赛道、做什么、怎么分工</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-11-09T10:30:00.000Z" title="发表于 2026-11-09 18:30:00">2026-11-09</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-11-09T02:34:15.084Z" title="更新于 2026-11-09 10:34:15">2026-11-09</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/%E7%AB%9E%E8%B5%9B/">竞赛</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-wordcount"><i class="far fa-file-word fa-fw post-meta-icon"></i><span class="post-meta-label">总字数:</span><span class="word-count">2k</span><span class="post-meta-separator">|</span><i class="far fa-clock fa-fw post-meta-icon"></i><span class="post-meta-label">阅读时长:</span><span>6分钟</span></span><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><blockquote>
+<p><strong>背景</strong>：队伍三人都是高中信息学竞赛出身，有 C++ 基础；我另有一点点强化学习&#x2F;奖励模型的入门知识（之前在课题组复现过 DPO 基线），两位队友另有一点点硬件知识。目标赛事：第十一届华为ICT大赛 2026-2027 创新赛（报名截止 2026-11-30，初赛 2026 年 12 月线上提交材料，中国总决赛 2027 年 3 月）。</p>
+<p><strong>本文结论先行</strong>：选赛题1，备选赛题2，放弃赛题3；做一个以奖励模型为核心创新点的 AI 应用；由我负责奖励模型与效果指标，另外两位分别负责后端&#x2F;云部署和前端&#x2F;材料。</p>
+</blockquote>
+<hr>
+<h1 id="一、三个赛题，先看清楚各自考什么"><a href="#一、三个赛题，先看清楚各自考什么" class="headerlink" title="一、三个赛题，先看清楚各自考什么"></a>一、三个赛题，先看清楚各自考什么</h1><table>
+<thead>
+<tr>
+<th></th>
+<th>赛题1：华为云AI创新应用</th>
+<th>赛题2：AgentArts智能体</th>
+<th>赛题3：Nexent决策智能体</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>要做什么</td>
+<td>任意场景的 AI 应用，用华为云产品（码道 CodeArts）开发并部署上线</td>
+<td>在 AgentArts 低代码平台上构建、编排、部署智能体</td>
+<td>面向医疗&#x2F;金融&#x2F;制造&#x2F;政务的知识图谱 + 多模态 + 跨文档多跳推理智能体</td>
+</tr>
+<tr>
+<td>初赛评分</td>
+<td>创新性 60% + 应用价值 40%</td>
+<td>创新性 60% + 应用价值 40%</td>
+<td><strong>技术评分 100%</strong>（算法创新性占 25%）</td>
+</tr>
+<tr>
+<td>赛程</td>
+<td>初赛 → 中国总决赛 → 全球总决赛</td>
+<td>同左</td>
+<td>初赛 → 中国总决赛（无全球赛）</td>
+</tr>
+<tr>
+<td>对我们的匹配度</td>
+<td>✅ 编程底子 + 奖励模型都用得上</td>
+<td>⚠️ 编程优势被低代码平台抹平</td>
+<td>❌ 无 NLP&#x2F;知识图谱积累</td>
+</tr>
+<tr>
+<td>一个月做出像样东西的把握</td>
+<td>✅</td>
+<td>✅</td>
+<td>❌ 基本不可能</td>
+</tr>
+</tbody></table>
+<h1 id="二、为什么选赛题1（针对我们的真实情况）"><a href="#二、为什么选赛题1（针对我们的真实情况）" class="headerlink" title="二、为什么选赛题1（针对我们的真实情况）"></a>二、为什么选赛题1（针对我们的真实情况）</h1><ol>
+<li>赛题1 的指定开发工具「码道 CodeArts 代码智能体」本身就是 AI 写代码工具，赛题要求里明确要体现「需求理解、代码生成、项目构建、问题修复、部署上线」这条 AI 辅助开发链路。<strong>我们缺 Web 和云的经验，但读代码、改代码、调试的能力是信息学竞赛练出来的强项</strong>——AI 生成的代码恰恰需要有人看得懂、改得动，这是我们的主场，不是短板。</li>
+<li>两位队友的硬件知识在这三个赛题里都用不上，不要为了”用上硬件”去迁就赛道。</li>
+<li>赛题2 是低代码平台路线：人人零门槛、作品高度同质化，”创新性 60%”最终变成拼平台熟练度和包装，我们的编程优势反而被抹平，是下策。</li>
+<li>赛题3 是研究型赛道：低资源场景下知识图谱本体半自动构建、跨文档多跳推理——没有 NLP 积累的队伍一个月内做不出像样的东西，而且它只有两级赛制、无全球总决赛，性价比最低。</li>
+<li>赛题1 的初赛<strong>不要求提交可访问的 Demo 链接</strong>，提交的是作品信息收集表 + PPT&#x2F;设计文件&#x2F;演示视频，材料导向对”逻辑清楚、会写文档”的竞赛生队伍很友好。</li>
+</ol>
+<h1 id="三、做什么项目：把奖励模型当成核心创新点"><a href="#三、做什么项目：把奖励模型当成核心创新点" class="headerlink" title="三、做什么项目：把奖励模型当成核心创新点"></a>三、做什么项目：把奖励模型当成核心创新点</h1><p>创新性占初赛 60%，全队唯一的差异化武器就是我那点奖励模型知识。方案主线统一为：</p>
+<blockquote>
+<p>LLM 生成多份候选 → 奖励模型打分 → 择优&#x2F;重试 → 呈现给用户</p>
+</blockquote>
+<p>三个候选场景（都满足”真需求、可演示、奖励模型是刚需”）：</p>
+<ol>
+<li><strong>AI 简历诊所 &#x2F; 面试陪练</strong>（首选）：上传简历或回答面试题，LLM 生成多份修改建议，奖励模型挑出最优反馈。</li>
+<li><strong>客服回复质检助手</strong>：奖励模型给客服&#x2F;售后话术打分——这正是 InstructGPT 偏好数据的起源场景，答辩故事最完整（”偏好学习就诞生在这种场景”）。</li>
+<li>作文批改 &#x2F; 论文摘要润色：教育场景，数据好找，但容易与往届获奖作品撞车。</li>
+</ol>
+<p>效果指标的硬性要求（初赛材料必须”提供可量化的指标”），只用两个：</p>
+<ul>
+<li>奖励模型打分与真人（导师&#x2F;同学）打分的 <strong>Spearman 相关系数</strong>（几十份样本即可算）；</li>
+<li>奖励模型择优后的回答在盲评中的<strong>胜率（win rate）</strong>。</li>
+</ul>
+<p><strong>红线</strong>：只做「奖励模型微调 + 推理打分」，不做 PPO 训练策略模型、不做 RL 控制类项目——一个月时间不够，翻车概率极高。</p>
+<h1 id="四、三人分工"><a href="#四、三人分工" class="headerlink" title="四、三人分工"></a>四、三人分工</h1><table>
+<thead>
+<tr>
+<th>成员</th>
+<th>职责</th>
+<th>关键产出</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>我</td>
+<td>奖励模型：偏好数据构造、微调、打分链路、指标设计、答辩技术讲解</td>
+<td>奖励模型 v1 + 相关性&#x2F;胜率报告 + PPT 技术章节</td>
+</tr>
+<tr>
+<td>队友A</td>
+<td>后端 + 云：Python 主链路、CodeArts 开发、华为云部署、RDS&#x2F;Redis</td>
+<td>可访问的 Demo 页面、部署文档</td>
+</tr>
+<tr>
+<td>队友B</td>
+<td>前端 + 材料：Demo 页面、演示视频、PPT、作品信息收集表</td>
+<td>全套初赛材料</td>
+</tr>
+</tbody></table>
+<p>说明：两位队友的硬件知识暂时用不上，但对”云服务器怎么选、Redis 是什么”这类概念上手会比纯小白快；三人都先花三天把 Python 语法过一遍（对竞赛生来说足够快）。</p>
+<h1 id="五、最小技术栈"><a href="#五、最小技术栈" class="headerlink" title="五、最小技术栈"></a>五、最小技术栈</h1><ul>
+<li>语言：Python（FastAPI 做后端）</li>
+<li>前端：先用最省事的方案（Gradio 或静态 HTML + FastAPI），把时间留给模型</li>
+<li>大模型调用：华为云 MaaS（用代金券购买）</li>
+<li>奖励模型：TRL 的 <code>RewardTrainer</code> + Qwen2.5-0.5B&#x2F;1.5B 级别小模型；偏好数据用 UltraFeedback 二值化版本或自建几百对「好&#x2F;差回答」</li>
+<li>训练：ModelArts；部署：华为云 ECS + RDS(MySQL) + Redis（官方提供了 Skills 一键部署教程）</li>
+<li>必读：官方「创新赛学习空间」的考纲解读——那是评分意图说明书，比任何二手攻略都准</li>
+</ul>
+<h1 id="六、30-天倒排（11-09-起，初赛约-12-月中旬交材料）"><a href="#六、30-天倒排（11-09-起，初赛约-12-月中旬交材料）" class="headerlink" title="六、30 天倒排（11.09 起，初赛约 12 月中旬交材料）"></a>六、30 天倒排（11.09 起，初赛约 12 月中旬交材料）</h1><table>
+<thead>
+<tr>
+<th>时间</th>
+<th>我</th>
+<th>队友A</th>
+<th>队友B</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>11.09–11.15</td>
+<td>跑通小奖励模型 v0</td>
+<td>注册华为云、装 CodeArts、走一遍官方一键部署教程</td>
+<td>Python + FastAPI 上手</td>
+</tr>
+<tr>
+<td>11.15–11.23</td>
+<td>偏好数据、v1 训练、出相关性指标</td>
+<td>LLM 主链路 + 打分闭环 + 页面雏形</td>
+<td>Demo 页面原型</td>
+</tr>
+<tr>
+<td>11.23–11.30</td>
+<td>打分服务接入应用</td>
+<td>部署华为云、接 RDS&#x2F;Redis、页面上线</td>
+<td>录演示视频</td>
+</tr>
+<tr>
+<td>12.01–12.08</td>
+<td>写「创新性&#x2F;数据集&#x2F;关键代码&#x2F;效果指标」章节</td>
+<td>复现测试、压指标</td>
+<td>PPT + 作品信息收集表</td>
+</tr>
+<tr>
+<td>12.08–提交前</td>
+<td>全员交叉检查</td>
+<td>核对提交清单</td>
+<td>材料打磨</td>
+</tr>
+</tbody></table>
+<p><strong>本周先做三件事</strong>：① 队长立刻完成组队报名（报名截止 11.30，且报名后不能换队员和指导教师）；② 报名过审后马上申请华为云代金券（训练和部署都靠它，早申请早到账）；③ 三人各自完成上面第一周的学习任务。</p>
+<h1 id="七、可靠性边界与风险对策"><a href="#七、可靠性边界与风险对策" class="headerlink" title="七、可靠性边界与风险对策"></a>七、可靠性边界与风险对策</h1><ul>
+<li><strong>预期目标</strong>：初赛出线&#x2F;拿奖是现实目标；中国总决赛（2027 年 3 月）是天花板，不预设。</li>
+<li>云部署踩坑：用官方 Skills 一键部署起步，<strong>提前一周开始部署</strong>，别压到最后。</li>
+<li>奖励模型训练不顺的兜底：先用「强模型当裁判」（LLM-as-judge）保证应用闭环，再迭代奖励模型——<strong>先保完整，再求亮点</strong>。</li>
+<li>材料真实性：组委会会复现，答辩效果与材料不符直接取消资格，所有数字必须真。</li>
+<li>赛道互斥：每人只能报一个赛道（实践赛&#x2F;编程赛&#x2F;创新赛&#x2F;挑战赛互斥），定了创新赛就别再动其他赛道。</li>
+</ul>
+<h1 id="结尾"><a href="#结尾" class="headerlink" title="结尾"></a>结尾</h1><p>一句话总结：以「C++ 竞赛生的调试能力」打底，用「奖励模型」做差异点，在赛题1里交出一个完整、真实、可量化的小应用，先拿下初赛。</p>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://gaozhuoran2.github.io">擎天—射日</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://gaozhuoran2.github.io/2026/11/09/%E5%8D%8E%E4%B8%BAICT%E5%A4%A7%E8%B5%9B%E5%88%9B%E6%96%B0%E8%B5%9B%E5%8F%82%E8%B5%9B%E5%BB%BA%E8%AE%AE/">https://gaozhuoran2.github.io/2026/11/09/%E5%8D%8E%E4%B8%BAICT%E5%A4%A7%E8%B5%9B%E5%88%9B%E6%96%B0%E8%B5%9B%E5%8F%82%E8%B5%9B%E5%BB%BA%E8%AE%AE/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://gaozhuoran2.github.io" target="_blank">gzr的小窝</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/%E6%AF%94%E8%B5%9B/">比赛</a><a class="post-meta__tags" href="/tags/%E5%8D%8E%E4%B8%BAICT%E5%A4%A7%E8%B5%9B/">华为ICT大赛</a><a class="post-meta__tags" href="/tags/%E5%88%9B%E6%96%B0%E8%B5%9B/">创新赛</a></div><div class="post-share"><div class="social-share" data-image="/img/cover/10.jpg" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related" href="/2026/11/09/AI%E7%AE%80%E5%8E%86%E8%AF%8A%E6%89%80%E4%BD%9C%E6%88%98%E6%89%8B%E5%86%8C/" title="AI简历诊所作战手册：五周从零到初赛提交的完整路线"><img class="cover" src="/img/cover/2.jpeg" onerror="onerror=null;src='/img/404.jpg'" alt="cover of previous post"><div class="info"><div class="info-1"><div class="info-item-1">上一篇</div><div class="info-item-2">AI简历诊所作战手册：五周从零到初赛提交的完整路线</div></div><div class="info-2"><div class="info-item-1">华为ICT大赛创新赛赛题1项目「AI简历诊所」的总路线图：产品闭环设计、五周七个里程碑、每一步的验收标准、奖励模型主线任务（数据/训练/指标）、三个兜底方案与初赛材料映射。</div></div></div></a><a class="pagination-related" href="/2026/11/08/RLHF%E4%B8%89%E9%98%B6%E6%AE%B5%E8%AF%A6%E8%A7%A3%EF%BC%9ASFT%E3%80%81%E5%A5%96%E5%8A%B1%E6%A8%A1%E5%9E%8B%E4%B8%8EPPO/" title="RLHF详解：SFT、奖励模型、PPO与DPO"><img class="cover" src="/img/cover/9.jpeg" onerror="onerror=null;src='/img/404.jpg'" alt="cover of next post"><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">RLHF详解：SFT、奖励模型、PPO与DPO</div></div><div class="info-2"><div class="info-item-1">从零讲懂RLHF与DPO：SFT为什么是地基、奖励模型如何把人类偏好变成可微分数、PPO的每个零件（优势函数、Critic、GAE、重要性采样、裁剪、KL正则）在干什么，以及DPO如何用一步数学推导把"训裁判+跑强化学习"压缩成一个分类损失。</div></div></div></a></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span>相关推荐</span></div><div class="relatedPosts-list"><a class="pagination-related" href="/2026/11/09/AI%E7%AE%80%E5%8E%86%E8%AF%8A%E6%89%80%E4%BD%9C%E6%88%98%E6%89%8B%E5%86%8C/" title="AI简历诊所作战手册：五周从零到初赛提交的完整路线"><img class="cover" src="/img/cover/2.jpeg" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-11-09</div><div class="info-item-2">AI简历诊所作战手册：五周从零到初赛提交的完整路线</div></div><div class="info-2"><div class="info-item-1">华为ICT大赛创新赛赛题1项目「AI简历诊所」的总路线图：产品闭环设计、五周七个里程碑、每一步的验收标准、奖励模型主线任务（数据/训练/指标）、三个兜底方案与初赛材料映射。</div></div></div></a></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">擎天—射日</div><div class="author-info-description">擎天神光，最后耀世</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">37</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">14</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">6</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/gaozhuoran2"><i class="fab fa-github"></i><span>Follow Me</span></a></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">3599 浩东99 麟月99 轩秀99</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#%E4%B8%80%E3%80%81%E4%B8%89%E4%B8%AA%E8%B5%9B%E9%A2%98%EF%BC%8C%E5%85%88%E7%9C%8B%E6%B8%85%E6%A5%9A%E5%90%84%E8%87%AA%E8%80%83%E4%BB%80%E4%B9%88"><span class="toc-number">1.</span> <span class="toc-text">一、三个赛题，先看清楚各自考什么</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E4%BA%8C%E3%80%81%E4%B8%BA%E4%BB%80%E4%B9%88%E9%80%89%E8%B5%9B%E9%A2%981%EF%BC%88%E9%92%88%E5%AF%B9%E6%88%91%E4%BB%AC%E7%9A%84%E7%9C%9F%E5%AE%9E%E6%83%85%E5%86%B5%EF%BC%89"><span class="toc-number">2.</span> <span class="toc-text">二、为什么选赛题1（针对我们的真实情况）</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E4%B8%89%E3%80%81%E5%81%9A%E4%BB%80%E4%B9%88%E9%A1%B9%E7%9B%AE%EF%BC%9A%E6%8A%8A%E5%A5%96%E5%8A%B1%E6%A8%A1%E5%9E%8B%E5%BD%93%E6%88%90%E6%A0%B8%E5%BF%83%E5%88%9B%E6%96%B0%E7%82%B9"><span class="toc-number">3.</span> <span class="toc-text">三、做什么项目：把奖励模型当成核心创新点</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E5%9B%9B%E3%80%81%E4%B8%89%E4%BA%BA%E5%88%86%E5%B7%A5"><span class="toc-number">4.</span> <span class="toc-text">四、三人分工</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E4%BA%94%E3%80%81%E6%9C%80%E5%B0%8F%E6%8A%80%E6%9C%AF%E6%A0%88"><span class="toc-number">5.</span> <span class="toc-text">五、最小技术栈</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E5%85%AD%E3%80%8130-%E5%A4%A9%E5%80%92%E6%8E%92%EF%BC%8811-09-%E8%B5%B7%EF%BC%8C%E5%88%9D%E8%B5%9B%E7%BA%A6-12-%E6%9C%88%E4%B8%AD%E6%97%AC%E4%BA%A4%E6%9D%90%E6%96%99%EF%BC%89"><span class="toc-number">6.</span> <span class="toc-text">六、30 天倒排（11.09 起，初赛约 12 月中旬交材料）</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E4%B8%83%E3%80%81%E5%8F%AF%E9%9D%A0%E6%80%A7%E8%BE%B9%E7%95%8C%E4%B8%8E%E9%A3%8E%E9%99%A9%E5%AF%B9%E7%AD%96"><span class="toc-number">7.</span> <span class="toc-text">七、可靠性边界与风险对策</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E7%BB%93%E5%B0%BE"><span class="toc-number">8.</span> <span class="toc-text">结尾</span></a></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/2026/11/13/agent%E5%AF%B9SimPO%E8%AE%BA%E6%96%87%E7%9A%84%E7%90%86%E8%A7%A3/" title="agent对SimPO论文的理解——工程视角：删掉参考模型+长度归一化，再讲margin与梯度背后的数学"><img src="/img/cover/9.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="agent对SimPO论文的理解——工程视角：删掉参考模型+长度归一化，再讲margin与梯度背后的数学"/></a><div class="content"><a class="title" href="/2026/11/13/agent%E5%AF%B9SimPO%E8%AE%BA%E6%96%87%E7%9A%84%E7%90%86%E8%A7%A3/" title="agent对SimPO论文的理解——工程视角：删掉参考模型+长度归一化，再讲margin与梯度背后的数学">agent对SimPO论文的理解——工程视角：删掉参考模型+长度归一化，再讲margin与梯度背后的数学</a><time datetime="2026-11-13T02:30:00.000Z" title="发表于 2026-11-13 10:30:00">2026-11-13</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/11/13/SimPO%E8%AE%BA%E6%96%87%E4%B8%AD%E6%96%87%E7%BF%BB%E8%AF%91/" title="SimPO论文中文翻译 - 免参考模型的简单偏好优化"><img src="/img/cover/6.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="SimPO论文中文翻译 - 免参考模型的简单偏好优化"/></a><div class="content"><a class="title" href="/2026/11/13/SimPO%E8%AE%BA%E6%96%87%E4%B8%AD%E6%96%87%E7%BF%BB%E8%AF%91/" title="SimPO论文中文翻译 - 免参考模型的简单偏好优化">SimPO论文中文翻译 - 免参考模型的简单偏好优化</a><time datetime="2026-11-13T01:00:00.000Z" title="发表于 2026-11-13 09:00:00">2026-11-13</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/11/12/IPO-DPO%E5%AF%B9%E7%85%A7%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%E5%88%86%E6%9E%90/" title="IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案"><img src="/img/cover/5.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案"/></a><div class="content"><a class="title" href="/2026/11/12/IPO-DPO%E5%AF%B9%E7%85%A7%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%E5%88%86%E6%9E%90/" title="IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案">IPO vs DPO 第一轮对照实验结果分析：DPO复现成功，IPO未学习（loss卡25）与修复方案</a><time datetime="2026-11-12T12:00:00.000Z" title="发表于 2026-11-12 20:00:00">2026-11-12</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/11/12/%E6%96%B0%E6%9C%8D%E5%8A%A1%E5%99%A8%E7%8E%AF%E5%A2%83%E9%85%8D%E7%BD%AE%E4%B8%8EDPO-IPO%E8%BF%90%E8%A1%8C%E6%8C%87%E5%8D%97/" title="新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）"><img src="/img/cover/8.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）"/></a><div class="content"><a class="title" href="/2026/11/12/%E6%96%B0%E6%9C%8D%E5%8A%A1%E5%99%A8%E7%8E%AF%E5%A2%83%E9%85%8D%E7%BD%AE%E4%B8%8EDPO-IPO%E8%BF%90%E8%A1%8C%E6%8C%87%E5%8D%97/" title="新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）">新服务器环境配置与DPO-IPO运行指南（RTX 3090×2）</a><time datetime="2026-11-12T07:30:00.000Z" title="发表于 2026-11-12 15:30:00">2026-11-12</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/11/12/%E5%A4%9A%E5%8F%8D%E9%A6%88%E6%95%B0%E6%8D%AE%E6%80%8E%E4%B9%88%E5%96%82%E7%BB%99DPO%E5%AE%B6%E6%97%8F%EF%BC%9A%E8%AF%84%E5%88%86%E3%80%81%E7%A4%BA%E8%8C%83%E3%80%81%E5%81%9C%E6%AD%A2%E4%BF%A1%E5%8F%B7%E7%9A%84%E8%BD%AC%E6%8D%A2%E6%8C%87%E5%8D%97/" title="多反馈数据怎么喂给DPO家族：评分、示范、停止信号的转换指南"><img src="/img/cover/5.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="多反馈数据怎么喂给DPO家族：评分、示范、停止信号的转换指南"/></a><div class="content"><a class="title" href="/2026/11/12/%E5%A4%9A%E5%8F%8D%E9%A6%88%E6%95%B0%E6%8D%AE%E6%80%8E%E4%B9%88%E5%96%82%E7%BB%99DPO%E5%AE%B6%E6%97%8F%EF%BC%9A%E8%AF%84%E5%88%86%E3%80%81%E7%A4%BA%E8%8C%83%E3%80%81%E5%81%9C%E6%AD%A2%E4%BF%A1%E5%8F%B7%E7%9A%84%E8%BD%AC%E6%8D%A2%E6%8C%87%E5%8D%97/" title="多反馈数据怎么喂给DPO家族：评分、示范、停止信号的转换指南">多反馈数据怎么喂给DPO家族：评分、示范、停止信号的转换指南</a><time datetime="2026-11-12T06:00:00.000Z" title="发表于 2026-11-12 14:00:00">2026-11-12</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2025 - 2026 By 擎天—射日</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.1</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.4</a></span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.4"></script><script src="/js/main.js?v=5.5.4"></script><div class="js-pjax"></div><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script><div id="local-search"><div class="search-dialog"><nav class="search-nav"><span class="search-dialog-title">搜索</span><i class="fas fa-spinner fa-pulse" id="loading-status" hidden="hidden"></i><button class="search-close-button"><i class="fas fa-times"></i></button></nav><div class="text-center" id="loading-database"><i class="fas fa-spinner fa-pulse"></i><span>  数据加载中</span></div><div class="local-search-input"><input placeholder="搜索文章" type="text"/></div><hr/><div id="local-search-results"></div><div class="ais-Pagination" id="local-search-pagination" style="display:none;"><ul class="ais-Pagination-list"></ul></div><div id="local-search-stats"></div></div><div id="search-mask"></div><script src="/js/search/local-search.js?v=5.5.4"></script></div></div></body></html>
